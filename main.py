@@ -250,9 +250,86 @@ if not st.session_state.print_mode:
             st.subheader("4. Notizen & Key Facts")
 
             with st.form("scouting_form"):
-                st.write("**Spieler-Notizen:**")
-                selection = st.session_state.roster_df.loc[selected_indices]
-                form_results = []
+    st.write("**Spieler-Notizen:**")
+    selection = st.session_state.roster_df.loc[selected_indices]
+    form_results = []
+
+    for _, row in selection.iterrows():
+        pid = row['PLAYER_ID']
+        c_h, c_c = st.columns([3, 1])
+        c_h.markdown(f"##### #{row['NR']} {row['NAME_FULL']}")
+        saved_c = st.session_state.saved_colors.get(pid, "Grau")
+        try:
+            idx = ["Grau", "Grün", "Rot"].index(saved_c)
+        except:
+            idx = 0
+
+        col_opt = c_c.selectbox(
+            "Markierung",
+            ["Grau", "Grün", "Rot"],
+            key=f"col_{pid}",
+            index=idx,
+            label_visibility="collapsed"
+        )
+
+        c1, c2 = st.columns(2)
+
+        l1v = st.session_state.saved_notes.get(f"l1_{pid}", "")
+        l2v = st.session_state.saved_notes.get(f"l2_{pid}", "")
+        l3v = st.session_state.saved_notes.get(f"l3_{pid}", "")
+        l4v = st.session_state.saved_notes.get(f"l4_{pid}", "")
+        r1v = st.session_state.saved_notes.get(f"r1_{pid}", "")
+        r2v = st.session_state.saved_notes.get(f"r2_{pid}", "")
+        r3v = st.session_state.saved_notes.get(f"r3_{pid}", "")
+        r4v = st.session_state.saved_notes.get(f"r4_{pid}", "")
+
+        l1 = c1.text_input("L1", value=l1v, key=f"l1_{pid}", label_visibility="collapsed")
+        l2 = c1.text_input("L2", value=l2v, key=f"l2_{pid}", label_visibility="collapsed")
+        l3 = c1.text_input("L3", value=l3v, key=f"l3_{pid}", label_visibility="collapsed")
+        l4 = c1.text_input("L4", value=l4v, key=f"l4_{pid}", label_visibility="collapsed")
+
+        r1 = c2.text_input("R1", value=r1v, key=f"r1_{pid}", label_visibility="collapsed")
+        r2 = c2.text_input("R2", value=r2v, key=f"r2_{pid}", label_visibility="collapsed")
+        r3 = c2.text_input("R3", value=r3v, key=f"r3_{pid}", label_visibility="collapsed")
+        r4 = c2.text_input("R4", value=r4v, key=f"r4_{pid}", label_visibility="collapsed")
+
+        st.divider()
+
+        form_results.append({
+            "row": row,
+            "pid": pid,
+            "color": col_opt,
+            "notes": {
+                "l1": l1, "l2": l2, "l3": l3, "l4": l4,
+                "r1": r1, "r2": r2, "r3": r3, "r4": r4
+            }
+        })
+
+    st.markdown("### Key Facts")
+    c_k1, c_k2, c_k3 = st.columns(3)
+    with c_k1:
+        st.caption("Offense")
+        edited_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True)
+    with c_k2:
+        st.caption("Defense")
+        edited_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True)
+    with c_k3:
+        st.caption("All About Us")
+        edited_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True)
+
+    st.markdown("### Grafiken")
+    uploaded_files = st.file_uploader(
+        "Upload",
+        accept_multiple_files=True,
+        type=["png", "jpg", "jpeg"]
+    )
+
+    # ✅ WICHTIG: Diese Zeile ist korrekt eingerückt
+    submitted = st.form_submit_button(
+        "Speichern & PDF Generieren",
+        type="primary"
+    )
+
 
                 # ... dein Form-Code für Spieler-Notizen, Facts & Uploads ...
 
@@ -320,3 +397,4 @@ else:
             st.info("PDF-Erzeugung ist in dieser Umgebung nicht verfügbar (pdfkit fehlt).")
 
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
+
