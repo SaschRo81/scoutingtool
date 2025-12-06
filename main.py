@@ -7,7 +7,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v1.5 (Final Release)"
+VERSION = "v1.7 (Fix Layout & State)"
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -130,9 +130,8 @@ def get_player_metadata(player_id):
 def generate_header_html(meta):
     return f"""
 <div style="font-family: Arial, sans-serif; page-break-inside: avoid;">
-    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #eee; margin-bottom: 10px; color: #888; font-size: 10px;">
-        <div>{VERSION}</div>
-        <div>DBBL Scouting Pro by Sascha Rosanke</div>
+    <div style="text-align: right; font-size: 10px; color: #888; border-bottom: 1px solid #eee; margin-bottom: 10px;">
+        DBBL Scouting Pro by Sascha Rosanke
     </div>
     <div style="border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; text-align: center;">
         <h1 style="margin: 0; padding: 0; font-size: 24px; color: #000; font-weight: bold;">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
@@ -409,25 +408,38 @@ if not st.session_state.print_mode:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
             
-            # Formular
-            with st.form("input_form"):
+            # WICHTIG: Das Formular umschließt ALLE Inputs für die ausgewählten Spieler
+            with st.form("scouting_form"):
                 st.write("**Spieler-Notizen:**")
                 selection = st.session_state.roster_df.loc[selected_indices]
                 
-                # Wir müssen hier keine Ergebnisse sammeln, sondern nur Inputs anzeigen.
-                # Die Ergebnisse werden erst bei Submit verarbeitet.
+                # Hier sammeln wir erst am ENDE die Daten (nach Submit), 
+                # aber wir müssen die Inputs zeichnen und mit SessionState verknüpfen.
+                
+                # Container für temporäre Daten, um nach Submit HTML zu bauen
+                # Wir können hier nicht direkt results_data füllen, da die widgets erst nach Rerun Werte haben.
+                # Aber wir können auf st.session_state zugreifen oder die return values der widgets nutzen.
+                
+                form_results = [] # Speichert (row, l1, l2..., color)
                 
                 for _, row in selection.iterrows():
                     pid = row['PLAYER_ID']
-                    col_info, col_color = st.columns([3, 1])
-                    with col_info: st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
-                    with col_color:
-                        # Color: Lade gespeicherten Wert
-                        saved_c = st.session_state.saved_colors.get(pid, "Grau")
-                        color_opt = st.selectbox(f"Markierung", ["Grau", "Grün", "Rot"], key=f"col_{pid}", index=["Grau", "Grün", "Rot"].index(saved_c))
                     
+                    # Header
+                    c_h, c_c = st.columns([3, 1])
+                    with c_h: st.markdown(f"##### #{row['NR']} {row['NAME_FULL']}")
+                    with c_c:
+                        # Farbe laden/setzen
+                        default_c = st.session_state.saved_colors.get(pid, "Grau")
+                        try:
+                            idx = ["Grau", "Grün", "Rot"].index(default_c)
+                        except: idx = 0
+                        col_opt = st.selectbox("Markierung", ["Grau", "Grün", "Rot"], key=f"col_{pid}", index=idx, label_visibility="collapsed")
+
+                    # Notizen (Linke & Rechte Spalte)
                     c1, c2 = st.columns(2)
-                    # Load saved notes
+                    
+                    # Werte laden
                     l1v = st.session_state.saved_notes.get(f"l1_{pid}", "")
                     l2v = st.session_state.saved_notes.get(f"l2_{pid}", "")
                     l3v = st.session_state.saved_notes.get(f"l3_{pid}", "")
@@ -437,105 +449,88 @@ if not st.session_state.print_mode:
                     r3v = st.session_state.saved_notes.get(f"r3_{pid}", "")
                     r4v = st.session_state.saved_notes.get(f"r4_{pid}", "")
 
-                    st.text_input("L1", value=l1v, key=f"l1_{pid}")
-                    st.text_input("L2", value=l2v, key=f"l2_{pid}")
-                    st.text_input("L3", value=l3v, key=f"l3_{pid}")
-                    st.text_input("L4", value=l4v, key=f"l4_{pid}")
-                    # Die Inputs sind jetzt "unverbunden" im Layout, aber durch Key im Session State
-                    # Wir müssen die "Rechte Spalte" (R1-R4) eigentlich daneben anzeigen.
-                    # Streamlit Form Layout ist sequenziell.
-                    # Besser:
-                    # Wir nutzen c1 und c2 DIREKT.
-                    
-                    # Da wir oben schon iteriert haben, müssen wir die Widgets sauber platzieren.
-                    # ACHTUNG: text_input returns value, but inside form we rely on key state on reruns?
-                    # No, we bind `value=` to our persistence dict.
-                    
-                    # KORREKTUR Layout innerhalb der Loop:
-                    # (Code oben war nur Platzhalter, hier die echte Implementierung)
-                    
-                # RESTART LOOP FOR CLEAN LAYOUT
-                # (Streamlit erlaubt keine verschachtelten Columns die nicht sofort genutzt werden)
-                pass 
-
-            # ECHTE SCHLEIFE FÜR INPUTS
-            with st.form("main_form"):
-                results_data = []
-                for _, row in selection.iterrows():
-                    pid = row['PLAYER_ID']
-                    c_h, c_c = st.columns([3, 1])
-                    with c_h: st.markdown(f"##### #{row['NR']} {row['NAME_FULL']}")
-                    with c_c:
-                        saved_c = st.session_state.saved_colors.get(pid, "Grau")
-                        col_opt = st.selectbox("Farbe", ["Grau", "Grün", "Rot"], key=f"c_{pid}", index=["Grau", "Grün", "Rot"].index(saved_c), label_visibility="collapsed")
-                    
-                    c1, c2 = st.columns(2)
                     with c1:
                         st.caption("Notizen")
-                        l1 = st.text_input("L1", value=st.session_state.saved_notes.get(f"l1_{pid}", ""), key=f"l1_{pid}", label_visibility="collapsed")
-                        l2 = st.text_input("L2", value=st.session_state.saved_notes.get(f"l2_{pid}", ""), key=f"l2_{pid}", label_visibility="collapsed")
-                        l3 = st.text_input("L3", value=st.session_state.saved_notes.get(f"l3_{pid}", ""), key=f"l3_{pid}", label_visibility="collapsed")
-                        l4 = st.text_input("L4", value=st.session_state.saved_notes.get(f"l4_{pid}", ""), key=f"l4_{pid}", label_visibility="collapsed")
+                        l1 = st.text_input("L1", value=l1v, key=f"l1_{pid}", label_visibility="collapsed")
+                        l2 = st.text_input("L2", value=l2v, key=f"l2_{pid}", label_visibility="collapsed")
+                        l3 = st.text_input("L3", value=l3v, key=f"l3_{pid}", label_visibility="collapsed")
+                        l4 = st.text_input("L4", value=l4v, key=f"l4_{pid}", label_visibility="collapsed")
                     with c2:
                         st.caption("Defense / Calls")
-                        r1 = st.text_input("R1", value=st.session_state.saved_notes.get(f"r1_{pid}", ""), key=f"r1_{pid}", label_visibility="collapsed")
-                        r2 = st.text_input("R2", value=st.session_state.saved_notes.get(f"r2_{pid}", ""), key=f"r2_{pid}", label_visibility="collapsed")
-                        r3 = st.text_input("R3", value=st.session_state.saved_notes.get(f"r3_{pid}", ""), key=f"r3_{pid}", label_visibility="collapsed")
-                        r4 = st.text_input("R4", value=st.session_state.saved_notes.get(f"r4_{pid}", ""), key=f"r4_{pid}", label_visibility="collapsed")
+                        r1 = st.text_input("R1", value=r1v, key=f"r1_{pid}", label_visibility="collapsed")
+                        r2 = st.text_input("R2", value=r2v, key=f"r2_{pid}", label_visibility="collapsed")
+                        r3 = st.text_input("R3", value=r3v, key=f"r3_{pid}", label_visibility="collapsed")
+                        r4 = st.text_input("R4", value=r4v, key=f"r4_{pid}", label_visibility="collapsed")
+                    
                     st.divider()
                     
-                    # Daten sammeln für später
-                    color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
-                    row_dict = row.to_dict()
-                    notes = {'l1':l1,'l2':l2,'l3':l3,'l4':l4,'r1':r1,'r2':r2,'r3':r3,'r4':r4}
-                    results_data.append((row_dict, notes, color_map[col_opt], pid)) # pid für speichern
+                    # Wir speichern die 'Referenzen' zu den Werten, die beim Submit gültig sind
+                    form_results.append({
+                        'row': row,
+                        'pid': pid,
+                        'color': col_opt,
+                        'notes': {'l1': l1, 'l2': l2, 'l3': l3, 'l4': l4, 'r1': r1, 'r2': r2, 'r3': r3, 'r4': r4}
+                    })
 
-                st.markdown("### Key Facts")
-                c_k1, c_k2, c_k3 = st.columns(3)
-                with c_k1: st.caption("Offense"); st.session_state.facts_offense = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="ed_off", hide_index=True)
-                with c_k2: st.caption("Defense"); st.session_state.facts_defense = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="ed_def", hide_index=True)
-                with c_k3: st.caption("All About Us"); st.session_state.facts_about = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="ed_abt", hide_index=True)
+                # Key Facts (Außerhalb der Schleife, aber im Formular?)
+                # DataEditor unterstützt Form-Submission nicht perfekt in allen Versionen, 
+                # aber wir probieren es. Besser: Außerhalb des Forms, da DataEditor eigenen State hat.
+                # Wir machen das Formular ZU, bevor wir Key Facts machen? Nein, Submit soll alles machen.
+                # Um Fehler zu vermeiden: Wir lassen Key Facts und Upload AUSSERHALB des Forms.
+                # Das Formular ist nur für die Spieler-Notizen.
                 
-                st.markdown("### Grafiken")
-                uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
-                
-                if st.form_submit_button("PDF Ansicht erstellen", type="primary"):
-                    # 1. State speichern (Persistence)
-                    for r_data in results_data:
-                        pid = r_data[3]
-                        notes = r_data[1]
-                        # Notizen speichern
-                        st.session_state.saved_notes[f"l1_{pid}"] = notes['l1']
-                        st.session_state.saved_notes[f"l2_{pid}"] = notes['l2']
-                        st.session_state.saved_notes[f"l3_{pid}"] = notes['l3']
-                        st.session_state.saved_notes[f"l4_{pid}"] = notes['l4']
-                        st.session_state.saved_notes[f"r1_{pid}"] = notes['r1']
-                        st.session_state.saved_notes[f"r2_{pid}"] = notes['r2']
-                        st.session_state.saved_notes[f"r3_{pid}"] = notes['r3']
-                        st.session_state.saved_notes[f"r4_{pid}"] = notes['r4']
-                        # Farbe speichern (Reverse lookup vom Hex code ist nervig, wir speichern den Namen aus dem Widget state ist einfacher, aber hier haben wir den Hex).
-                        # Einfacher: Wir schauen was im Widget 'c_{pid}' steht (Streamlit State)
-                        st.session_state.saved_colors[pid] = st.session_state[f"c_{pid}"]
+                submitted = st.form_submit_button("Speichern & PDF Generieren", type="primary")
 
-                    # 2. HTML bauen
-                    full_df = st.session_state.roster_df
-                    html = generate_header_html(st.session_state.game_meta)
-                    html += generate_top3_html(full_df)
-                    for p_data, p_notes, p_color, _ in results_data:
-                        meta = get_player_metadata(p_data['PLAYER_ID'])
-                        html += generate_card_html(p_data, meta, p_notes, p_color)
-                    html += generate_team_stats_html(st.session_state.team_stats)
-                    if uploaded_files:
-                        html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
-                        for up in uploaded_files:
-                            b64 = base64.b64encode(up.getvalue()).decode()
-                            html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
-                        html += "</div>"
-                    html += generate_custom_sections_html()
-                    
-                    st.session_state.final_html = html
-                    st.session_state.print_mode = True
-                    st.rerun()
+            # Außerhalb des Forms: Key Facts & Uploads (Live Edit möglich)
+            st.markdown("### Key Facts")
+            c_k1, c_k2, c_k3 = st.columns(3)
+            with c_k1: st.caption("Offense"); st.session_state.facts_offense = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="ed_off", hide_index=True)
+            with c_k2: st.caption("Defense"); st.session_state.facts_defense = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="ed_def", hide_index=True)
+            with c_k3: st.caption("All About Us"); st.session_state.facts_about = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="ed_abt", hide_index=True)
+            
+            st.markdown("### Grafiken")
+            uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+
+            # Logik nach Submit
+            if submitted:
+                # 1. Speichern in Session State (Persistence)
+                color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
+                
+                for item in form_results:
+                    pid = item['pid']
+                    notes = item['notes']
+                    # Save Notes
+                    for k, v in notes.items():
+                        st.session_state.saved_notes[f"{k}_{pid}"] = v
+                    # Save Color
+                    st.session_state.saved_colors[pid] = item['color']
+
+                # 2. HTML Generieren
+                full_df = st.session_state.roster_df
+                html = generate_header_html(st.session_state.game_meta)
+                html += generate_top3_html(full_df)
+                
+                for item in form_results:
+                    meta = get_player_metadata(item['pid'])
+                    # Row ist eine Series, muss dict sein für Template
+                    r_dict = item['row'].to_dict()
+                    c_hex = color_map[item['color']]
+                    html += generate_card_html(r_dict, meta, item['notes'], c_hex)
+                
+                html += generate_team_stats_html(st.session_state.team_stats)
+                
+                if uploaded_files:
+                    html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
+                    for up in uploaded_files:
+                        b64 = base64.b64encode(up.getvalue()).decode()
+                        html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
+                    html += "</div>"
+                
+                html += generate_custom_sections_html()
+                
+                st.session_state.final_html = html
+                st.session_state.print_mode = True
+                st.rerun()
 
 else:
     if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
