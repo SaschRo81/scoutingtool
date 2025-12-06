@@ -7,7 +7,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v2.4 (Fixed Layout & Print)"
+VERSION = "v2.5 (Print Fix)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -293,6 +293,7 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
 # --- ANSICHT: BEARBEITUNG ---
 if not st.session_state.print_mode:
     st.title(f"🏀 DBBL Scouting Pro {VERSION}")
+    
     st.subheader("1. Spieldaten")
     col_staffel, col_home, col_guest = st.columns([1, 2, 2])
     with col_staffel:
@@ -404,6 +405,7 @@ if not st.session_state.print_mode:
         if len(selected_indices) > 0:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
+            
             with st.form("scouting_form"):
                 st.write("**Spieler-Notizen:**")
                 selection = st.session_state.roster_df.loc[selected_indices]
@@ -437,16 +439,16 @@ if not st.session_state.print_mode:
                     st.divider()
                     form_results.append({'row': row, 'pid': pid, 'color': col_opt, 'notes': {'l1': l1, 'l2': l2, 'l3': l3, 'l4': l4, 'r1': r1, 'r2': r2, 'r3': r3, 'r4': r4}})
 
-                st.markdown("### Key Facts")
-                c_k1, c_k2, c_k3 = st.columns(3)
-                with c_k1: st.caption("Offense"); edited_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="ed_off", hide_index=True)
-                with c_k2: st.caption("Defense"); edited_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="ed_def", hide_index=True)
-                with c_k3: st.caption("All About Us"); edited_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="ed_abt", hide_index=True)
-                
-                st.markdown("### Grafiken")
-                uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
-
                 submitted = st.form_submit_button("Speichern & PDF Generieren", type="primary")
+
+            st.markdown("### Key Facts")
+            c_k1, c_k2, c_k3 = st.columns(3)
+            with c_k1: st.caption("Offense"); edited_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="editor_offense", hide_index=True)
+            with c_k2: st.caption("Defense"); edited_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="editor_defense", hide_index=True)
+            with c_k3: st.caption("All About Us"); edited_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="editor_about", hide_index=True)
+            
+            st.markdown("### Grafiken")
+            uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
             if submitted:
                 st.session_state.facts_offense = edited_off
@@ -482,72 +484,27 @@ if not st.session_state.print_mode:
                 st.session_state.print_mode = True
                 st.rerun()
 
-# --- ANSICHT: DRUCK/PDF ---
 else:
-    # Zurück zur Bearbeitung
     if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
         st.session_state.print_mode = False
         st.rerun()
-
-    # CSS für Druck + Scroll-Verhalten
-    st.markdown(
-        """
-        <style>
-        /* Allgemein: volle Höhe, kein Scrollen erzwingen */
-        html, body {
-            height: auto !important;
-            overflow: visible !important;
-        }
-
-        /* Streamlit-Container etwas "entfesseln" */
-        [data-testid="stAppViewContainer"],
-        [data-testid="stAppViewBlockContainer"],
-        .block-container {
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-        }
-
-        @media print {
-            /* Alles ausblenden, was nicht in den Report gehört */
-            [data-testid="stHeader"],
-            [data-testid="stSidebar"],
-            [data-testid="stToolbar"],
-            footer,
-            .stButton {
-                display: none !important;
-            }
-
-            [data-testid="stAppViewContainer"],
-            [data-testid="stAppViewBlockContainer"],
-            .block-container {
-                padding: 0 !important;
-                margin: 0 !important;
-                max-width: 100% !important;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # Report direkt anzeigen
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-
-    # Zusätzlich: als eigene HTML-Datei herunterladen (beste Druckqualität, keine Scrollbalken)
-    full_html_doc = (
-        "<!DOCTYPE html><html><head>"
-        "<meta charset='utf-8'>"
-        "<title>Scouting Report</title>"
-        "<style>@page { size: A4 portrait; margin: 10mm; }</style>"
-        "</head><body>"
-        + st.session_state.final_html +
-        "</body></html>"
-    )
-
-    st.download_button(
-        "📄 Report als HTML herunterladen (zum Drucken ohne Scrollbalken)",
-        data=full_html_doc.encode("utf-8"),
-        file_name="scouting_report.html",
-        mime="text/html"
-    )
+    st.markdown("""
+    <style>
+    @media print {
+        @page { size: A4; margin: 5mm; }
+        body { margin: 0; padding: 0; zoom: 0.65; }
+        .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
+        [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton { display: none !important; }
+        
+        /* Force Tables to Expand */
+        table { width: 100% !important; table-layout: fixed !important; }
+        
+        /* Hide Scrollbars */
+        ::-webkit-scrollbar { display: none; }
+        
+        /* Make all containers overflow visible */
+        .stApp, [data-testid="stVerticalBlock"], div { overflow: visible !important; height: auto !important; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
