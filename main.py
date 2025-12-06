@@ -410,4 +410,166 @@ if not st.session_state.print_mode:
             if raw:
                 df = pd.json_normalize(raw)
                 df.columns = [str(c).lower() for c in df.columns]
-                col_ma
+                col_map = {
+                    'firstname': ['person.firstname', 'firstname'],
+                    'lastname': ['person.lastname', 'lastname'],
+                    'shirtnumber': ['jerseynumber', 'shirtnumber', 'no'],
+                    'id': ['id', 'person.id', 'personid'],
+                    'gp': ['matches', 'gamesplayed', 'games', 'gp'],
+                    'ppg': ['pointspergame'], 'tot': ['totalreboundspergame'],
+                    'min_sec': ['secondsplayedpergame', 'minutespergame', 'avgminutes', 'minutes'],
+                    'sec_total': ['secondsplayed', 'totalminutes', 'totalseconds'],
+                    '2m': ['twopointshotsmadepergame'], '2a': ['twopointshotsattemptedpergame'], '2pct': ['twopointshotsuccesspercent'],
+                    '3m': ['threepointshotsmadepergame'], '3a': ['threepointshotsattemptedpergame'], '3pct': ['threepointshotsuccesspercent'],
+                    'ftm': ['freethrowsmadepergame'], 'fta': ['freethrowsattemptedpergame'], 'ftpct': ['freethrowssuccesspercent'],
+                    'dr': ['defensivereboundspergame'], 'or': ['offensivereboundspergame'],
+                    'as': ['assistspergame'], 'to': ['turnoverspergame'], 'st': ['stealspergame'], 'pf': ['foulscommittedpergame'],
+                    'fgpct': ['fieldgoalsuccesspercent', 'fieldgoalpercentage']
+                }
+                final_cols = {}
+                for t, p_list in col_map.items():
+                    for p in p_list:
+                        m = [c for c in df.columns if p in c]
+                        if m: final_cols[t] = sorted(m, key=len)[0]; break
+                
+                fn = df[final_cols['firstname']].fillna('') if 'firstname' in final_cols else ''
+                ln = df[final_cols['lastname']].fillna('') if 'lastname' in final_cols else ''
+                df['NAME_FULL'] = (fn + " " + ln).str.strip()
+                df['NR'] = df[final_cols['shirtnumber']].fillna('-').astype(str).str.replace('.0', '', regex=False) if 'shirtnumber' in final_cols else '-'
+                df['PLAYER_ID'] = df[final_cols['id']].astype(str) if 'id' in final_cols else ""
+                
+                def get_v(k): return pd.to_numeric(df[final_cols[k]], errors='coerce').fillna(0) if k in final_cols else pd.Series([0.0]*len(df))
+                def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
+
+                df['GP'] = get_v('gp').replace(0, 1)
+                min_raw = get_v('min_sec')
+                sec_total = get_v('sec_total')
+                df['MIN_FINAL'] = min_raw
+                mask_zero = df['MIN_FINAL'] <= 0
+                df.loc[mask_zero, 'MIN_FINAL'] = sec_total[mask_zero] / df.loc[mask_zero, 'GP']
+                df['MIN_DISPLAY'] = df['MIN_FINAL'].apply(format_minutes)
+                df['PPG'] = get_v('ppg'); df['TOT'] = get_v('tot')
+                df['2M'] = get_v('2m'); df['2A'] = get_v('2a'); df['2PCT'] = get_v('2pct').apply(pct)
+                df['3M'] = get_v('3m'); df['3A'] = get_v('3a'); df['3PCT'] = get_v('3pct').apply(pct)
+                df['FTM'] = get_v('ftm'); df['FTA'] = get_v('fta'); df['FTPCT'] = get_v('ftpct').apply(pct)
+                raw_fg = get_v('fgpct')
+                if raw_fg.sum() == 0: df['FG%'] = df['2PCT'] 
+                else: df['FG%'] = raw_fg.apply(pct)
+                df['DR'] = get_v('dr'); df['OR'] = get_v('or')
+                df['AS'] = get_v('as'); df['TO'] = get_v('to'); df['ST'] = get_v('st'); df['PF'] = get_v('pf')
+                df['select'] = False
+                st.session_state.roster_df = df
+                st.session_state.game_meta = {'home_name': home_name, 'home_logo': get_logo_url(home_id), 'guest_name': guest_name, 'guest_logo': get_logo_url(guest_id), 'date': date_input.strftime('%d.%m.%Y'), 'time': time_input.strftime('%H:%M')}
+        except Exception as e: st.error(f"Fehler: {e}")
+
+    if st.session_state.roster_df is not None:
+        st.subheader("3. Spieler auswählen")
+        edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']], column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)}, disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
+        selected_indices = edited[edited['select']].index
+        if len(selected_indices) > 0:
+            st.divider()
+            st.subheader("4. Notizen & Key Facts")
+            
+            with st.form("scouting_form"):
+                st.write("**Spieler-Notizen:**")
+                selection = st.session_state.roster_df.loc[selected_indices]
+                form_results = [] 
+                
+                for _, row in selection.iterrows():
+                    pid = row['PLAYER_ID']
+                    c_h, c_c = st.columns([3, 1])
+                    c_h.markdown(f"##### #{row['NR']} {row['NAME_FULL']}")
+                    saved_c = st.session_state.saved_colors.get(pid, "Grau")
+                    try: idx = ["Grau", "Grün", "Rot"].index(saved_c)
+                    except: idx = 0
+                    col_opt = c_c.selectbox("Markierung", ["Grau", "Grün", "Rot"], key=f"col_{pid}", index=idx, label_visibility="collapsed")
+                    
+                    c1, c2 = st.columns(2)
+                    l1v = st.session_state.saved_notes.get(f"l1_{pid}", ""); l2v = st.session_state.saved_notes.get(f"l2_{pid}", "")
+                    l3v = st.session_state.saved_notes.get(f"l3_{pid}", ""); l4v = st.session_state.saved_notes.get(f"l4_{pid}", "")
+                    r1v = st.session_state.saved_notes.get(f"r1_{pid}", ""); r2v = st.session_state.saved_notes.get(f"r2_{pid}", "")
+                    r3v = st.session_state.saved_notes.get(f"r3_{pid}", ""); r4v = st.session_state.saved_notes.get(f"r4_{pid}", "")
+
+                    l1=c1.text_input("L1", value=l1v, key=f"l1_{pid}", label_visibility="collapsed")
+                    l2=c1.text_input("L2", value=l2v, key=f"l2_{pid}", label_visibility="collapsed")
+                    l3=c1.text_input("L3", value=l3v, key=f"l3_{pid}", label_visibility="collapsed")
+                    l4=c1.text_input("L4", value=l4v, key=f"l4_{pid}", label_visibility="collapsed")
+                    r1=c2.text_input("R1", value=r1v, key=f"r1_{pid}", label_visibility="collapsed")
+                    r2=c2.text_input("R2", value=r2v, key=f"r2_{pid}", label_visibility="collapsed")
+                    r3=c2.text_input("R3", value=r3v, key=f"r3_{pid}", label_visibility="collapsed")
+                    r4=c2.text_input("R4", value=r4v, key=f"r4_{pid}", label_visibility="collapsed")
+                    st.divider()
+                    form_results.append({'row': row, 'pid': pid, 'color': col_opt, 'notes': {'l1': l1, 'l2': l2, 'l3': l3, 'l4': l4, 'r1': r1, 'r2': r2, 'r3': r3, 'r4': r4}})
+
+                st.markdown("### Key Facts")
+                c_k1, c_k2, c_k3 = st.columns(3)
+                with c_k1: st.caption("Offense"); edited_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="editor_offense", hide_index=True)
+                with c_k2: st.caption("Defense"); edited_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="editor_defense", hide_index=True)
+                with c_k3: st.caption("All About Us"); edited_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="editor_about", hide_index=True)
+                
+                st.markdown("### Grafiken")
+                uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+
+                submitted = st.form_submit_button("Speichern & PDF Generieren", type="primary")
+
+            if submitted:
+                st.session_state.facts_offense = edited_off
+                st.session_state.facts_defense = edited_def
+                st.session_state.facts_about = edited_abt
+                
+                for item in form_results:
+                    pid = item['pid']
+                    st.session_state.saved_colors[pid] = item['color']
+                    for k, v in item['notes'].items(): st.session_state.saved_notes[f"{k}_{pid}"] = v
+
+                color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
+                full_df = st.session_state.roster_df
+                html = generate_header_html(st.session_state.game_meta)
+                html += generate_top3_html(full_df)
+                
+                for item in form_results:
+                    meta = get_player_metadata(item['pid'])
+                    c_hex = color_map[item['color']]
+                    html += generate_card_html(item['row'].to_dict(), meta, item['notes'], c_hex)
+                
+                html += generate_team_stats_html(st.session_state.team_stats)
+                
+                if uploaded_files:
+                    html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
+                    for up in uploaded_files:
+                        b64 = base64.b64encode(up.getvalue()).decode()
+                        html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
+                    html += "</div>"
+                
+                html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
+                st.session_state.final_html = html
+                st.session_state.print_mode = True
+                st.rerun()
+
+else:
+    if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
+        st.session_state.print_mode = False
+        st.rerun()
+    st.markdown(st.session_state.final_html, unsafe_allow_html=True)
+    st.markdown("""
+    <style>
+    @media print {
+        @page { size: A4; margin: 5mm; }
+        body { margin: 0; padding: 0; zoom: 0.65; }
+        .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
+        [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton { display: none !important; }
+        
+        /* Force Tables to Expand */
+        table { width: 100% !important; table-layout: fixed !important; }
+        
+        /* Hide Scrollbars */
+        ::-webkit-scrollbar { display: none; }
+        
+        /* Make all containers overflow visible */
+        .stApp, [data-testid="stVerticalBlock"], div { overflow: visible !important; height: auto !important; }
+        
+        /* Ensure Images Scale */
+        img { max-width: 100% !important; height: auto !important; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
