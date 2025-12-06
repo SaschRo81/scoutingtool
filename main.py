@@ -475,7 +475,7 @@ if not st.session_state.print_mode:
 
                 submitted = st.form_submit_button("Speichern & PDF Generieren", type="primary")
 
-            if submitted:
+                        if submitted:
                 st.session_state.facts_offense = edited_off
                 st.session_state.facts_defense = edited_def
                 st.session_state.facts_about = edited_abt
@@ -483,10 +483,12 @@ if not st.session_state.print_mode:
                 for item in form_results:
                     pid = item['pid']
                     st.session_state.saved_colors[pid] = item['color']
-                    for k, v in item['notes'].items(): st.session_state.saved_notes[f"{k}_{pid}"] = v
+                    for k, v in item['notes'].items():
+                        st.session_state.saved_notes[f"{k}_{pid}"] = v
 
                 color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
                 full_df = st.session_state.roster_df
+
                 html = generate_header_html(st.session_state.game_meta)
                 html += generate_top3_html(full_df)
                 
@@ -497,23 +499,30 @@ if not st.session_state.print_mode:
                 
                 html += generate_team_stats_html(st.session_state.team_stats)
                 
-               if uploaded_files:
+                # ----- NEUER, KORREKTER BILDBLOCK -----
+                if uploaded_files:
                     html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
                     for up in uploaded_files:
                         b64 = base64.b64encode(up.getvalue()).decode()
                         html += (
-                             <div style='margin-bottom:20px; page-break-inside: avoid;'>"
-                              f"<img src='data:image/png;base64,{b64}' "
-                              "style='max-width:100%; height:auto; border:1px solid #ccc; display:block;'>"
-                              "</div>"
-                         )
-                   html += "</div>"
+                            "<div style='margin-bottom:20px; page-break-inside: avoid;'>"
+                            f"<img src='data:image/png;base64,{b64}' "
+                            "style='max-width:100%; height:auto; border:1px solid #ccc; display:block;'>"
+                            "</div>"
+                        )
+                    html += "</div>"
+                # --------------------------------------
 
-                
-                html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
+                html += generate_custom_sections_html(
+                    st.session_state.facts_offense,
+                    st.session_state.facts_defense,
+                    st.session_state.facts_about
+                )
+
                 st.session_state.final_html = html
                 st.session_state.print_mode = True
                 st.rerun()
+
 
 else:
     if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
@@ -595,6 +604,7 @@ else:
         """,
         unsafe_allow_html=True
     )
+
 
 
 
