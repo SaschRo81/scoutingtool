@@ -14,7 +14,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v3.1 (Full Stats & PDF)"
+VERSION = "v3.3 (Bugfix border_css)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -60,7 +60,7 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"}
 }
 
-# --- SESSION STATE ---
+# --- SESSION STATE INITIALISIERUNG ---
 if 'print_mode' not in st.session_state: st.session_state.print_mode = False
 if 'final_html' not in st.session_state: st.session_state.final_html = ""
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
@@ -206,7 +206,7 @@ def generate_top3_html(df):
     # Build Row 1
     h_scorers = build_box(scorers, ["Name", "PPG", "FG%"], ["NAME_FULL", "PPG", "FG%"], [1], "#e35b00", "🔥", "Top Scorer")
     h_rebs = build_box(rebounders, ["Name", "DR", "OR", "TOT"], ["NAME_FULL", "DR", "OR", "TOT"], [3], "#0055ff", "🗑️", "Rebounds")
-    h_3pt = build_box(shooters, ["Name", "M", "A", "%"], ["NAME_FULL", "3M", "3A", "3PCT"], [3], "#28a745", "🎯", "Best 3pt")
+    h_3pt = build_box(shooters, ["Name", "M", "A", "%"], ["NAME_FULL", "3M", "3A", "3PCT"], [3], "#28a745", "🎯", "3-Points")
     h_ft = build_box(fts, ["Name", "M", "A", "%"], ["NAME_FULL", "FTM", "FTA", "FTPCT"], [3], "#dc3545", "⚠️", "Worst FT")
 
     # Build Row 2
@@ -217,12 +217,10 @@ def generate_top3_html(df):
     h_pf = build_box(fouls, ["Name", "PF"], ["NAME_FULL", "PF"], [1], "#20c997", "🛑", "Fouls")
 
     return f"""
-<div style="margin-bottom: 20px; page-break-inside: avoid; font-family: Arial, sans-serif;">
-    <!-- Row 1 -->
+<div style="margin-bottom: 30px; page-break-inside: avoid; font-family: Arial, sans-serif;">
     <div style="display: flex; flex-direction: row; gap: 10px; margin-bottom: 10px;">
         {h_scorers} {h_rebs} {h_3pt} {h_ft}
     </div>
-    <!-- Row 2 -->
     <div style="display: flex; flex-direction: row; gap: 10px;">
         {h_as} {h_st} {h_to} {h_bs} {h_pf}
     </div>
@@ -299,34 +297,48 @@ def generate_team_stats_html(team_stats):
     t_2pct = calc_pct(ts['2m'], ts['2a'], ts['2pct'])
     t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
     t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
+    
+    border_css = "border: 1px solid #ccc;"
+
     return f"""
-<div style="font-family: Arial, sans-serif; margin-top: 20px; page-break-inside: avoid;">
-<h2 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-size: 16px;">Team Stats (AVG - Official API)</h2>
-<table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black; border: 1px solid #ccc;">
-<tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-<th rowspan="2" style="{border_css} padding: 4px;">PPG</th><th colspan="3" style="{border_css} padding: 4px;">2P FG</th><th colspan="3" style="{border_css} padding: 4px;">3P FG</th><th colspan="3" style="{border_css} padding: 4px;">FT</th><th colspan="3" style="{border_css} padding: 4px;">REB</th><th rowspan="2" style="{border_css} padding: 4px;">AS</th><th rowspan="2" style="{border_css} padding: 4px;">TO</th><th rowspan="2" style="{border_css} padding: 4px;">ST</th><th rowspan="2" style="{border_css} padding: 4px;">PF</th>
-</tr>
-<tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-<th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">D</th><th style="{border_css}">O</th><th style="{border_css}">TOT</th>
-</tr>
-<tr style="font-weight: bold; background-color: #f9f9f9;">
-<td style="{border_css} padding: 6px;">{ts['ppg']:.1f}</td>
-<td style="{border_css}">{ts['2m']:.1f}</td><td style="{border_css}">{ts['2a']:.1f}</td><td style="{border_css}">{t_2pct:.1f}</td>
-<td style="{border_css}">{ts['3m']:.1f}</td><td style="{border_css}">{ts['3a']:.1f}</td><td style="{border_css}">{t_3pct:.1f}</td>
-<td style="{border_css}">{ts['ftm']:.1f}</td><td style="{border_css}">{ts['fta']:.1f}</td><td style="{border_css}">{t_ftpct:.1f}</td>
-<td style="{border_css}">{ts['dr']:.1f}</td><td style="{border_css}">{ts['or']:.1f}</td><td style="{border_css}">{ts['tot']:.1f}</td>
-<td style="{border_css}">{ts['as']:.1f}</td><td style="{border_css}">{ts['to']:.1f}</td><td style="{border_css}">{ts['st']:.1f}</td><td style="{border_css}">{ts['pf']:.1f}</td>
-</tr>
-</table>
+<div style="font-family: Arial, sans-serif; margin-top: 30px; page-break-inside: avoid;">
+    <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG - Official API)</h2>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; border: 1px solid #ccc;">
+        <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
+            <th rowspan="2" style="{border_css} padding: 4px;">PPG</th>
+            <th colspan="3" style="{border_css} padding: 4px;">2P FG</th>
+            <th colspan="3" style="{border_css} padding: 4px;">3P FG</th>
+            <th colspan="3" style="{border_css} padding: 4px;">FT</th>
+            <th colspan="3" style="{border_css} padding: 4px;">REB</th>
+            <th rowspan="2" style="{border_css} padding: 4px;">AS</th>
+            <th rowspan="2" style="{border_css} padding: 4px;">TO</th>
+            <th rowspan="2" style="{border_css} padding: 4px;">ST</th>
+            <th rowspan="2" style="{border_css} padding: 4px;">PF</th>
+        </tr>
+        <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
+            <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
+            <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
+            <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
+            <th style="{border_css}">D</th><th style="{border_css}">O</th><th style="{border_css}">TOT</th>
+        </tr>
+        <tr style="font-weight: bold; background-color: #f9f9f9;">
+            <td style="{border_css} padding: 8px;">{ts['ppg']:.1f}</td>
+            <td style="{border_css}">{ts['2m']:.1f}</td><td style="{border_css}">{ts['2a']:.1f}</td><td style="{border_css}">{t_2pct:.1f}</td>
+            <td style="{border_css}">{ts['3m']:.1f}</td><td style="{border_css}">{ts['3a']:.1f}</td><td style="{border_css}">{t_3pct:.1f}</td>
+            <td style="{border_css}">{ts['ftm']:.1f}</td><td style="{border_css}">{ts['fta']:.1f}</td><td style="{border_css}">{t_ftpct:.1f}</td>
+            <td style="{border_css}">{ts['dr']:.1f}</td><td style="{border_css}">{ts['or']:.1f}</td><td style="{border_css}">{ts['tot']:.1f}</td>
+            <td style="{border_css}">{ts['as']:.1f}</td><td style="{border_css}">{ts['to']:.1f}</td><td style="{border_css}">{ts['st']:.1f}</td><td style="{border_css}">{ts['pf']:.1f}</td>
+        </tr>
+    </table>
 </div>
 """
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
-    html = "<div style='margin-top: 20px; page-break-inside: avoid;'>"
+    html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
     def make_section(title, df):
         if df.empty: return ""
-        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:5px; font-size:16px;'>{title}</h3>"
-        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:11px; margin-bottom:15px;'>"
+        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px;'>{title}</h3>"
+        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; margin-bottom:20px;'>"
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], "")
             c2 = r.get(df.columns[1], "")
@@ -343,6 +355,7 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
 # --- ANSICHT: BEARBEITUNG ---
 if not st.session_state.print_mode:
     st.title(f"🏀 DBBL Scouting Pro {VERSION}")
+    
     st.subheader("1. Spieldaten")
     col_staffel, col_home, col_guest = st.columns([1, 2, 2])
     with col_staffel:
@@ -531,7 +544,6 @@ if not st.session_state.print_mode:
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
                 st.session_state.final_html = html
                 
-                # PDF Generierung (Optional, falls pdfkit vorhanden)
                 if HAS_PDFKIT:
                     try:
                         options = {'page-size': 'A4', 'margin-top': '10mm', 'margin-right': '10mm', 'margin-bottom': '10mm', 'margin-left': '10mm', 'encoding': "UTF-8", 'no-outline': None}
@@ -539,7 +551,7 @@ if not st.session_state.print_mode:
                         st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, options=options)
                     except Exception:
                         st.session_state.pdf_bytes = None
-                
+
                 st.session_state.print_mode = True
                 st.rerun()
 
