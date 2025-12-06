@@ -497,30 +497,80 @@ if not st.session_state.print_mode:
                 st.session_state.print_mode = True
                 st.rerun()
 
+# --- ANSICHT: DRUCK ---
 else:
     if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
         st.session_state.print_mode = False
         st.rerun()
+
+    # Layout entsperren
+    st.markdown(
+        """
+        <style>
+        html, body {
+            height: auto !important;
+            overflow: visible !important;
+        }
+        [data-testid="stAppViewContainer"],
+        [data-testid="stAppViewBlockContainer"],
+        .block-container {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Report anzeigen
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-    st.markdown("""
-    <style>
-    @media print {
-        @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.65; }
-        .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
-        [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton { display: none !important; }
-        
-        /* Force Tables to Expand */
-        table { width: 100% !important; table-layout: fixed !important; }
-        
-        /* Hide Scrollbars */
-        ::-webkit-scrollbar { display: none; }
-        
-        /* Make all containers overflow visible */
-        .stApp, [data-testid="stVerticalBlock"], div { overflow: visible !important; height: auto !important; }
-        
-        /* Ensure Images Scale */
-        img { max-width: 100% !important; height: auto !important; }
-    }
-    </style>
-    """, unsafe_allow_html=True)
+
+    # Print-spezifisches CSS
+    st.markdown(
+        """
+        <style>
+        @media print {
+            @page {
+                size: A4;
+                margin: 5mm;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+            }
+
+            [data-testid="stHeader"],
+            [data-testid="stSidebar"],
+            [data-testid="stToolbar"],
+            footer,
+            .stButton {
+                display: none !important;
+            }
+
+            [data-testid="stAppViewContainer"],
+            [data-testid="stAppViewBlockContainer"],
+            .block-container {
+                padding: 0 !important;
+                margin: 0 !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+
+            table {
+                width: 100% !important;
+                table-layout: fixed !important;
+            }
+
+            ::-webkit-scrollbar {
+                display: none !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
