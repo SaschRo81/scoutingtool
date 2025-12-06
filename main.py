@@ -7,7 +7,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v1.8 (Final Stable)"
+VERSION = "v1.9 (One-Form-Solution)"
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -53,7 +53,7 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"}
 }
 
-# --- SESSION STATE INITIALISIERUNG ---
+# --- SESSION STATE ---
 if 'print_mode' not in st.session_state: st.session_state.print_mode = False
 if 'final_html' not in st.session_state: st.session_state.final_html = ""
 if 'roster_df' not in st.session_state: st.session_state.roster_df = None
@@ -61,11 +61,11 @@ if 'team_stats' not in st.session_state: st.session_state.team_stats = None
 if 'game_meta' not in st.session_state: st.session_state.game_meta = {}
 if 'optimized_images' not in st.session_state: st.session_state.optimized_images = {}
 
-# Speicher für Notizen (Persistence)
+# Speicher für Notizen
 if 'saved_notes' not in st.session_state: st.session_state.saved_notes = {}
 if 'saved_colors' not in st.session_state: st.session_state.saved_colors = {}
 
-# Key Facts Dataframes initialisieren
+# Speicher für Key Facts
 if 'facts_offense' not in st.session_state: 
     st.session_state.facts_offense = pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])
 if 'facts_defense' not in st.session_state: 
@@ -303,7 +303,6 @@ if not st.session_state.print_mode:
         teams_filtered = {k: v for k, v in TEAMS_DB.items() if v['staffel'] == staffel}
         team_options = {v['name']: k for k, v in teams_filtered.items()}
     with col_home:
-        # Hier Session State Key für automatische Speicherung
         home_name = st.selectbox("Heim-Team:", list(team_options.keys()), index=0, key="sel_home")
         home_id = team_options[home_name]
         st.image(get_logo_url(home_id), width=100)
@@ -321,7 +320,6 @@ if not st.session_state.print_mode:
     with col_time: time_input = st.time_input("Tip-Off", datetime.time(16, 0), key="sel_time")
 
     st.divider()
-    # Button: Daten neu laden (Reset von Roster)
     if st.button(f"2. Kader von {scout_target} laden", type="primary"):
         api_url = f"https://api-s.dbbl.scb.world/teams/{target_team_id}/{SEASON_ID}/player-stats"
         api_team = f"https://api-s.dbbl.scb.world/seasons/{SEASON_ID}/team-statistics?displayType=MAIN_ROUND&teamId={target_team_id}"
@@ -397,7 +395,6 @@ if not st.session_state.print_mode:
                 else: df['FG%'] = raw_fg.apply(pct)
                 df['DR'] = get_v('dr'); df['OR'] = get_v('or')
                 df['AS'] = get_v('as'); df['TO'] = get_v('to'); df['ST'] = get_v('st'); df['PF'] = get_v('pf')
-                
                 df['select'] = False
                 st.session_state.roster_df = df
                 st.session_state.game_meta = {'home_name': home_name, 'home_logo': get_logo_url(home_id), 'guest_name': guest_name, 'guest_logo': get_logo_url(guest_id), 'date': date_input.strftime('%d.%m.%Y'), 'time': time_input.strftime('%H:%M')}
@@ -407,98 +404,118 @@ if not st.session_state.print_mode:
         st.subheader("3. Spieler auswählen")
         edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']], column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)}, disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
         selected_indices = edited[edited['select']].index
-        
         if len(selected_indices) > 0:
             st.divider()
-            st.subheader("4. Notizen")
+            st.subheader("4. Notizen & Key Facts")
             
-            # Formular umschließt ALLE Inputs für alle Spieler
-            with st.form("player_notes_form"):
+            # WICHTIG: EINE GROSSE FORM FÜR ALLES
+            with st.form("complete_form"):
+                st.write("**Spieler-Notizen:**")
                 selection = st.session_state.roster_df.loc[selected_indices]
                 
-                form_items = [] # Sammelt Keys
+                # Wir sammeln die Widgets-Values in einer Liste, um sie beim Submit zu verarbeiten
+                # Wir können aber die Werte nicht direkt lesen (sie sind erst nach Submit da).
+                # Wir verlassen uns auf st.session_state oder key-based access nach Submit.
+                # Besser: Wir iterieren und nutzen keys.
+                
+                widget_keys = []
                 
                 for _, row in selection.iterrows():
                     pid = row['PLAYER_ID']
-                    st.markdown(f"##### #{row['NR']} {row['NAME_FULL']}")
+                    c_h, c_c = st.columns([3, 1])
+                    c_h.markdown(f"##### #{row['NR']} {row['NAME_FULL']}")
                     
-                    # Farbe Auswahl
-                    s_c = st.session_state.saved_colors.get(pid, "Grau")
-                    try: idx = ["Grau", "Grün", "Rot"].index(s_c)
+                    # Default Color
+                    saved_c = st.session_state.saved_colors.get(pid, "Grau")
+                    try: idx = ["Grau", "Grün", "Rot"].index(saved_c)
                     except: idx = 0
-                    c_col = st.selectbox("Markierung", ["Grau", "Grün", "Rot"], index=idx, key=f"col_{pid}", label_visibility="collapsed")
+                    
+                    c_c.selectbox("Farbe", ["Grau", "Grün", "Rot"], key=f"col_{pid}", index=idx, label_visibility="collapsed")
                     
                     c1, c2 = st.columns(2)
-                    with c1:
-                        st.caption("Notizen")
-                        # Lade Werte aus Session State oder leer
-                        l1 = st.text_input("L1", value=st.session_state.saved_notes.get(f"l1_{pid}", ""), key=f"l1_{pid}", label_visibility="collapsed")
-                        l2 = st.text_input("L2", value=st.session_state.saved_notes.get(f"l2_{pid}", ""), key=f"l2_{pid}", label_visibility="collapsed")
-                        l3 = st.text_input("L3", value=st.session_state.saved_notes.get(f"l3_{pid}", ""), key=f"l3_{pid}", label_visibility="collapsed")
-                        l4 = st.text_input("L4", value=st.session_state.saved_notes.get(f"l4_{pid}", ""), key=f"l4_{pid}", label_visibility="collapsed")
-                    with c2:
-                        st.caption("Defense / Calls")
-                        r1 = st.text_input("R1", value=st.session_state.saved_notes.get(f"r1_{pid}", ""), key=f"r1_{pid}", label_visibility="collapsed")
-                        r2 = st.text_input("R2", value=st.session_state.saved_notes.get(f"r2_{pid}", ""), key=f"r2_{pid}", label_visibility="collapsed")
-                        r3 = st.text_input("R3", value=st.session_state.saved_notes.get(f"r3_{pid}", ""), key=f"r3_{pid}", label_visibility="collapsed")
-                        r4 = st.text_input("R4", value=st.session_state.saved_notes.get(f"r4_{pid}", ""), key=f"r4_{pid}", label_visibility="collapsed")
+                    # Load saved notes
+                    l1v = st.session_state.saved_notes.get(f"l1_{pid}", "")
+                    l2v = st.session_state.saved_notes.get(f"l2_{pid}", "")
+                    l3v = st.session_state.saved_notes.get(f"l3_{pid}", "")
+                    l4v = st.session_state.saved_notes.get(f"l4_{pid}", "")
+                    r1v = st.session_state.saved_notes.get(f"r1_{pid}", "")
+                    r2v = st.session_state.saved_notes.get(f"r2_{pid}", "")
+                    r3v = st.session_state.saved_notes.get(f"r3_{pid}", "")
+                    r4v = st.session_state.saved_notes.get(f"r4_{pid}", "")
+
+                    c1.text_input("L1", value=l1v, key=f"l1_{pid}", label_visibility="collapsed")
+                    c1.text_input("L2", value=l2v, key=f"l2_{pid}", label_visibility="collapsed")
+                    c1.text_input("L3", value=l3v, key=f"l3_{pid}", label_visibility="collapsed")
+                    c1.text_input("L4", value=l4v, key=f"l4_{pid}", label_visibility="collapsed")
+                    
+                    c2.text_input("R1", value=r1v, key=f"r1_{pid}", label_visibility="collapsed")
+                    c2.text_input("R2", value=r2v, key=f"r2_{pid}", label_visibility="collapsed")
+                    c2.text_input("R3", value=r3v, key=f"r3_{pid}", label_visibility="collapsed")
+                    c2.text_input("R4", value=r4v, key=f"r4_{pid}", label_visibility="collapsed")
                     
                     st.divider()
-                    
-                    # Speichere die Referenzdaten für später
-                    form_items.append({
-                        'row': row,
-                        'pid': pid,
-                        # Die Werte (l1, r1...) sind hier noch nicht final, erst beim Submit werden sie aus st.session_state gelesen bzw die Return Values genutzt.
-                        # Da wir im Form sind, geben l1... erst nach Submit den neuen Wert zurück.
-                        'widgets': {'l1':l1, 'l2':l2, 'l3':l3, 'l4':l4, 'r1':r1, 'r2':r2, 'r3':r3, 'r4':r4, 'col':c_col}
-                    })
+                    widget_keys.append(pid)
 
-                # SUBMIT BUTTON AM ENDE DES FORMS
-                submitted = st.form_submit_button("Speichern (Notizen)", type="primary")
+                # --- 3 KEY FACTS EDITORS (Inside Form is tricky but works with st.session_state hack) ---
+                # DataEditors inside form return the modified data ONLY on submit.
+                # We need to assign them to variables.
+                
+                st.markdown("### Key Facts")
+                c_k1, c_k2, c_k3 = st.columns(3)
+                
+                with c_k1: 
+                    st.caption("Offense")
+                    edited_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="editor_offense", hide_index=True)
+                with c_k2: 
+                    st.caption("Defense")
+                    edited_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="editor_defense", hide_index=True)
+                with c_k3: 
+                    st.caption("All About Us")
+                    edited_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="editor_about", hide_index=True)
 
-            # Außerhalb des Formulars: Key Facts & Uploads (damit dynamisch)
-            st.markdown("### Key Facts")
-            c_k1, c_k2, c_k3 = st.columns(3)
-            with c_k1: st.caption("Offense"); st.session_state.facts_offense = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="ed_off", hide_index=True)
-            with c_k2: st.caption("Defense"); st.session_state.facts_defense = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="ed_def", hide_index=True)
-            with c_k3: st.caption("All About Us"); st.session_state.facts_about = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="ed_abt", hide_index=True)
-            
-            st.markdown("### Grafiken")
-            uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+                # --- UPLOAD ---
+                st.markdown("### Grafiken")
+                uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
-            # Button zur Generierung (Trigger)
-            # Da wir oben ein Formular haben, müssen wir den Submit State nutzen.
-            # Aber wir wollen auch Key Facts nutzen.
-            # Trick: Wir nutzen den Submit Button oben, um ALLES zu generieren.
-            
+                # --- SUBMIT BUTTON ---
+                submitted = st.form_submit_button("Speichern & PDF Ansicht erstellen", type="primary")
+
+            # --- LOGIK NACH SUBMIT (Ausserhalb 'with form', aber im if submitted block) ---
             if submitted:
-                # 1. Speichern der Formular-Werte in Session State
-                for item in form_items:
-                    pid = item['pid']
-                    w = item['widgets']
-                    st.session_state.saved_notes[f"l1_{pid}"] = w['l1']
-                    st.session_state.saved_notes[f"l2_{pid}"] = w['l2']
-                    st.session_state.saved_notes[f"l3_{pid}"] = w['l3']
-                    st.session_state.saved_notes[f"l4_{pid}"] = w['l4']
-                    st.session_state.saved_notes[f"r1_{pid}"] = w['r1']
-                    st.session_state.saved_notes[f"r2_{pid}"] = w['r2']
-                    st.session_state.saved_notes[f"r3_{pid}"] = w['r3']
-                    st.session_state.saved_notes[f"r4_{pid}"] = w['r4']
-                    st.session_state.saved_colors[pid] = w['col']
+                # 1. Update Session State (Key Facts)
+                st.session_state.facts_offense = edited_off
+                st.session_state.facts_defense = edited_def
+                st.session_state.facts_about = edited_abt
+                
+                # 2. Update Notes & Colors in Session State
+                # Wir lesen jetzt die Werte aus dem Session State, die durch das Formular geupdated wurden
+                for pid in widget_keys:
+                    # Color
+                    st.session_state.saved_colors[pid] = st.session_state[f"col_{pid}"]
+                    # Notes
+                    for k in ['l1','l2','l3','l4','r1','r2','r3','r4']:
+                        key = f"{k}_{pid}"
+                        if key in st.session_state:
+                            st.session_state.saved_notes[key] = st.session_state[key]
 
-                # 2. HTML Generieren
+                # 3. HTML Generieren
                 color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
                 full_df = st.session_state.roster_df
                 html = generate_header_html(st.session_state.game_meta)
                 html += generate_top3_html(full_df)
                 
-                for item in form_items:
-                    meta = get_player_metadata(item['pid'])
+                for idx, row in selection.iterrows():
+                    pid = row['PLAYER_ID']
+                    meta = get_player_metadata(pid)
+                    row_dict = row.to_dict()
+                    
                     # Notizen Dictionary bauen
-                    notes_dict = {k: v for k, v in item['widgets'].items() if k != 'col'}
-                    c_hex = color_map[item['widgets']['col']]
-                    html += generate_card_html(item['row'].to_dict(), meta, notes_dict, c_hex)
+                    p_notes = {}
+                    for k in ['l1','l2','l3','l4','r1','r2','r3','r4']:
+                        p_notes[k] = st.session_state.saved_notes.get(f"{k}_{pid}", "")
+                    
+                    c_hex = color_map[st.session_state.saved_colors.get(pid, "Grau")]
+                    html += generate_card_html(row_dict, meta, p_notes, c_hex)
                 
                 html += generate_team_stats_html(st.session_state.team_stats)
                 
