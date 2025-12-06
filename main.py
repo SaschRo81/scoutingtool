@@ -8,7 +8,7 @@ from PIL import Image
 import streamlit.components.v1 as components
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v2.0"
+VERSION = "v2.1 (Full Screen Preview)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -138,13 +138,13 @@ def generate_header_html(meta):
         <br>
         <div style="display: flex; align-items: center; justify-content: center; gap: 40px;">
             <div style="text-align: center;">
-                <img src="{meta['home_logo']}" style="height: 70px; object-fit: contain;">
-                <div style="font-weight: bold; margin-top: 5px; font-size: 14px;">{meta['home_name']}</div>
+                <img src="{meta['home_logo']}" style="height: 80px; object-fit: contain;">
+                <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['home_name']}</div>
             </div>
             <div style="font-size: 24px; font-weight: bold; color: #333;">VS</div>
             <div style="text-align: center;">
-                <img src="{meta['guest_logo']}" style="height: 70px; object-fit: contain;">
-                <div style="font-weight: bold; margin-top: 5px; font-size: 14px;">{meta['guest_name']}</div>
+                <img src="{meta['guest_logo']}" style="height: 80px; object-fit: contain;">
+                <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['guest_name']}</div>
             </div>
         </div>
     </div>
@@ -159,10 +159,10 @@ def generate_top3_html(df):
     fts = df[df['FTA'] >= 1.0].sort_values(by='FTPCT', ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by='FTPCT', ascending=True).head(3)
 
-    table_style = "width:100%; font-size:10px; border-collapse:collapse; margin-top:5px;"
-    th_style = "text-align:center; border-bottom:1px solid #999; font-weight:bold; color:#555; padding:2px;"
-    td_name = "text-align:left; border-bottom:1px solid #eee; padding:2px 0;"
-    td_val = "text-align:center; border-bottom:1px solid #eee; padding:2px 0;"
+    table_style = "width:100%; font-size:11px; border-collapse:collapse; margin-top:5px;"
+    th_style = "text-align:center; border-bottom:1px solid #999; font-weight:bold; color:#555;"
+    td_name = "text-align:left; border-bottom:1px solid #eee; padding:3px 0;"
+    td_val = "text-align:center; border-bottom:1px solid #eee;"
 
     def build_table(d, headers, keys, bolds):
         h = f"<table style='{table_style}'><tr>"
@@ -190,11 +190,11 @@ def generate_top3_html(df):
     h_ft = build_table(fts, ["Name", "M", "A", "%"], ["NAME_FULL", "FTM", "FTA", "FTPCT"], [3])
 
     return f"""
-<div style="display: flex; flex-direction: row; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; font-family: Arial, sans-serif;">
-<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#e35b00; border-bottom: 2px solid #e35b00; font-size:12px;">🔥 Top Scorer</div>{h_scorers}</div>
-<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#0055ff; border-bottom: 2px solid #0055ff; font-size:12px;">🗑️ Rebounder</div>{h_rebs}</div>
-<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#28a745; border-bottom: 2px solid #28a745; font-size:12px;">🎯 Best 3pt</div>{h_3pt}</div>
-<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#dc3545; border-bottom: 2px solid #dc3545; font-size:12px;">⚠️ Worst FT</div>{h_ft}</div>
+<div style="display: flex; flex-direction: row; gap: 15px; margin-bottom: 30px; page-break-inside: avoid; font-family: Arial, sans-serif;">
+<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#e35b00; border-bottom: 2px solid #e35b00; font-size:13px;">🔥 Top Scorer</div>{h_scorers}</div>
+<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#0055ff; border-bottom: 2px solid #0055ff; font-size:13px;">🗑️ Rebounder</div>{h_rebs}</div>
+<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#28a745; border-bottom: 2px solid #28a745; font-size:13px;">🎯 Best 3pt</div>{h_3pt}</div>
+<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#dc3545; border-bottom: 2px solid #dc3545; font-size:13px;">⚠️ Worst FT</div>{h_ft}</div>
 </div>
 """
 
@@ -221,8 +221,7 @@ def generate_card_html(row, metadata, notes, color_code):
 <th rowspan="2" style="border: 1px solid black; padding: 2px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">PF</th>
 </tr>
 <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
-<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th>
-<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">DR</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
+<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">DR</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
 </tr>
 <tr>
 <td style="border: 1px solid black;">{row['MIN_DISPLAY']}</td><td style="border: 1px solid black;">{row['PPG']}</td>
@@ -404,24 +403,24 @@ if not st.session_state.print_mode:
         st.subheader("3. Spieler auswählen")
         edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']], column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)}, disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
         selected_indices = edited[edited['select']].index
+        
         if len(selected_indices) > 0:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
             
-            with st.form("input_form"):
+            with st.form("scouting_form"):
                 st.write("**Spieler-Notizen:**")
                 selection = st.session_state.roster_df.loc[selected_indices]
+                form_results = [] 
                 
-                widget_keys = []
                 for _, row in selection.iterrows():
                     pid = row['PLAYER_ID']
                     c_h, c_c = st.columns([3, 1])
                     c_h.markdown(f"##### #{row['NR']} {row['NAME_FULL']}")
-                    
                     saved_c = st.session_state.saved_colors.get(pid, "Grau")
                     try: idx = ["Grau", "Grün", "Rot"].index(saved_c)
                     except: idx = 0
-                    st.selectbox("Markierung", ["Grau", "Grün", "Rot"], key=f"col_{pid}", index=idx, label_visibility="collapsed")
+                    col_opt = c_c.selectbox("Markierung", ["Grau", "Grün", "Rot"], key=f"col_{pid}", index=idx, label_visibility="collapsed")
                     
                     c1, c2 = st.columns(2)
                     l1v = st.session_state.saved_notes.get(f"l1_{pid}", ""); l2v = st.session_state.saved_notes.get(f"l2_{pid}", "")
@@ -429,56 +428,49 @@ if not st.session_state.print_mode:
                     r1v = st.session_state.saved_notes.get(f"r1_{pid}", ""); r2v = st.session_state.saved_notes.get(f"r2_{pid}", "")
                     r3v = st.session_state.saved_notes.get(f"r3_{pid}", ""); r4v = st.session_state.saved_notes.get(f"r4_{pid}", "")
 
-                    c1.text_input("L1", value=l1v, key=f"l1_{pid}", label_visibility="collapsed")
-                    c1.text_input("L2", value=l2v, key=f"l2_{pid}", label_visibility="collapsed")
-                    c1.text_input("L3", value=l3v, key=f"l3_{pid}", label_visibility="collapsed")
-                    c1.text_input("L4", value=l4v, key=f"l4_{pid}", label_visibility="collapsed")
-                    c2.text_input("R1", value=r1v, key=f"r1_{pid}", label_visibility="collapsed")
-                    c2.text_input("R2", value=r2v, key=f"r2_{pid}", label_visibility="collapsed")
-                    c2.text_input("R3", value=r3v, key=f"r3_{pid}", label_visibility="collapsed")
-                    c2.text_input("R4", value=r4v, key=f"r4_{pid}", label_visibility="collapsed")
+                    l1=c1.text_input("L1", value=l1v, key=f"l1_{pid}", label_visibility="collapsed")
+                    l2=c1.text_input("L2", value=l2v, key=f"l2_{pid}", label_visibility="collapsed")
+                    l3=c1.text_input("L3", value=l3v, key=f"l3_{pid}", label_visibility="collapsed")
+                    l4=c1.text_input("L4", value=l4v, key=f"l4_{pid}", label_visibility="collapsed")
+                    
+                    r1=c2.text_input("R1", value=r1v, key=f"r1_{pid}", label_visibility="collapsed")
+                    r2=c2.text_input("R2", value=r2v, key=f"r2_{pid}", label_visibility="collapsed")
+                    r3=c2.text_input("R3", value=r3v, key=f"r3_{pid}", label_visibility="collapsed")
+                    r4=c2.text_input("R4", value=r4v, key=f"r4_{pid}", label_visibility="collapsed")
+                    
                     st.divider()
-                    widget_keys.append(pid)
+                    form_results.append({'row': row, 'pid': pid, 'color': col_opt, 'notes': {'l1': l1, 'l2': l2, 'l3': l3, 'l4': l4, 'r1': r1, 'r2': r2, 'r3': r3, 'r4': r4}})
 
-                st.markdown("### Key Facts")
-                c_k1, c_k2, c_k3 = st.columns(3)
-                with c_k1: st.caption("Offense"); edited_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="editor_offense", hide_index=True)
-                with c_k2: st.caption("Defense"); edited_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="editor_defense", hide_index=True)
-                with c_k3: st.caption("All About Us"); edited_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="editor_about", hide_index=True)
+                submitted = st.form_submit_button("Speichern & PDF Generieren", type="primary")
 
-                st.markdown("### Grafiken")
-                uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
-
-                submitted = st.form_submit_button("Speichern & PDF Ansicht erstellen", type="primary")
+            st.markdown("### Key Facts")
+            c_k1, c_k2, c_k3 = st.columns(3)
+            with c_k1: st.caption("Offense"); edited_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="editor_offense", hide_index=True)
+            with c_k2: st.caption("Defense"); edited_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="editor_defense", hide_index=True)
+            with c_k3: st.caption("All About Us"); edited_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="editor_about", hide_index=True)
+            
+            st.markdown("### Grafiken")
+            uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
             if submitted:
-                # 1. Update State
                 st.session_state.facts_offense = edited_off
                 st.session_state.facts_defense = edited_def
                 st.session_state.facts_about = edited_abt
                 
-                for pid in widget_keys:
-                    st.session_state.saved_colors[pid] = st.session_state[f"col_{pid}"]
-                    for k in ['l1','l2','l3','l4','r1','r2','r3','r4']:
-                        key = f"{k}_{pid}"
-                        if key in st.session_state: st.session_state.saved_notes[key] = st.session_state[key]
+                for item in form_results:
+                    pid = item['pid']
+                    st.session_state.saved_colors[pid] = item['color']
+                    for k, v in item['notes'].items(): st.session_state.saved_notes[f"{k}_{pid}"] = v
 
-                # 2. Generate HTML
                 color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
                 full_df = st.session_state.roster_df
-                
-                # A4 Container
-                html = "<div style='width: 210mm; margin: 0 auto;'>"
-                html += generate_header_html(st.session_state.game_meta)
+                html = generate_header_html(st.session_state.game_meta)
                 html += generate_top3_html(full_df)
                 
-                for idx, row in selection.iterrows():
-                    pid = row['PLAYER_ID']
-                    meta = get_player_metadata(pid)
-                    row_dict = row.to_dict()
-                    p_notes = {k: st.session_state.saved_notes.get(f"{k}_{pid}", "") for k in ['l1','l2','l3','l4','r1','r2','r3','r4']}
-                    c_hex = color_map[st.session_state.saved_colors.get(pid, "Grau")]
-                    html += generate_card_html(row_dict, meta, p_notes, c_hex)
+                for item in form_results:
+                    meta = get_player_metadata(item['pid'])
+                    c_hex = color_map[item['color']]
+                    html += generate_card_html(item['row'].to_dict(), meta, item['notes'], c_hex)
                 
                 html += generate_team_stats_html(st.session_state.team_stats)
                 
@@ -490,8 +482,6 @@ if not st.session_state.print_mode:
                     html += "</div>"
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
-                html += "</div>" # Close A4 Container
-                
                 st.session_state.final_html = html
                 st.session_state.print_mode = True
                 st.rerun()
@@ -503,10 +493,7 @@ else:
             st.session_state.print_mode = False
             st.rerun()
     with c2:
-        # JS Print Button
-        components.html(f"""
-            <button onclick="window.print()" style="background-color:#ff4b4b; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold;">🖨️ Drucken (Öffnet Dialog)</button>
-        """, height=50)
+        components.html(f"""<button onclick="window.print()" style="background-color:#ff4b4b; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold; font-family:sans-serif;">🖨️ Drucken (Dialog öffnen)</button>""", height=50)
 
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-    st.markdown("""<style>@media print {[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton, iframe {display: none !important;} .block-container {padding:0!important;margin:0!important;max_width:100%!important;} body {margin: 0; padding: 0;}}</style>""", unsafe_allow_html=True)
+    st.markdown("""<style>@media print { @page {size: A4; margin: 10mm;} body { -webkit-print-color-adjust: exact; } [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton, iframe {display: none !important;} .block-container {padding:0!important;margin:0!important;max_width:100%!important;} }</style>""", unsafe_allow_html=True)
