@@ -137,7 +137,7 @@ def get_player_metadata(player_id):
 def generate_header_html(meta):
     return f"""
 <div style="font-family: Arial, sans-serif; page-break-inside: avoid;">
-    <div style="text-align: right; font-size: 10px; color: #888; border-bottom: 1px solid #eee; margin-bottom: 10px;">
+    <div style="text-align: right; font-size: 12px; color: #888; border-bottom: 1px solid #eee; margin-bottom: 10px;">
         DBBL Scouting Pro by Sascha Rosanke
     </div>
     <div style="border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; text-align: center;">
@@ -173,9 +173,9 @@ def generate_top3_html(df):
     fouls = df.sort_values(by='PF', ascending=False).head(3)
 
     box_style = "flex: 1; border: 1px solid #ccc; padding: 0;"
-    header_base = "padding: 2px 4px; font-weight: bold; font-size: 11px; border-bottom: 1px solid #eee; font-family: Arial, sans-serif;"
-    table_style = "width:100%; font-size:10px; border-collapse:collapse; font-family: Arial, sans-serif;"
-    th_style = "text-align:center; color:#555; padding:2px; font-size:9px; background-color: #f9f9f9; border-bottom: 1px solid #eee;"
+    header_base = "padding: 2px 4px; font-weight: bold; font-size: 12px; border-bottom: 1px solid #eee; font-family: Arial, sans-serif;"
+    table_style = "width:100%; font-size:12px; border-collapse:collapse; font-family: Arial, sans-serif;"
+    th_style = "text-align:center; color:#555; padding:2px; font-size:12px; background-color: #f9f9f9; border-bottom: 1px solid #eee;"
     td_val = "text-align:center; padding:2px; border-bottom:1px solid #eee;"
     td_name = "text-align:left; padding:2px; border-bottom:1px solid #eee; white-space:nowrap; overflow:hidden; max-width:90px;"
 
@@ -277,10 +277,10 @@ def generate_card_html(row, metadata, notes, color_code):
                 <th rowspan="2" style="{border_css} {pad_style}">PF</th>
             </tr>
             <tr style="{bg_css}">
-                <th style="{border_css} {pad_style} font-size:10px;">M</th><th style="{border_css} {pad_style} font-size:10px;">A</th><th style="{border_css} {pad_style} font-size:10px;">%</th>
-                <th style="{border_css} {pad_style} font-size:10px;">M</th><th style="{border_css} {pad_style} font-size:10px;">A</th><th style="{border_css} {pad_style} font-size:10px;">%</th>
-                <th style="{border_css} {pad_style} font-size:10px;">M</th><th style="{border_css} {pad_style} font-size:10px;">A</th><th style="{border_css} {pad_style} font-size:10px;">%</th>
-                <th style="{border_css} {pad_style} font-size:10px;">DR</th><th style="{border_css} {pad_style} font-size:10px;">O</th><th style="{border_css} {pad_style} font-size:10px;">TOT</th>
+                <th style="{border_css} {pad_style} font-size:12px;">M</th><th style="{border_css} {pad_style} font-size:12px;">A</th><th style="{border_css} {pad_style} font-size:12px;">%</th>
+                <th style="{border_css} {pad_style} font-size:12px;">M</th><th style="{border_css} {pad_style} font-size:12px;">A</th><th style="{border_css} {pad_style} font-size:12px;">%</th>
+                <th style="{border_css} {pad_style} font-size:12px;">M</th><th style="{border_css} {pad_style} font-size:12px;">A</th><th style="{border_css} {pad_style} font-size:12px;">%</th>
+                <th style="{border_css} {pad_style} font-size:12px;">DR</th><th style="{border_css} {pad_style} font-size:12px;">O</th><th style="{border_css} {pad_style} font-size:12px;">TOT</th>
             </tr>
             <tr style="font-weight: bold;">
                 <td style="{border_css} {pad_style}">{row['MIN_DISPLAY']}</td><td style="{border_css} {pad_style}">{row['PPG']}</td>
@@ -598,3 +598,4 @@ else:
     }
     </style>
     """, unsafe_allow_html=True)
+
