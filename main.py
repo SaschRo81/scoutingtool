@@ -14,7 +14,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v3.3 (Bugfix border_css)"
+VERSION = "v3.1 (3x3 Grid & Arial Font)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -60,7 +60,7 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"}
 }
 
-# --- SESSION STATE INITIALISIERUNG ---
+# --- SESSION STATE ---
 if 'print_mode' not in st.session_state: st.session_state.print_mode = False
 if 'final_html' not in st.session_state: st.session_state.final_html = ""
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
@@ -68,7 +68,6 @@ if 'roster_df' not in st.session_state: st.session_state.roster_df = None
 if 'team_stats' not in st.session_state: st.session_state.team_stats = None
 if 'game_meta' not in st.session_state: st.session_state.game_meta = {}
 if 'optimized_images' not in st.session_state: st.session_state.optimized_images = {}
-
 if 'saved_notes' not in st.session_state: st.session_state.saved_notes = {}
 if 'saved_colors' not in st.session_state: st.session_state.saved_colors = {}
 
@@ -133,7 +132,7 @@ def get_player_metadata(player_id):
     except: pass
     return {'img': '', 'height': 0, 'pos': '-'}
 
-# --- HTML GENERATOREN ---
+# --- HTML GENERATOREN (Alles Arial!) ---
 
 def generate_header_html(meta):
     return f"""
@@ -142,17 +141,17 @@ def generate_header_html(meta):
         DBBL Scouting Pro by Sascha Rosanke
     </div>
     <div style="border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; text-align: center;">
-        <h1 style="margin: 0; padding: 0; font-size: 24px; color: #000; font-weight: bold;">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
+        <h1 style="margin: 0; padding: 0; font-size: 24px; color: #000; font-weight: bold; font-family: Arial, sans-serif;">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
         <br>
         <div style="display: flex; align-items: center; justify-content: center; gap: 40px;">
             <div style="text-align: center;">
                 <img src="{meta['home_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
-                <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['home_name']}</div>
+                <div style="font-weight: bold; margin-top: 5px; font-size: 16px; font-family: Arial, sans-serif;">{meta['home_name']}</div>
             </div>
-            <div style="font-size: 24px; font-weight: bold; color: #333;">VS</div>
+            <div style="font-size: 24px; font-weight: bold; color: #333; font-family: Arial, sans-serif;">VS</div>
             <div style="text-align: center;">
                 <img src="{meta['guest_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
-                <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['guest_name']}</div>
+                <div style="font-weight: bold; margin-top: 5px; font-size: 16px; font-family: Arial, sans-serif;">{meta['guest_name']}</div>
             </div>
         </div>
     </div>
@@ -160,24 +159,24 @@ def generate_header_html(meta):
 """
 
 def generate_top3_html(df):
-    # Row 1: Classic
+    # Sortieren
     scorers = df.sort_values(by='PPG', ascending=False).head(3)
     rebounders = df.sort_values(by='TOT', ascending=False).head(3)
     shooters = df[df['3M'] >= 0.5].sort_values(by='3PCT', ascending=False).head(3)
     if shooters.empty: shooters = df.sort_values(by='3PCT', ascending=False).head(3)
     fts = df[df['FTA'] >= 1.0].sort_values(by='FTPCT', ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by='FTPCT', ascending=True).head(3)
-
-    # Row 2: Extended
+    
     assisters = df.sort_values(by='AS', ascending=False).head(3)
     stealers = df.sort_values(by='ST', ascending=False).head(3)
     turnovers = df.sort_values(by='TO', ascending=False).head(3)
     blocks = df.sort_values(by='BS', ascending=False).head(3)
     fouls = df.sort_values(by='PF', ascending=False).head(3)
 
+    # Styles
     box_style = "flex: 1; border: 1px solid #ccc; padding: 0;"
-    header_base = "padding: 2px 4px; font-weight: bold; font-size: 11px; border-bottom: 1px solid #eee;"
-    table_style = "width:100%; font-size:10px; border-collapse:collapse;"
+    header_base = "padding: 2px 4px; font-weight: bold; font-size: 11px; border-bottom: 1px solid #eee; font-family: Arial, sans-serif;"
+    table_style = "width:100%; font-size:10px; border-collapse:collapse; font-family: Arial, sans-serif;"
     th_style = "text-align:center; color:#555; padding:2px; font-size:9px; background-color: #f9f9f9; border-bottom: 1px solid #eee;"
     td_name = "text-align:left; padding:2px; border-bottom:1px solid #eee; white-space:nowrap; overflow:hidden; max-width:80px;"
     td_val = "text-align:center; padding:2px; border-bottom:1px solid #eee;"
@@ -192,37 +191,41 @@ def generate_top3_html(df):
             h += "<tr>"
             for i, k in enumerate(keys):
                 style = td_val
-                if i == 0: style = td_name # Name
+                if i == 0: style = td_name
                 if i in bolds: style += " font-weight:bold;"
                 val = r[k]
                 if isinstance(val, float): val = f"{val:.1f}"
                 if k == 'NR': val = f"#{val}"
-                if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL'].split(' ')[-1]}" # Nur Nachname für Platz
+                if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL'].split(' ')[-1]}"
                 h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
         h += "</table></div>"
         return h
 
-    # Build Row 1
-    h_scorers = build_box(scorers, ["Name", "PPG", "FG%"], ["NAME_FULL", "PPG", "FG%"], [1], "#e35b00", "🔥", "Top Scorer")
-    h_rebs = build_box(rebounders, ["Name", "DR", "OR", "TOT"], ["NAME_FULL", "DR", "OR", "TOT"], [3], "#0055ff", "🗑️", "Rebounds")
-    h_3pt = build_box(shooters, ["Name", "M", "A", "%"], ["NAME_FULL", "3M", "3A", "3PCT"], [3], "#28a745", "🎯", "3-Points")
-    h_ft = build_box(fts, ["Name", "M", "A", "%"], ["NAME_FULL", "FTM", "FTA", "FTPCT"], [3], "#dc3545", "⚠️", "Worst FT")
+    # 9 Boxen
+    box_ppg = build_box(scorers, ["Name", "PPG", "FG%"], ["NAME_FULL", "PPG", "FG%"], [1], "#e35b00", "🔥", "Top Scorer")
+    box_reb = build_box(rebounders, ["Name", "DR", "OR", "TOT"], ["NAME_FULL", "DR", "OR", "TOT"], [3], "#0055ff", "🗑️", "Rebounds")
+    box_3pt = build_box(shooters, ["Name", "M", "A", "%"], ["NAME_FULL", "3M", "3A", "3PCT"], [3], "#28a745", "🎯", "3-Points")
+    box_ft = build_box(fts, ["Name", "M", "A", "%"], ["NAME_FULL", "FTM", "FTA", "FTPCT"], [3], "#dc3545", "⚠️", "Worst FT")
+    box_ast = build_box(assisters, ["Name", "AS"], ["NAME_FULL", "AS"], [1], "#ffc107", "🅰️", "Assists")
+    box_st = build_box(stealers, ["Name", "ST"], ["NAME_FULL", "ST"], [1], "#6f42c1", "✋", "Steals")
+    box_to = build_box(turnovers, ["Name", "TO"], ["NAME_FULL", "TO"], [1], "#fd7e14", "🔄", "Turnovers")
+    box_blk = build_box(blocks, ["Name", "BS"], ["NAME_FULL", "BS"], [1], "#343a40", "🧱", "Blocks")
+    box_pf = build_box(fouls, ["Name", "PF"], ["NAME_FULL", "PF"], [1], "#20c997", "🛑", "Fouls")
 
-    # Build Row 2
-    h_as = build_box(assisters, ["Name", "AS"], ["NAME_FULL", "AS"], [1], "#ffc107", "🅰️", "Assists")
-    h_st = build_box(stealers, ["Name", "ST"], ["NAME_FULL", "ST"], [1], "#6f42c1", "✋", "Steals")
-    h_to = build_box(turnovers, ["Name", "TO"], ["NAME_FULL", "TO"], [1], "#fd7e14", "🔄", "Turnovers")
-    h_bs = build_box(blocks, ["Name", "BS"], ["NAME_FULL", "BS"], [1], "#343a40", "🧱", "Blocks")
-    h_pf = build_box(fouls, ["Name", "PF"], ["NAME_FULL", "PF"], [1], "#20c997", "🛑", "Fouls")
-
+    # 3x3 Grid Layout
+    row_style = "display: flex; flex-direction: row; gap: 10px; margin-bottom: 10px;"
+    
     return f"""
 <div style="margin-bottom: 30px; page-break-inside: avoid; font-family: Arial, sans-serif;">
-    <div style="display: flex; flex-direction: row; gap: 10px; margin-bottom: 10px;">
-        {h_scorers} {h_rebs} {h_3pt} {h_ft}
+    <div style="{row_style}">
+        {box_ppg} {box_reb} {box_3pt}
     </div>
-    <div style="display: flex; flex-direction: row; gap: 10px;">
-        {h_as} {h_st} {h_to} {h_bs} {h_pf}
+    <div style="{row_style}">
+        {box_ft} {box_ast} {box_to}
+    </div>
+    <div style="{row_style}">
+        {box_st} {box_blk} {box_pf}
     </div>
 </div>
 """
@@ -235,9 +238,9 @@ def generate_card_html(row, metadata, notes, color_code):
         height_str = f"{h:.2f}".replace('.', ',')
     except: height_str = "-"
     pos_str = clean_pos(metadata['pos'])
-    header_style = f"background-color: {color_code}; color: white; padding: 2px 10px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
     
-    table_css = "width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: black;"
+    header_style = f"background-color: {color_code}; color: white; padding: 2px 10px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: Arial, sans-serif;"
+    table_css = "width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: black; font-family: Arial, sans-serif;"
     border_css = "border: 1px solid #ccc;" 
     bg_css = "background-color: #f0f0f0; -webkit-print-color-adjust: exact;"
 
@@ -297,13 +300,12 @@ def generate_team_stats_html(team_stats):
     t_2pct = calc_pct(ts['2m'], ts['2a'], ts['2pct'])
     t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
     t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
-    
     border_css = "border: 1px solid #ccc;"
 
     return f"""
 <div style="font-family: Arial, sans-serif; margin-top: 30px; page-break-inside: avoid;">
-    <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG - Official API)</h2>
-    <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; border: 1px solid #ccc;">
+    <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-family: Arial, sans-serif;">Team Stats (AVG - Official API)</h2>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; border: 1px solid #ccc; font-family: Arial, sans-serif;">
         <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
             <th rowspan="2" style="{border_css} padding: 4px;">PPG</th>
             <th colspan="3" style="{border_css} padding: 4px;">2P FG</th>
@@ -327,22 +329,25 @@ def generate_team_stats_html(team_stats):
             <td style="{border_css}">{ts['3m']:.1f}</td><td style="{border_css}">{ts['3a']:.1f}</td><td style="{border_css}">{t_3pct:.1f}</td>
             <td style="{border_css}">{ts['ftm']:.1f}</td><td style="{border_css}">{ts['fta']:.1f}</td><td style="{border_css}">{t_ftpct:.1f}</td>
             <td style="{border_css}">{ts['dr']:.1f}</td><td style="{border_css}">{ts['or']:.1f}</td><td style="{border_css}">{ts['tot']:.1f}</td>
-            <td style="{border_css}">{ts['as']:.1f}</td><td style="{border_css}">{ts['to']:.1f}</td><td style="{border_css}">{ts['st']:.1f}</td><td style="{border_css}">{ts['pf']:.1f}</td>
+            <td style="{border_css}">{ts['as']:.1f}</td>
+            <td style="{border_css}">{ts['to']:.1f}</td>
+            <td style="{border_css}">{ts['st']:.1f}</td>
+            <td style="{border_css}">{ts['pf']:.1f}</td>
         </tr>
     </table>
 </div>
 """
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
-    html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
+    html = "<div style='margin-top: 30px; page-break-inside: avoid; font-family: Arial, sans-serif;'>"
     def make_section(title, df):
         if df.empty: return ""
-        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px;'>{title}</h3>"
-        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; margin-bottom:20px;'>"
+        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-family: Arial, sans-serif;'>{title}</h3>"
+        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial, sans-serif; font-size:12px; margin-bottom:20px;'>"
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], "")
             c2 = r.get(df.columns[1], "")
-            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:4px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:4px; vertical-align:top;'>{c2}</td></tr>"
+            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td></tr>"
         section_html += "</table>"
         return section_html
 
@@ -465,7 +470,6 @@ if not st.session_state.print_mode:
         st.subheader("3. Spieler auswählen")
         edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']], column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)}, disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
         selected_indices = edited[edited['select']].index
-        
         if len(selected_indices) > 0:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
@@ -544,11 +548,39 @@ if not st.session_state.print_mode:
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
                 st.session_state.final_html = html
                 
+                # PDF Generation Logic
                 if HAS_PDFKIT:
                     try:
-                        options = {'page-size': 'A4', 'margin-top': '10mm', 'margin-right': '10mm', 'margin-bottom': '10mm', 'margin-left': '10mm', 'encoding': "UTF-8", 'no-outline': None}
-                        full_html = f"<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>{html}</body></html>"
-                        st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, options=options)
+                        # Full HTML wrapper to apply font body-wide
+                        full_html_str = f"""
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                        <meta charset="utf-8">
+                        <style>
+                        body {{
+                            font-family: Arial, sans-serif;
+                        }}
+                        img {{
+                            max-width: 100%;
+                        }}
+                        </style>
+                        </head>
+                        <body>
+                        {html}
+                        </body>
+                        </html>
+                        """
+                        options = {
+                            'page-size': 'A4',
+                            'margin-top': '10mm',
+                            'margin-right': '10mm',
+                            'margin-bottom': '10mm',
+                            'margin-left': '10mm',
+                            'encoding': "UTF-8",
+                            'no-outline': None
+                        }
+                        st.session_state.pdf_bytes = pdfkit.from_string(full_html_str, False, options=options)
                     except Exception:
                         st.session_state.pdf_bytes = None
 
@@ -563,16 +595,16 @@ else:
             st.rerun()
     with c2:
         if st.session_state.pdf_bytes:
-            st.download_button("📄 PDF Herunterladen", data=st.session_state.pdf_bytes, file_name=f"scouting_report_{datetime.date.today()}.pdf", mime="application/pdf")
+             st.download_button("📄 PDF Herunterladen", data=st.session_state.pdf_bytes, file_name=f"scouting_report_{datetime.date.today()}.pdf", mime="application/pdf")
         elif HAS_PDFKIT:
-            st.warning("PDF konnte nicht erstellt werden.")
-    
+             st.warning("PDF konnte nicht erstellt werden.")
+
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
     st.markdown("""
     <style>
     @media print {
         @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.60; }
+        body { margin: 0; padding: 0; zoom: 0.60; font-family: Arial, sans-serif; }
         .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
         [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton, .stDownloadButton { display: none !important; }
         table { width: 100% !important; table-layout: fixed !important; }
