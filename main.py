@@ -7,7 +7,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v2.6 (High Res Images & Thin Lines)"
+VERSION = "v2.6 (Clean Print Final)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -90,34 +90,22 @@ def clean_pos(pos):
     return str(pos).replace('_', ' ').title()
 
 def optimize_image_base64(url):
-    """
-    Lädt Bild und optimiert es für Druck (High Res).
-    """
     if url in st.session_state.optimized_images:
         return st.session_state.optimized_images[url]
     if not url or "placeholder" in url:
         return url
     try:
-        response = requests.get(url, headers=API_HEADERS, timeout=5)
+        response = requests.get(url, headers=API_HEADERS, timeout=3)
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content))
-            
-            # Neue Logik: Höhere Auflösung für Druck (500px statt 150px)
-            base_height = 500 
+            base_height = 150
             w_percent = (base_height / float(img.size[1]))
             w_size = int((float(img.size[0]) * float(w_percent)))
-            
-            # Nur skalieren wenn das Original RIESIG ist, sonst lassen (Qualität erhalten)
-            if img.size[1] > base_height:
-                img = img.resize((w_size, base_height), Image.Resampling.LANCZOS)
-            
+            img = img.resize((w_size, base_height), Image.Resampling.LANCZOS)
             if img.mode in ("RGBA", "P"): img = img.convert("RGB")
-            
             buffer = BytesIO()
-            # Hohe Qualität für Druck (95)
-            img.save(buffer, format="JPEG", quality=95) 
+            img.save(buffer, format="JPEG", quality=70)
             img_str = base64.b64encode(buffer.getvalue()).decode()
-            
             final_src = f"data:image/jpeg;base64,{img_str}"
             st.session_state.optimized_images[url] = final_src
             return final_src
@@ -170,11 +158,10 @@ def generate_top3_html(df):
     fts = df[df['FTA'] >= 1.0].sort_values(by='FTPCT', ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by='FTPCT', ascending=True).head(3)
 
-    # Styles: Dünnere Rahmen (#ccc)
     table_style = "width:100%; font-size:11px; border-collapse:collapse; margin-top:5px;"
-    th_style = "text-align:center; border-bottom:1px solid #ccc; font-weight:bold; color:#555; padding:2px;"
-    td_name = "text-align:left; border-bottom:1px solid #eee; padding:2px 0;"
-    td_val = "text-align:center; border-bottom:1px solid #eee; padding:2px 0;"
+    th_style = "text-align:center; border-bottom:1px solid #999; font-weight:bold; color:#555;"
+    td_name = "text-align:left; border-bottom:1px solid #eee; padding:3px 0;"
+    td_val = "text-align:center; border-bottom:1px solid #eee;"
 
     def build_table(d, headers, keys, bolds):
         h = f"<table style='{table_style}'><tr>"
@@ -190,7 +177,6 @@ def generate_top3_html(df):
                 if isinstance(val, float): val = f"{val:.1f}"
                 if k == 'NR': val = f"#{val}"
                 if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL']}"
-                
                 if k != 'NR' and k != 'NAME_FULL': h += f"<td style='{style}'>{val}</td>"
                 elif k == 'NAME_FULL': h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
@@ -219,41 +205,35 @@ def generate_card_html(row, metadata, notes, color_code):
         height_str = f"{h:.2f}".replace('.', ',')
     except: height_str = "-"
     pos_str = clean_pos(metadata['pos'])
-    header_style = f"background-color: {color_code}; color: white; padding: 2px 10px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
+    header_style = f"background-color: {color_code}; color: white; padding: 5px 10px; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
     
-    # Styles: Feinere Linien (#ccc)
-    table_css = "width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: black;"
-    border_css = "border: 1px solid #ccc;" # Dünnes Grau statt Schwarz
-    bg_css = "background-color: #f0f0f0; -webkit-print-color-adjust: exact;"
-
     return f"""
-<div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 15px; background-color: white; page-break-inside: avoid;">
-<div style="{header_style}"><span>#{row['NR']} {row['NAME_FULL']}</span><span style="font-size:14px;">{height_str} m | {pos_str}</span></div>
+<div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 20px; background-color: white; page-break-inside: avoid;">
+<div style="{header_style}"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
 <div style="display: flex; flex-direction: row;">
-<div style="width: 100px; min-width: 100px; border-right: 1px solid #ccc;"><img src="{img_url}" style="width: 100%; height: 125px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'"></div>
-<table style="{table_css}">
-<tr style="{bg_css}">
-<th rowspan="2" style="{border_css} padding: 2px;">Min</th><th rowspan="2" style="{border_css} padding: 2px;">PPG</th>
-<th colspan="3" style="{border_css} padding: 2px;">2P FG</th><th colspan="3" style="{border_css} padding: 2px;">3P FG</th><th colspan="3" style="{border_css} padding: 2px;">FT</th>
-<th colspan="3" style="{border_css} padding: 2px;">REB</th>
-<th rowspan="2" style="{border_css} padding: 2px;">AS</th><th rowspan="2" style="{border_css} padding: 2px;">TO</th><th rowspan="2" style="{border_css} padding: 2px;">ST</th><th rowspan="2" style="{border_css} padding: 2px;">PF</th>
+<div style="width: 120px; min-width: 120px; border-right: 1px solid #ccc;"><img src="{img_url}" style="width: 100%; height: 150px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'"></div>
+<table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black;">
+<tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">Min</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">PPG</th>
+<th colspan="3" style="border: 1px solid black; padding: 4px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 4px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 4px;">FT</th>
+<th colspan="3" style="border: 1px solid black; padding: 4px;">REB</th>
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">PF</th>
 </tr>
-<tr style="{bg_css}">
-<th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-<th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">DR</th><th style="{border_css}">O</th><th style="{border_css}">TOT</th>
+<tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
+<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">DR</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
 </tr>
 <tr>
-<td style="{border_css}">{row['MIN_DISPLAY']}</td><td style="{border_css}">{row['PPG']}</td>
-<td style="{border_css}">{row['2M']}</td><td style="{border_css}">{row['2A']}</td><td style="{border_css}">{row['2PCT']}</td>
-<td style="{border_css}">{row['3M']}</td><td style="{border_css}">{row['3A']}</td><td style="{border_css}">{row['3PCT']}</td>
-<td style="{border_css}">{row['FTM']}</td><td style="{border_css}">{row['FTA']}</td><td style="{border_css}">{row['FTPCT']}</td>
-<td style="{border_css}">{row['DR']}</td><td style="{border_css}">{row['OR']}</td><td style="{border_css}">{row['TOT']}</td>
-<td style="{border_css}">{row['AS']}</td><td style="{border_css}">{row['TO']}</td><td style="{border_css}">{row['ST']}</td><td style="{border_css}">{row['PF']}</td>
+<td style="border: 1px solid black;">{row['MIN_DISPLAY']}</td><td style="border: 1px solid black;">{row['PPG']}</td>
+<td style="border: 1px solid black;">{row['2M']}</td><td style="border: 1px solid black;">{row['2A']}</td><td style="border: 1px solid black;">{row['2PCT']}</td>
+<td style="border: 1px solid black;">{row['3M']}</td><td style="border: 1px solid black;">{row['3A']}</td><td style="border: 1px solid black;">{row['3PCT']}</td>
+<td style="border: 1px solid black;">{row['FTM']}</td><td style="border: 1px solid black;">{row['FTA']}</td><td style="border: 1px solid black;">{row['FTPCT']}</td>
+<td style="border: 1px solid black;">{row['DR']}</td><td style="border: 1px solid black;">{row['OR']}</td><td style="border: 1px solid black;">{row['TOT']}</td>
+<td style="border: 1px solid black;">{row['AS']}</td><td style="border: 1px solid black;">{row['TO']}</td><td style="border: 1px solid black;">{row['ST']}</td><td style="border: 1px solid black;">{row['PF']}</td>
 </tr>
-<tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l1','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r1','')}</td></tr>
-<tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l2','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r2','')}</td></tr>
-<tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l3','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r3','')}</td></tr>
-<tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l4','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r4','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l1','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r1','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l2','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r2','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l3','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r3','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l4','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r4','')}</td></tr>
 </table>
 </div>
 </div>
@@ -269,42 +249,38 @@ def generate_team_stats_html(team_stats):
     t_2pct = calc_pct(ts['2m'], ts['2a'], ts['2pct'])
     t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
     t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
-    
-    # Feinere Linien
-    border_css = "border: 1px solid #ccc;"
-
     return f"""
-<div style="font-family: Arial, sans-serif; margin-top: 20px; page-break-inside: avoid;">
-<h2 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-size: 16px;">Team Stats (AVG - Official API)</h2>
-<table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black; border: 1px solid #000;">
+<div style="font-family: Arial, sans-serif; margin-top: 30px; page-break-inside: avoid;">
+<h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG - Official API)</h2>
+<table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; border: 1px solid #000;">
 <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-<th rowspan="2" style="{border_css} padding: 4px;">PPG</th><th colspan="3" style="{border_css} padding: 4px;">2P FG</th><th colspan="3" style="{border_css} padding: 4px;">3P FG</th><th colspan="3" style="{border_css} padding: 4px;">FT</th><th colspan="3" style="{border_css} padding: 4px;">REB</th><th rowspan="2" style="{border_css} padding: 4px;">AS</th><th rowspan="2" style="{border_css} padding: 4px;">TO</th><th rowspan="2" style="{border_css} padding: 4px;">ST</th><th rowspan="2" style="{border_css} padding: 4px;">PF</th>
+<th rowspan="2" style="border: 1px solid black; padding: 6px;">PPG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">FT</th><th colspan="3" style="border: 1px solid black; padding: 6px;">REB</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">PF</th>
 </tr>
 <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-<th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">D</th><th style="{border_css}">O</th><th style="{border_css}">TOT</th>
+<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">D</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
 </tr>
 <tr style="font-weight: bold; background-color: #f9f9f9;">
-<td style="{border_css} padding: 6px;">{ts['ppg']:.1f}</td>
-<td style="{border_css}">{ts['2m']:.1f}</td><td style="{border_css}">{ts['2a']:.1f}</td><td style="{border_css}">{t_2pct:.1f}</td>
-<td style="{border_css}">{ts['3m']:.1f}</td><td style="{border_css}">{ts['3a']:.1f}</td><td style="{border_css}">{t_3pct:.1f}</td>
-<td style="{border_css}">{ts['ftm']:.1f}</td><td style="{border_css}">{ts['fta']:.1f}</td><td style="{border_css}">{t_ftpct:.1f}</td>
-<td style="{border_css}">{ts['dr']:.1f}</td><td style="{border_css}">{ts['or']:.1f}</td><td style="{border_css}">{ts['tot']:.1f}</td>
-<td style="{border_css}">{ts['as']:.1f}</td><td style="{border_css}">{ts['to']:.1f}</td><td style="{border_css}">{ts['st']:.1f}</td><td style="{border_css}">{ts['pf']:.1f}</td>
+<td style="border: 1px solid black; padding: 8px;">{ts['ppg']:.1f}</td>
+<td style="border: 1px solid black;">{ts['2m']:.1f}</td><td style="border: 1px solid black;">{ts['2a']:.1f}</td><td style="border: 1px solid black;">{t_2pct:.1f}</td>
+<td style="border: 1px solid black;">{ts['3m']:.1f}</td><td style="border: 1px solid black;">{ts['3a']:.1f}</td><td style="border: 1px solid black;">{t_3pct:.1f}</td>
+<td style="border: 1px solid black;">{ts['ftm']:.1f}</td><td style="border: 1px solid black;">{ts['fta']:.1f}</td><td style="border: 1px solid black;">{t_ftpct:.1f}</td>
+<td style="border: 1px solid black;">{ts['dr']:.1f}</td><td style="border: 1px solid black;">{ts['or']:.1f}</td><td style="border: 1px solid black;">{ts['tot']:.1f}</td>
+<td style="border: 1px solid black;">{ts['as']:.1f}</td><td style="border: 1px solid black;">{ts['to']:.1f}</td><td style="border: 1px solid black;">{ts['st']:.1f}</td><td style="border: 1px solid black;">{ts['pf']:.1f}</td>
 </tr>
 </table>
 </div>
 """
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
-    html = "<div style='margin-top: 20px; page-break-inside: avoid;'>"
+    html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
     def make_section(title, df):
         if df.empty: return ""
-        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:5px; font-size:16px;'>{title}</h3>"
-        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:11px; margin-bottom:15px;'>"
+        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px;'>{title}</h3>"
+        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; margin-bottom:20px;'>"
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], "")
             c2 = r.get(df.columns[1], "")
-            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:4px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:4px; vertical-align:top;'>{c2}</td></tr>"
+            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td></tr>"
         section_html += "</table>"
         return section_html
 
@@ -530,6 +506,12 @@ else:
         
         /* Make all containers overflow visible */
         .stApp, [data-testid="stVerticalBlock"], div { overflow: visible !important; height: auto !important; }
+        
+        /* Ensure Images Scale */
+        img { max-width: 100% !important; height: auto !important; }
+        
+        /* Hide Streamlit specific elements */
+        header, .stAppDeployButton, [data-testid="stManageAppButton"] { display: none !important; }
     }
     </style>
     """, unsafe_allow_html=True)
