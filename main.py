@@ -63,40 +63,10 @@ TEAMS_DB = {
 # --- SESSION STATE ---
 if "print_mode" not in st.session_state:
     st.session_state.print_mode = False
+
 if "final_html" not in st.session_state:
-    st.session_state.final_html = html
+    st.session_state.final_html = ""   # leer initialisieren
 
-    if HAS_PDFKIT:
-        full_html = f"""
-        <html>
-        <head>
-        <meta charset="utf-8">
-        <style>
-        @page {{
-            size: A4 portrait;
-            margin: 10mm;
-        }}
-        body {{
-            font-family: Arial, sans-serif;
-        }}
-        img {{
-            max-width: 100%;
-        }}
-        </style>
-        </head>
-        <body>
-        {st.session_state.final_html}
-        </body>
-        </html>
-        """
-
-        # evtl. configuration, siehe unten
-        st.session_state.pdf_bytes = pdfkit.from_string(full_html, False)
-    else:
-        st.session_state.pdf_bytes = None   # kein PDF möglich
-
-    st.session_state.print_mode = True
-    st.experimental_rerun()
 if "pdf_bytes" not in st.session_state:
     st.session_state.pdf_bytes = None
 
@@ -286,47 +256,49 @@ if not st.session_state.print_mode:
 
                 # ... dein Form-Code für Spieler-Notizen, Facts & Uploads ...
 
-                submitted = st.form_submit_button("Speichern & PDF Generieren", type="primary")
+               submitted = st.form_submit_button("Speichern & PDF Generieren", type="primary")
 
-            if submitted:
-                # deine bisherigen Updates (saved_notes etc.) + HTML bauen
-                # ...
-                html = generate_header_html(st.session_state.game_meta)
-                html += generate_top3_html(st.session_state.roster_df)
-                # + cards, team stats, images, custom sections
-                # ...
-                st.session_state.final_html = html
+if submitted:
+    # ... du baust hier dein HTML:
+    html = generate_header_html(st.session_state.game_meta)
+    html += generate_top3_html(st.session_state.roster_df)
+    # + Karten, Teamstats, Grafiken, Custom Sections ...
+    st.session_state.final_html = html
 
-                # >>> HIER: komplettes HTML fürs PDF einwickeln
-                full_html = f"""
-                <html>
-                <head>
-                <meta charset="utf-8">
-                <style>
-                @page {{
-                    size: A4 portrait;
-                    margin: 10mm;
-                }}
-                body {{
-                    font-family: Arial, sans-serif;
-                }}
-                img {{
-                    max-width: 100%;
-                }}
-                </style>
-                </head>
-                <body>
-                {st.session_state.final_html}
-                </body>
-                </html>
-                """
+    if HAS_PDFKIT:
+        full_html = f"""
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>
+        @page {{
+            size: A4 portrait;
+            margin: 10mm;
+        }}
+        body {{
+            font-family: Arial, sans-serif;
+        }}
+        img {{
+            max-width: 100%;
+        }}
+        </style>
+        </head>
+        <body>
+        {st.session_state.final_html}
+        </body>
+        </html>
+        """
 
-                # PDF als Bytes erzeugen und im Session State speichern
-                st.session_state.pdf_bytes = pdfkit.from_string(full_html, False)
+        # falls nötig mit config:
+        # config = pdfkit.configuration(wkhtmltopdf="/usr/bin/wkhtmltopdf")
+        # st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, configuration=config)
+        st.session_state.pdf_bytes = pdfkit.from_string(full_html, False)
+    else:
+        st.session_state.pdf_bytes = None
 
-                # in den Print-/Downloadmodus wechseln
-                st.session_state.print_mode = True
-                st.experimental_rerun()
+    st.session_state.print_mode = True
+    st.experimental_rerun()
+
 
 # --- ANSICHT: PDF / DRUCK ---
 else:
@@ -345,3 +317,4 @@ else:
         st.info("PDF-Erzeugung ist in dieser Umgebung nicht verfügbar (pdfkit fehlt).")
 
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
+
