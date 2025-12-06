@@ -7,7 +7,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- KONFIGURATION ---
-VERSION = "v3.1 (PDF Layout Fix)"
+VERSION = "v3.0 (PDF Layout Match)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -64,12 +64,22 @@ if 'optimized_images' not in st.session_state: st.session_state.optimized_images
 if 'saved_notes' not in st.session_state: st.session_state.saved_notes = {}
 if 'saved_colors' not in st.session_state: st.session_state.saved_colors = {}
 
+# Default Key Facts
 if 'facts_offense' not in st.session_state: 
-    st.session_state.facts_offense = pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])
+    st.session_state.facts_offense = pd.DataFrame([
+        {"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"},
+        {"Fokus": "Spacing", "Beschreibung": "swing or skip the ball to get it inside"}
+    ])
 if 'facts_defense' not in st.session_state: 
-    st.session_state.facts_defense = pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])
+    st.session_state.facts_defense = pd.DataFrame([
+        {"Fokus": "Rebound", "Beschreibung": "box out!"},
+        {"Fokus": "Transition", "Beschreibung": "Slow the ball down! Pick up the ball early!"}
+    ])
 if 'facts_about' not in st.session_state: 
-    st.session_state.facts_about = pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}])
+    st.session_state.facts_about = pd.DataFrame([
+        {"Fokus": "Energy", "Beschreibung": "100% effort"},
+        {"Fokus": "Together", "Beschreibung": "Fight for & trust in each other!"}
+    ])
 
 # --- HILFSFUNKTIONEN ---
 
@@ -80,10 +90,8 @@ def format_minutes(val):
     try:
         v = float(val)
         if v <= 0: return "00:00"
-        if v > 45: # Sekunden
-            mins = int(v // 60); secs = int(v % 60)
-        else: # Minuten
-            mins = int(v); secs = int((v % 1) * 60)
+        if v > 48: mins = int(v // 60); secs = int(v % 60)
+        else: mins = int(v); secs = int((v % 1) * 60)
         return f"{mins:02d}:{secs:02d}"
     except: return "00:00"
 
@@ -163,7 +171,7 @@ def generate_top3_html(df):
     fts = df[df['FTA'] >= 1.0].sort_values(by='FTPCT', ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by='FTPCT', ascending=True).head(3)
 
-    # Styles exakt wie im Screenshot
+    # Styles für die Boxen (PDF Screenshot Stil)
     box_style = "flex: 1; border: 1px solid #ccc; padding: 0;"
     header_base = "padding: 4px 8px; font-weight: bold; font-size: 12px; border-bottom: 1px solid #eee;"
     
@@ -174,6 +182,7 @@ def generate_top3_html(df):
 
     def build_table(d, headers, keys, bolds, color, icon, title):
         h = f"<div style='{box_style}'>"
+        # Farbiger Header Strich
         h += f"<div style='border-top: 3px solid {color}; {header_base} color: {color};'>{icon} {title}</div>"
         
         h += f"<table style='{table_style}'><tr>"
@@ -221,12 +230,13 @@ def generate_card_html(row, metadata, notes, color_code):
     
     # Farben für Header
     text_color = "white"
+    if color_code == "#666666": text_color = "white" # Grau
     
     header_style = f"background-color: {color_code}; color: {text_color}; padding: 3px 10px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
     
     # Tabelle Styles (Dünne graue Linien)
     table_css = "width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: black;"
-    border_css = "border: 1px solid #aaa;" 
+    border_css = "border: 1px solid #ccc;" 
     bg_css = "background-color: #f0f0f0; -webkit-print-color-adjust: exact;"
 
     return f"""
@@ -282,21 +292,19 @@ def generate_card_html(row, metadata, notes, color_code):
 def generate_team_stats_html(team_stats):
     if not team_stats: return ""
     ts = team_stats
-    
     def calc_pct(made, att, api_val):
         if api_val > 0: return api_val
         if att > 0: return (made / att) * 100
         return 0.0
-
     t_2pct = calc_pct(ts['2m'], ts['2a'], ts['2pct'])
     t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
     t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
     
-    border_css = "border: 1px solid #aaa;"
+    border_css = "border: 1px solid #ccc;"
 
     return f"""
-<div style="font-family: Arial, sans-serif; margin-top: 20px; page-break-inside: avoid;">
-    <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-size: 16px;">Team Stats (AVG - Official API)</h2>
+<div style="font-family: Arial, sans-serif; margin-top: 30px; page-break-inside: avoid;">
+    <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-size: 18px;">Team Stats (AVG - Official API)</h2>
     <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black; border: 1px solid #ccc;">
         <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
             <th rowspan="2" style="{border_css} padding: 4px;">PPG</th>
@@ -328,15 +336,15 @@ def generate_team_stats_html(team_stats):
 """
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
-    html = "<div style='margin-top: 20px; page-break-inside: avoid;'>"
+    html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
     def make_section(title, df):
         if df.empty: return ""
-        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:5px; font-size:16px;'>{title}</h3>"
-        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:11px; margin-bottom:15px;'>"
+        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-size: 18px;'>{title}</h3>"
+        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; margin-bottom:20px; border: 1px solid #ccc;'>"
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], "")
             c2 = r.get(df.columns[1], "")
-            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:4px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:4px; vertical-align:top;'>{c2}</td></tr>"
+            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td></tr>"
         section_html += "</table>"
         return section_html
 
@@ -434,29 +442,21 @@ if not st.session_state.print_mode:
                 def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
 
                 df['GP'] = get_v('gp').replace(0, 1)
-                
                 min_raw = get_v('min_sec')
                 sec_total = get_v('sec_total')
-                
                 df['MIN_FINAL'] = min_raw
-                # Minuten-Logik: Wenn PerGame <= 0, nimm Total/GP
                 mask_zero = df['MIN_FINAL'] <= 0
                 df.loc[mask_zero, 'MIN_FINAL'] = sec_total[mask_zero] / df.loc[mask_zero, 'GP']
-                
                 df['MIN_DISPLAY'] = df['MIN_FINAL'].apply(format_minutes)
-                
                 df['PPG'] = get_v('ppg'); df['TOT'] = get_v('tot')
                 df['2M'] = get_v('2m'); df['2A'] = get_v('2a'); df['2PCT'] = get_v('2pct').apply(pct)
                 df['3M'] = get_v('3m'); df['3A'] = get_v('3a'); df['3PCT'] = get_v('3pct').apply(pct)
                 df['FTM'] = get_v('ftm'); df['FTA'] = get_v('fta'); df['FTPCT'] = get_v('ftpct').apply(pct)
-                
                 raw_fg = get_v('fgpct')
                 if raw_fg.sum() == 0: df['FG%'] = df['2PCT'] 
                 else: df['FG%'] = raw_fg.apply(pct)
-
                 df['DR'] = get_v('dr'); df['OR'] = get_v('or')
                 df['AS'] = get_v('as'); df['TO'] = get_v('to'); df['ST'] = get_v('st'); df['PF'] = get_v('pf')
-                
                 df['select'] = False
                 st.session_state.roster_df = df
                 st.session_state.game_meta = {'home_name': home_name, 'home_logo': get_logo_url(home_id), 'guest_name': guest_name, 'guest_logo': get_logo_url(guest_id), 'date': date_input.strftime('%d.%m.%Y'), 'time': time_input.strftime('%H:%M')}
@@ -466,7 +466,6 @@ if not st.session_state.print_mode:
         st.subheader("3. Spieler auswählen")
         edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']], column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)}, disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
         selected_indices = edited[edited['select']].index
-        
         if len(selected_indices) > 0:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
@@ -537,12 +536,10 @@ if not st.session_state.print_mode:
                 
                 if uploaded_files:
                     html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
-                    # Grid Layout für Grafiken (2 pro Zeile)
-                    html += "<div style='display: flex; flex-wrap: wrap; gap: 10px;'>"
                     for up in uploaded_files:
                         b64 = base64.b64encode(up.getvalue()).decode()
-                        html += f"<div style='flex: 0 0 48%; margin-bottom:10px;'><img src='data:image/png;base64,{b64}' style='width:100%; border:1px solid #ccc;'></div>"
-                    html += "</div></div>"
+                        html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
+                    html += "</div>"
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
                 st.session_state.final_html = html
@@ -558,7 +555,7 @@ else:
     <style>
     @media print {
         @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.75; }
+        body { margin: 0; padding: 0; zoom: 0.65; }
         .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
         [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton { display: none !important; }
         
