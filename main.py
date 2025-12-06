@@ -553,7 +553,6 @@ else:
 
     print_css = """
     <style>
-    /* Seitengröße für den Druck */
     @page {
         size: A4 portrait;
         margin: 10mm;
@@ -561,7 +560,7 @@ else:
 
     @media print {
 
-        /* Streamlit-UI ausblenden */
+        /* Streamlit-Chrome ausblenden */
         [data-testid="stHeader"],
         [data-testid="stSidebar"],
         [data-testid="stToolbar"],
@@ -570,20 +569,33 @@ else:
             display: none !important;
         }
 
+        /* GANZE Seite druckbar machen */
         html, body {
-            margin: 0;
-            padding: 0;
-            width: 210mm;
-            height: auto;          /* wichtig, damit mehrere Seiten möglich sind */
-        }
-
-        .block-container {
-            padding: 0 !important;
             margin: 0 !important;
-            max-width: 100% !important;
+            padding: 0 !important;
+            height: auto !important;
+            overflow: visible !important;
         }
 
-        /* Klassen für manuelle Seitenumbrüche, falls du sie in final_html nutzt */
+        /* äußere Streamlit-Container von fester Höhe/Scrollen befreien */
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        .main,
+        .block-container,
+        [data-testid="stVerticalBlock"],
+        [data-testid="stHorizontalBlock"] {
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+        }
+
+        /* „Manage app“ und ähnliche Overlays verstecken */
+        [data-testid="stStatusWidget"],
+        [data-testid="stDecoration"] {
+            display: none !important;
+        }
+
+        /* optional: Seitenumbruch-Klasse für dein HTML */
         .page-break {
             page-break-after: always;
             break-after: page;
