@@ -14,7 +14,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v3.1 (3x3 Grid & Arial Font)"
+VERSION = "v3.4 (Split Columns Top3)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -60,7 +60,7 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"}
 }
 
-# --- SESSION STATE ---
+# --- SESSION STATE INITIALISIERUNG ---
 if 'print_mode' not in st.session_state: st.session_state.print_mode = False
 if 'final_html' not in st.session_state: st.session_state.final_html = ""
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
@@ -68,6 +68,7 @@ if 'roster_df' not in st.session_state: st.session_state.roster_df = None
 if 'team_stats' not in st.session_state: st.session_state.team_stats = None
 if 'game_meta' not in st.session_state: st.session_state.game_meta = {}
 if 'optimized_images' not in st.session_state: st.session_state.optimized_images = {}
+
 if 'saved_notes' not in st.session_state: st.session_state.saved_notes = {}
 if 'saved_colors' not in st.session_state: st.session_state.saved_colors = {}
 
@@ -178,8 +179,8 @@ def generate_top3_html(df):
     header_base = "padding: 2px 4px; font-weight: bold; font-size: 11px; border-bottom: 1px solid #eee; font-family: Arial, sans-serif;"
     table_style = "width:100%; font-size:10px; border-collapse:collapse; font-family: Arial, sans-serif;"
     th_style = "text-align:center; color:#555; padding:2px; font-size:9px; background-color: #f9f9f9; border-bottom: 1px solid #eee;"
-    td_name = "text-align:left; padding:2px; border-bottom:1px solid #eee; white-space:nowrap; overflow:hidden; max-width:80px;"
     td_val = "text-align:center; padding:2px; border-bottom:1px solid #eee;"
+    td_name = "text-align:left; padding:2px; border-bottom:1px solid #eee; white-space:nowrap; overflow:hidden; max-width:90px;"
 
     def build_box(d, headers, keys, bolds, color, icon, title):
         h = f"<div style='{box_style}'>"
@@ -191,27 +192,36 @@ def generate_top3_html(df):
             h += "<tr>"
             for i, k in enumerate(keys):
                 style = td_val
-                if i == 0: style = td_name
-                if i in bolds: style += " font-weight:bold;"
                 val = r[k]
-                if isinstance(val, float): val = f"{val:.1f}"
-                if k == 'NR': val = f"#{val}"
-                if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL'].split(' ')[-1]}"
+                
+                # Special Formatting
+                if k == 'NR':
+                    val = f"#{val}"
+                elif k == 'NAME_FULL':
+                    style = td_name
+                    # Nur Nachname für Platz in der Tabelle
+                    val = r['NAME_FULL'].split(' ')[-1]
+                elif isinstance(val, float):
+                    val = f"{val:.1f}"
+
+                if i in bolds: style += " font-weight:bold;"
+                
                 h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
         h += "</table></div>"
         return h
 
-    # 9 Boxen
-    box_ppg = build_box(scorers, ["Name", "PPG", "FG%"], ["NAME_FULL", "PPG", "FG%"], [1], "#e35b00", "🔥", "Top Scorer")
-    box_reb = build_box(rebounders, ["Name", "DR", "OR", "TOT"], ["NAME_FULL", "DR", "OR", "TOT"], [3], "#0055ff", "🗑️", "Rebounds")
-    box_3pt = build_box(shooters, ["Name", "M", "A", "%"], ["NAME_FULL", "3M", "3A", "3PCT"], [3], "#28a745", "🎯", "3-Points")
-    box_ft = build_box(fts, ["Name", "M", "A", "%"], ["NAME_FULL", "FTM", "FTA", "FTPCT"], [3], "#dc3545", "⚠️", "Worst FT")
-    box_ast = build_box(assisters, ["Name", "AS"], ["NAME_FULL", "AS"], [1], "#ffc107", "🅰️", "Assists")
-    box_st = build_box(stealers, ["Name", "ST"], ["NAME_FULL", "ST"], [1], "#6f42c1", "✋", "Steals")
-    box_to = build_box(turnovers, ["Name", "TO"], ["NAME_FULL", "TO"], [1], "#fd7e14", "🔄", "Turnovers")
-    box_blk = build_box(blocks, ["Name", "BS"], ["NAME_FULL", "BS"], [1], "#343a40", "🧱", "Blocks")
-    box_pf = build_box(fouls, ["Name", "PF"], ["NAME_FULL", "PF"], [1], "#20c997", "🛑", "Fouls")
+    # 9 Boxen - Jetzt mit getrennten Spalten für # und Name
+    box_ppg = build_box(scorers, ["#", "Name", "PPG", "FG%"], ["NR", "NAME_FULL", "PPG", "FG%"], [2], "#e35b00", "🔥", "Top Scorer")
+    box_reb = build_box(rebounders, ["#", "Name", "DR", "OR", "TOT"], ["NR", "NAME_FULL", "DR", "OR", "TOT"], [4], "#0055ff", "🗑️", "Rebounds")
+    box_3pt = build_box(shooters, ["#", "Name", "M", "A", "%"], ["NR", "NAME_FULL", "3M", "3A", "3PCT"], [4], "#28a745", "🎯", "3-Points")
+    box_ft = build_box(fts, ["#", "Name", "M", "A", "%"], ["NR", "NAME_FULL", "FTM", "FTA", "FTPCT"], [4], "#dc3545", "⚠️", "Worst FT")
+    
+    box_ast = build_box(assisters, ["#", "Name", "AS"], ["NR", "NAME_FULL", "AS"], [2], "#ffc107", "🅰️", "Assists")
+    box_st = build_box(stealers, ["#", "Name", "ST"], ["NR", "NAME_FULL", "ST"], [2], "#6f42c1", "✋", "Steals")
+    box_to = build_box(turnovers, ["#", "Name", "TO"], ["NR", "NAME_FULL", "TO"], [2], "#fd7e14", "🔄", "Turnovers")
+    box_blk = build_box(blocks, ["#", "Name", "BS"], ["NR", "NAME_FULL", "BS"], [2], "#343a40", "🧱", "Blocks")
+    box_pf = build_box(fouls, ["#", "Name", "PF"], ["NR", "NAME_FULL", "PF"], [2], "#20c997", "🛑", "Fouls")
 
     # 3x3 Grid Layout
     row_style = "display: flex; flex-direction: row; gap: 10px; margin-bottom: 10px;"
@@ -548,39 +558,11 @@ if not st.session_state.print_mode:
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
                 st.session_state.final_html = html
                 
-                # PDF Generation Logic
                 if HAS_PDFKIT:
                     try:
-                        # Full HTML wrapper to apply font body-wide
-                        full_html_str = f"""
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                        <meta charset="utf-8">
-                        <style>
-                        body {{
-                            font-family: Arial, sans-serif;
-                        }}
-                        img {{
-                            max-width: 100%;
-                        }}
-                        </style>
-                        </head>
-                        <body>
-                        {html}
-                        </body>
-                        </html>
-                        """
-                        options = {
-                            'page-size': 'A4',
-                            'margin-top': '10mm',
-                            'margin-right': '10mm',
-                            'margin-bottom': '10mm',
-                            'margin-left': '10mm',
-                            'encoding': "UTF-8",
-                            'no-outline': None
-                        }
-                        st.session_state.pdf_bytes = pdfkit.from_string(full_html_str, False, options=options)
+                        options = {'page-size': 'A4', 'margin-top': '10mm', 'margin-right': '10mm', 'margin-bottom': '10mm', 'margin-left': '10mm', 'encoding': "UTF-8", 'no-outline': None}
+                        full_html = f"<!DOCTYPE html><html><head><meta charset='utf-8'><style>body {{ font-family: Arial, sans-serif; }}</style></head><body>{html}</body></html>"
+                        st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, options=options)
                     except Exception:
                         st.session_state.pdf_bytes = None
 
@@ -604,7 +586,7 @@ else:
     <style>
     @media print {
         @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.60; font-family: Arial, sans-serif; }
+        body { margin: 0; padding: 0; zoom: 0.60; }
         .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
         [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton, .stDownloadButton { display: none !important; }
         table { width: 100% !important; table-layout: fixed !important; }
