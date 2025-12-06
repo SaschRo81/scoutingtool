@@ -7,7 +7,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v2.8 (Extended Stats)"
+VERSION = "v2.9 (Logo Size Fix)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -127,6 +127,7 @@ def get_player_metadata(player_id):
 # --- HTML GENERATOREN ---
 
 def generate_header_html(meta):
+    # LOGO GRÖSSE HIER ANGEPASST: height: 50px
     return f"""
 <div style="font-family: Arial, sans-serif; page-break-inside: avoid;">
     <div style="text-align: right; font-size: 10px; color: #888; border-bottom: 1px solid #eee; margin-bottom: 10px;">
@@ -137,12 +138,12 @@ def generate_header_html(meta):
         <br>
         <div style="display: flex; align-items: center; justify-content: center; gap: 40px;">
             <div style="text-align: center;">
-                <img src="{meta['home_logo']}" style="height: 80px; object-fit: contain;">
+                <img src="{meta['home_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
                 <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['home_name']}</div>
             </div>
             <div style="font-size: 24px; font-weight: bold; color: #333;">VS</div>
             <div style="text-align: center;">
-                <img src="{meta['guest_logo']}" style="height: 80px; object-fit: contain;">
+                <img src="{meta['guest_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
                 <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['guest_name']}</div>
             </div>
         </div>
@@ -151,71 +152,73 @@ def generate_header_html(meta):
 """
 
 def generate_top3_html(df):
-    # Calculations
     scorers = df.sort_values(by='PPG', ascending=False).head(3)
     rebounders = df.sort_values(by='TOT', ascending=False).head(3)
     shooters = df[df['3M'] >= 0.5].sort_values(by='3PCT', ascending=False).head(3)
     if shooters.empty: shooters = df.sort_values(by='3PCT', ascending=False).head(3)
     fts = df[df['FTA'] >= 1.0].sort_values(by='FTPCT', ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by='FTPCT', ascending=True).head(3)
-    
-    # New Stats
-    assisters = df.sort_values(by='AS', ascending=False).head(3)
-    stealers = df.sort_values(by='ST', ascending=False).head(3)
-    turnovers = df.sort_values(by='TO', ascending=False).head(3)
-    blocks = df.sort_values(by='BS', ascending=False).head(3)
-    fouls = df.sort_values(by='PF', ascending=False).head(3)
 
-    # Styling
-    box_style = "flex: 1; border: 1px solid #ccc; padding: 0;"
-    header_base = "padding: 2px 4px; font-weight: bold; font-size: 11px; border-bottom: 1px solid #eee;"
-    table_style = "width:100%; font-size:10px; border-collapse:collapse;"
-    th_style = "text-align:center; color:#555; padding:2px; font-size:9px; background-color: #f9f9f9; border-bottom: 1px solid #eee;"
-    td_name = "text-align:left; padding:2px; border-bottom:1px solid #eee; white-space:nowrap; overflow:hidden; max-width:80px;"
-    td_val = "text-align:center; padding:2px; border-bottom:1px solid #eee;"
+    table_style = "width:100%; font-size:11px; border-collapse:collapse; margin-top:5px;"
+    th_style = "text-align:center; border-bottom:1px solid #999; font-weight:bold; color:#555;"
+    td_name = "text-align:left; border-bottom:1px solid #eee; padding:3px 0;"
+    td_val = "text-align:center; border-bottom:1px solid #eee;"
 
-    def build_box(d, headers, keys, bolds, color, icon, title):
-        h = f"<div style='{box_style}'>"
-        h += f"<div style='border-top: 3px solid {color}; {header_base} color: {color};'>{icon} {title}</div>"
-        h += f"<table style='{table_style}'><tr>"
+    def build_table(d, headers, keys, bolds):
+        h = f"<table style='{table_style}'><tr>"
         for head in headers: h += f"<th style='{th_style}'>{head}</th>"
         h += "</tr>"
         for _, r in d.iterrows():
             h += "<tr>"
             for i, k in enumerate(keys):
                 style = td_val
-                if i == 0: style = td_name
+                if i == 0: style = td_name # Name
                 if i in bolds: style += " font-weight:bold;"
                 val = r[k]
                 if isinstance(val, float): val = f"{val:.1f}"
                 if k == 'NR': val = f"#{val}"
-                if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL'].split(' ')[-1]}" # Nur Nachname für Platz
+                if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL']}"
                 
-                h += f"<td style='{style}'>{val}</td>"
+                if k != 'NR' and k != 'NAME_FULL': h += f"<td style='{style}'>{val}</td>"
+                elif k == 'NAME_FULL': h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
-        h += "</table></div>"
+        h += "</table>"
         return h
 
-    # Row 1
-    h_scorers = build_box(scorers, ["Name", "PPG", "FG%"], ["NAME_FULL", "PPG", "FG%"], [1], "#e35b00", "🔥", "Top Scorer")
-    h_rebs = build_box(rebounders, ["Name", "DR", "OR", "TOT"], ["NAME_FULL", "DR", "OR", "TOT"], [3], "#0055ff", "🗑️", "Rebounds")
-    h_3pt = build_box(shooters, ["Name", "M", "A", "%"], ["NAME_FULL", "3M", "3A", "3PCT"], [3], "#28a745", "🎯", "3-Points")
-    h_ft = build_box(fts, ["Name", "M", "A", "%"], ["NAME_FULL", "FTM", "FTA", "FTPCT"], [3], "#dc3545", "⚠️", "Worst FT")
+    h_scorers = build_table(scorers, ["Name", "PPG", "FG%"], ["NAME_FULL", "PPG", "FG%"], [1])
+    h_rebs = build_table(rebounders, ["Name", "DR", "OR", "TOT"], ["NAME_FULL", "DR", "OR", "TOT"], [3])
+    h_3pt = build_table(shooters, ["Name", "M", "A", "%"], ["NAME_FULL", "3M", "3A", "3PCT"], [3])
+    h_ft = build_table(fts, ["Name", "M", "A", "%"], ["NAME_FULL", "FTM", "FTA", "FTPCT"], [3])
+    
+    # NEW STATS Row 2
+    assisters = df.sort_values(by='AS', ascending=False).head(3)
+    stealers = df.sort_values(by='ST', ascending=False).head(3)
+    turnovers = df.sort_values(by='TO', ascending=False).head(3)
+    blocks = df.sort_values(by='BS', ascending=False).head(3)
+    fouls = df.sort_values(by='PF', ascending=False).head(3)
 
-    # Row 2 (New Stats)
-    h_as = build_box(assisters, ["Name", "AS"], ["NAME_FULL", "AS"], [1], "#ffc107", "🅰️", "Assists")
-    h_st = build_box(stealers, ["Name", "ST"], ["NAME_FULL", "ST"], [1], "#6f42c1", "✋", "Steals")
-    h_bs = build_box(blocks, ["Name", "BS"], ["NAME_FULL", "BS"], [1], "#343a40", "🧱", "Blocks")
-    h_to = build_box(turnovers, ["Name", "TO"], ["NAME_FULL", "TO"], [1], "#fd7e14", "🔄", "Turnovers")
-    h_pf = build_box(fouls, ["Name", "PF"], ["NAME_FULL", "PF"], [1], "#20c997", "🛑", "Fouls")
+    h_as = build_table(assisters, ["Name", "AS"], ["NAME_FULL", "AS"], [1])
+    h_st = build_table(stealers, ["Name", "ST"], ["NAME_FULL", "ST"], [1])
+    h_to = build_table(turnovers, ["Name", "TO"], ["NAME_FULL", "TO"], [1])
+    h_bs = build_table(blocks, ["Name", "BS"], ["NAME_FULL", "BS"], [1])
+    h_pf = build_table(fouls, ["Name", "PF"], ["NAME_FULL", "PF"], [1])
 
     return f"""
-<div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; font-family: Arial, sans-serif;">
-    <div style="display: flex; flex-direction: row; gap: 10px;">
-        {h_scorers} {h_rebs} {h_3pt} {h_ft}
+<div style="margin-bottom: 30px; page-break-inside: avoid; font-family: Arial, sans-serif;">
+    <!-- Row 1 -->
+    <div style="display: flex; flex-direction: row; gap: 15px; margin-bottom: 15px;">
+        <div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#e35b00; border-bottom: 2px solid #e35b00; font-size:13px;">🔥 Top Scorer</div>{h_scorers}</div>
+        <div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#0055ff; border-bottom: 2px solid #0055ff; font-size:13px;">🗑️ Rebounder</div>{h_rebs}</div>
+        <div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#28a745; border-bottom: 2px solid #28a745; font-size:13px;">🎯 Best 3pt</div>{h_3pt}</div>
+        <div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#dc3545; border-bottom: 2px solid #dc3545; font-size:13px;">⚠️ Worst FT</div>{h_ft}</div>
     </div>
-    <div style="display: flex; flex-direction: row; gap: 10px;">
-        {h_as} {h_to} {h_pf} {h_bs} {h_st}
+    <!-- Row 2 -->
+    <div style="display: flex; flex-direction: row; gap: 15px;">
+        <div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#ffc107; border-bottom: 2px solid #ffc107; font-size:12px;">🅰️ Assists</div>{h_as}</div>
+        <div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#6f42c1; border-bottom: 2px solid #6f42c1; font-size:12px;">✋ Steals</div>{h_st}</div>
+        <div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#fd7e14; border-bottom: 2px solid #fd7e14; font-size:12px;">🔄 Turnovers</div>{h_to}</div>
+        <div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#343a40; border-bottom: 2px solid #343a40; font-size:12px;">🧱 Blocks</div>{h_bs}</div>
+        <div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#20c997; border-bottom: 2px solid #20c997; font-size:12px;">🛑 Fouls</div>{h_pf}</div>
     </div>
 </div>
 """
@@ -228,96 +231,119 @@ def generate_card_html(row, metadata, notes, color_code):
         height_str = f"{h:.2f}".replace('.', ',')
     except: height_str = "-"
     pos_str = clean_pos(metadata['pos'])
-    header_style = f"background-color: {color_code}; color: white; padding: 2px 10px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
+
+    header_style = f"background-color: {color_code}; color: white; padding: 5px 10px; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
     
-    return f"""
-<div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 15px; background-color: white; page-break-inside: avoid;">
-<div style="{header_style}"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
-<div style="display: flex; flex-direction: row;">
-<div style="width: 100px; min-width: 100px; border-right: 1px solid #ccc;"><img src="{img_url}" style="width: 100%; height: 125px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'"></div>
-<table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: black;">
-<tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
-<th rowspan="2" style="border: 1px solid black; padding: 2px;">Min</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">PPG</th>
-<th colspan="3" style="border: 1px solid black; padding: 2px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 2px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 2px;">FT</th>
-<th colspan="3" style="border: 1px solid black; padding: 2px;">REB</th>
-<th rowspan="2" style="border: 1px solid black; padding: 2px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">PF</th>
-</tr>
-<tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
-<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">DR</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
-</tr>
-<tr>
-<td style="border: 1px solid black;">{row['MIN_DISPLAY']}</td><td style="border: 1px solid black;">{row['PPG']}</td>
-<td style="border: 1px solid black;">{row['2M']}</td><td style="border: 1px solid black;">{row['2A']}</td><td style="border: 1px solid black;">{row['2PCT']}</td>
-<td style="border: 1px solid black;">{row['3M']}</td><td style="border: 1px solid black;">{row['3A']}</td><td style="border: 1px solid black;">{row['3PCT']}</td>
-<td style="border: 1px solid black;">{row['FTM']}</td><td style="border: 1px solid black;">{row['FTA']}</td><td style="border: 1px solid black;">{row['FTPCT']}</td>
-<td style="border: 1px solid black;">{row['DR']}</td><td style="border: 1px solid black;">{row['OR']}</td><td style="border: 1px solid black;">{row['TOT']}</td>
-<td style="border: 1px solid black;">{row['AS']}</td><td style="border: 1px solid black;">{row['TO']}</td><td style="border: 1px solid black;">{row['ST']}</td><td style="border: 1px solid black;">{row['PF']}</td>
-</tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 20px; text-align: left; padding-left: 5px;">{notes.get('l1','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r1','')}</td></tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 20px; text-align: left; padding-left: 5px;">{notes.get('l2','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r2','')}</td></tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 20px; text-align: left; padding-left: 5px;">{notes.get('l3','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r3','')}</td></tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 20px; text-align: left; padding-left: 5px;">{notes.get('l4','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r4','')}</td></tr>
-</table>
-</div>
+    html = f"""
+<div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 20px; background-color: white; page-break-inside: avoid;">
+    <div style="{header_style}">
+        <span>#{row['NR']} {row['NAME_FULL']}</span>
+        <span>{height_str} m | Pos: {pos_str}</span>
+    </div>
+    <div style="display: flex; flex-direction: row;">
+        <div style="width: 120px; min-width: 120px; border-right: 1px solid #ccc;">
+            <img src="{img_url}" style="width: 100%; height: 150px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black;">
+            <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
+                <th rowspan="2" style="border: 1px solid black; padding: 4px;">Min</th>
+                <th rowspan="2" style="border: 1px solid black; padding: 4px;">PPG</th>
+                <th colspan="3" style="border: 1px solid black; padding: 4px;">2P FG</th>
+                <th colspan="3" style="border: 1px solid black; padding: 4px;">3P FG</th>
+                <th colspan="3" style="border: 1px solid black; padding: 4px;">FT</th>
+                <th colspan="3" style="border: 1px solid black; padding: 4px;">REB</th>
+                <th rowspan="2" style="border: 1px solid black; padding: 4px;">AS</th>
+                <th rowspan="2" style="border: 1px solid black; padding: 4px;">TO</th>
+                <th rowspan="2" style="border: 1px solid black; padding: 4px;">ST</th>
+                <th rowspan="2" style="border: 1px solid black; padding: 4px;">PF</th>
+            </tr>
+            <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
+                <th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+                <th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+                <th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+                <th style="border: 1px solid black;">D</th> <th style="border: 1px solid black;">O</th> <th style="border: 1px solid black;">TOT</th>
+            </tr>
+            <tr>
+                <td style="border: 1px solid black;">{row['MIN_DISPLAY']}</td>
+                <td style="border: 1px solid black;">{row['PPG']}</td>
+                <td style="border: 1px solid black;">{row['2M']}</td> <td style="border: 1px solid black;">{row['2A']}</td> <td style="border: 1px solid black;">{row['2PCT']}</td>
+                <td style="border: 1px solid black;">{row['3M']}</td> <td style="border: 1px solid black;">{row['3A']}</td> <td style="border: 1px solid black;">{row['3PCT']}</td>
+                <td style="border: 1px solid black;">{row['FTM']}</td> <td style="border: 1px solid black;">{row['FTA']}</td> <td style="border: 1px solid black;">{row['FTPCT']}</td>
+                <td style="border: 1px solid black;">{row['DR']}</td> <td style="border: 1px solid black;">{row['OR']}</td> <td style="border: 1px solid black;">{row['TOT']}</td>
+                <td style="border: 1px solid black;">{row['AS']}</td>
+                <td style="border: 1px solid black;">{row['TO']}</td>
+                <td style="border: 1px solid black;">{row['ST']}</td>
+                <td style="border: 1px solid black;">{row['PF']}</td>
+            </tr>
+            <tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l1']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r1']}</td></tr>
+            <tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l2']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r2']}</td></tr>
+            <tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l3']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r3']}</td></tr>
+            <tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l4']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r4']}</td></tr>
+        </table>
+    </div>
 </div>
 """
+    return html
 
 def generate_team_stats_html(team_stats):
     if not team_stats: return ""
     ts = team_stats
+    
     def calc_pct(made, att, api_val):
         if api_val > 0: return api_val
         if att > 0: return (made / att) * 100
         return 0.0
+
     t_2pct = calc_pct(ts['2m'], ts['2a'], ts['2pct'])
     t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
     t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
-    
-    border_css = "border: 1px solid #ccc;"
 
     return f"""
-<div style="font-family: Arial, sans-serif; margin-top: 20px; page-break-inside: avoid;">
-    <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-size: 16px;">Team Stats (AVG - Official API)</h2>
-    <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black; border: 1px solid #000;">
+<div style="font-family: Arial, sans-serif; margin-top: 30px; page-break-inside: avoid;">
+    <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG - Official API)</h2>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; border: 1px solid #000;">
         <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-            <th rowspan="2" style="{border_css} padding: 4px;">PPG</th>
-            <th colspan="3" style="{border_css} padding: 4px;">2P FG</th>
-            <th colspan="3" style="{border_css} padding: 4px;">3P FG</th>
-            <th colspan="3" style="{border_css} padding: 4px;">FT</th>
-            <th colspan="3" style="{border_css} padding: 4px;">REB</th>
-            <th rowspan="2" style="{border_css} padding: 4px;">AS</th>
-            <th rowspan="2" style="{border_css} padding: 4px;">TO</th>
-            <th rowspan="2" style="{border_css} padding: 4px;">ST</th>
-            <th rowspan="2" style="{border_css} padding: 4px;">PF</th>
+            <th rowspan="2" style="border: 1px solid black; padding: 6px;">PPG</th>
+            <th colspan="3" style="border: 1px solid black; padding: 6px;">2P FG</th>
+            <th colspan="3" style="border: 1px solid black; padding: 6px;">3P FG</th>
+            <th colspan="3" style="border: 1px solid black; padding: 6px;">FT</th>
+            <th colspan="3" style="border: 1px solid black; padding: 6px;">REB</th>
+            <th rowspan="2" style="border: 1px solid black; padding: 6px;">AS</th>
+            <th rowspan="2" style="border: 1px solid black; padding: 6px;">TO</th>
+            <th rowspan="2" style="border: 1px solid black; padding: 6px;">ST</th>
+            <th rowspan="2" style="border: 1px solid black; padding: 6px;">PF</th>
         </tr>
         <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-            <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-            <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-            <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-            <th style="{border_css}">D</th><th style="{border_css}">O</th><th style="{border_css}">TOT</th>
+            <th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+            <th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+            <th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+            <th style="border: 1px solid black;">D</th> <th style="border: 1px solid black;">O</th> <th style="border: 1px solid black;">TOT</th>
         </tr>
         <tr style="font-weight: bold; background-color: #f9f9f9;">
-            <td style="{border_css} padding: 6px;">{ts['ppg']:.1f}</td>
-            <td style="{border_css}">{ts['2m']:.1f}</td><td style="{border_css}">{ts['2a']:.1f}</td><td style="{border_css}">{t_2pct:.1f}</td>
-            <td style="{border_css}">{ts['3m']:.1f}</td><td style="{border_css}">{ts['3a']:.1f}</td><td style="{border_css}">{t_3pct:.1f}</td>
-            <td style="{border_css}">{ts['ftm']:.1f}</td><td style="{border_css}">{ts['fta']:.1f}</td><td style="{border_css}">{t_ftpct:.1f}</td>
-            <td style="{border_css}">{ts['dr']:.1f}</td><td style="{border_css}">{ts['or']:.1f}</td><td style="{border_css}">{ts['tot']:.1f}</td>
-            <td style="{border_css}">{ts['as']:.1f}</td><td style="{border_css}">{ts['to']:.1f}</td><td style="{border_css}">{ts['st']:.1f}</td><td style="{border_css}">{ts['pf']:.1f}</td>
+            <td style="border: 1px solid black; padding: 8px;">{ts['ppg']:.1f}</td>
+            <td style="border: 1px solid black;">{ts['2m']:.1f}</td> <td style="border: 1px solid black;">{ts['2a']:.1f}</td> <td style="border: 1px solid black;">{t_2pct:.1f}</td>
+            <td style="border: 1px solid black;">{ts['3m']:.1f}</td> <td style="border: 1px solid black;">{ts['3a']:.1f}</td> <td style="border: 1px solid black;">{t_3pct:.1f}</td>
+            <td style="border: 1px solid black;">{ts['ftm']:.1f}</td> <td style="border: 1px solid black;">{ts['fta']:.1f}</td> <td style="border: 1px solid black;">{t_ftpct:.1f}</td>
+            <td style="border: 1px solid black;">{ts['dr']:.1f}</td> <td style="border: 1px solid black;">{ts['or']:.1f}</td> <td style="border: 1px solid black;">{ts['tot']:.1f}</td>
+            <td style="border: 1px solid black;">{ts['as']:.1f}</td>
+            <td style="border: 1px solid black;">{ts['to']:.1f}</td>
+            <td style="border: 1px solid black;">{ts['st']:.1f}</td>
+            <td style="border: 1px solid black;">{ts['pf']:.1f}</td>
         </tr>
     </table>
 </div>
 """
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
-    html = "<div style='margin-top: 20px; page-break-inside: avoid;'>"
+    html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
     def make_section(title, df):
         if df.empty: return ""
-        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:5px; font-size:16px;'>{title}</h3>"
-        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:11px; margin-bottom:15px;'>"
+        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px;'>{title}</h3>"
+        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; margin-bottom:20px;'>"
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], "")
             c2 = r.get(df.columns[1], "")
-            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:4px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:4px; vertical-align:top;'>{c2}</td></tr>"
+            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td></tr>"
         section_html += "</table>"
         return section_html
 
@@ -397,7 +423,7 @@ if not st.session_state.print_mode:
                     'ftm': ['freethrowsmadepergame'], 'fta': ['freethrowsattemptedpergame'], 'ftpct': ['freethrowssuccesspercent'],
                     'dr': ['defensivereboundspergame'], 'or': ['offensivereboundspergame'],
                     'as': ['assistspergame'], 'to': ['turnoverspergame'], 'st': ['stealspergame'], 'pf': ['foulscommittedpergame'],
-                    'bs': ['blockspergame', 'blockedshotspergame'], # Neu
+                    'bs': ['blockspergame', 'blockedshotspergame'],
                     'fgpct': ['fieldgoalsuccesspercent', 'fieldgoalpercentage']
                 }
                 final_cols = {}
@@ -440,7 +466,6 @@ if not st.session_state.print_mode:
         st.subheader("3. Spieler auswählen")
         edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']], column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)}, disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
         selected_indices = edited[edited['select']].index
-        
         if len(selected_indices) > 0:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
@@ -530,7 +555,7 @@ else:
     <style>
     @media print {
         @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.65; }
+        body { margin: 0; padding: 0; zoom: 0.60; }
         .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
         [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton { display: none !important; }
         
