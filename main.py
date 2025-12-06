@@ -550,5 +550,47 @@ else:
     if st.button("⬅️ Zurück"):
         st.session_state.print_mode = False
         st.rerun()
+
+    print_css = """
+    <style>
+    /* Seitengröße für den Druck */
+    @page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+
+    @media print {
+
+        /* Streamlit-UI ausblenden */
+        [data-testid="stHeader"],
+        [data-testid="stSidebar"],
+        [data-testid="stToolbar"],
+        footer,
+        .stButton {
+            display: none !important;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 210mm;
+            height: auto;          /* wichtig, damit mehrere Seiten möglich sind */
+        }
+
+        .block-container {
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
+        }
+
+        /* Klassen für manuelle Seitenumbrüche, falls du sie in final_html nutzt */
+        .page-break {
+            page-break-after: always;
+            break-after: page;
+        }
+    }
+    </style>
+    """
+
+    st.markdown(print_css, unsafe_allow_html=True)
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-    st.markdown("""<style>@media print {[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton {display: none !important;} .block-container {padding:0!important;margin:0!important;max_width:100%!important;}}</style>""", unsafe_allow_html=True)
