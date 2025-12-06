@@ -482,9 +482,72 @@ if not st.session_state.print_mode:
                 st.session_state.print_mode = True
                 st.rerun()
 
+# --- ANSICHT: DRUCK/PDF ---
 else:
+    # Zurück zur Bearbeitung
     if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
         st.session_state.print_mode = False
         st.rerun()
+
+    # CSS für Druck + Scroll-Verhalten
+    st.markdown(
+        """
+        <style>
+        /* Allgemein: volle Höhe, kein Scrollen erzwingen */
+        html, body {
+            height: auto !important;
+            overflow: visible !important;
+        }
+
+        /* Streamlit-Container etwas "entfesseln" */
+        [data-testid="stAppViewContainer"],
+        [data-testid="stAppViewBlockContainer"],
+        .block-container {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+
+        @media print {
+            /* Alles ausblenden, was nicht in den Report gehört */
+            [data-testid="stHeader"],
+            [data-testid="stSidebar"],
+            [data-testid="stToolbar"],
+            footer,
+            .stButton {
+                display: none !important;
+            }
+
+            [data-testid="stAppViewContainer"],
+            [data-testid="stAppViewBlockContainer"],
+            .block-container {
+                padding: 0 !important;
+                margin: 0 !important;
+                max-width: 100% !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Report direkt anzeigen
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-    st.markdown("""<style>@media print { @page {size: A4; margin: 5mm;} body { margin: 0; padding: 0; zoom: 0.9; } .block-container {padding:0!important;margin:0!important;max_width:100%!important;} [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton {display: none !important;} }</style>""", unsafe_allow_html=True)
+
+    # Zusätzlich: als eigene HTML-Datei herunterladen (beste Druckqualität, keine Scrollbalken)
+    full_html_doc = (
+        "<!DOCTYPE html><html><head>"
+        "<meta charset='utf-8'>"
+        "<title>Scouting Report</title>"
+        "<style>@page { size: A4 portrait; margin: 10mm; }</style>"
+        "</head><body>"
+        + st.session_state.final_html +
+        "</body></html>"
+    )
+
+    st.download_button(
+        "📄 Report als HTML herunterladen (zum Drucken ohne Scrollbalken)",
+        data=full_html_doc.encode("utf-8"),
+        file_name="scouting_report.html",
+        mime="text/html"
+    )
