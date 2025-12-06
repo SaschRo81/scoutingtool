@@ -14,7 +14,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v3.0 (PDF Download Support)"
+VERSION = "v3.1 (Full Stats & PDF)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -60,7 +60,7 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"}
 }
 
-# --- SESSION STATE INITIALISIERUNG ---
+# --- SESSION STATE ---
 if 'print_mode' not in st.session_state: st.session_state.print_mode = False
 if 'final_html' not in st.session_state: st.session_state.final_html = ""
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
@@ -137,22 +137,22 @@ def get_player_metadata(player_id):
 
 def generate_header_html(meta):
     return f"""
-<div style="font-family: Arial, sans-serif; page-break-inside: avoid; width: 100%;">
+<div style="font-family: Arial, sans-serif; page-break-inside: avoid;">
     <div style="text-align: right; font-size: 10px; color: #888; border-bottom: 1px solid #eee; margin-bottom: 10px;">
         DBBL Scouting Pro by Sascha Rosanke
     </div>
-    <div style="border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px; text-align: center;">
+    <div style="border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; text-align: center;">
         <h1 style="margin: 0; padding: 0; font-size: 24px; color: #000; font-weight: bold;">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
         <br>
-        <div style="display: flex; align-items: center; justify-content: center; gap: 60px;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 40px;">
             <div style="text-align: center;">
-                <img src="{meta['home_logo']}" style="height: 70px; object-fit: contain;">
-                <div style="font-weight: bold; margin-top: 5px; font-size: 14px;">{meta['home_name']}</div>
+                <img src="{meta['home_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
+                <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['home_name']}</div>
             </div>
-            <div style="font-size: 20px; font-weight: bold; color: #333;">VS</div>
+            <div style="font-size: 24px; font-weight: bold; color: #333;">VS</div>
             <div style="text-align: center;">
-                <img src="{meta['guest_logo']}" style="height: 70px; object-fit: contain;">
-                <div style="font-weight: bold; margin-top: 5px; font-size: 14px;">{meta['guest_name']}</div>
+                <img src="{meta['guest_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
+                <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['guest_name']}</div>
             </div>
         </div>
     </div>
@@ -160,12 +160,20 @@ def generate_header_html(meta):
 """
 
 def generate_top3_html(df):
+    # Row 1: Classic
     scorers = df.sort_values(by='PPG', ascending=False).head(3)
     rebounders = df.sort_values(by='TOT', ascending=False).head(3)
     shooters = df[df['3M'] >= 0.5].sort_values(by='3PCT', ascending=False).head(3)
     if shooters.empty: shooters = df.sort_values(by='3PCT', ascending=False).head(3)
     fts = df[df['FTA'] >= 1.0].sort_values(by='FTPCT', ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by='FTPCT', ascending=True).head(3)
+
+    # Row 2: Extended
+    assisters = df.sort_values(by='AS', ascending=False).head(3)
+    stealers = df.sort_values(by='ST', ascending=False).head(3)
+    turnovers = df.sort_values(by='TO', ascending=False).head(3)
+    blocks = df.sort_values(by='BS', ascending=False).head(3)
+    fouls = df.sort_values(by='PF', ascending=False).head(3)
 
     box_style = "flex: 1; border: 1px solid #ccc; padding: 0;"
     header_base = "padding: 2px 4px; font-weight: bold; font-size: 11px; border-bottom: 1px solid #eee;"
@@ -184,25 +192,40 @@ def generate_top3_html(df):
             h += "<tr>"
             for i, k in enumerate(keys):
                 style = td_val
-                if i == 0: style = td_name
+                if i == 0: style = td_name # Name
                 if i in bolds: style += " font-weight:bold;"
                 val = r[k]
                 if isinstance(val, float): val = f"{val:.1f}"
                 if k == 'NR': val = f"#{val}"
-                if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL'].split(' ')[-1]}"
+                if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL'].split(' ')[-1]}" # Nur Nachname für Platz
                 h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
         h += "</table></div>"
         return h
 
+    # Build Row 1
     h_scorers = build_box(scorers, ["Name", "PPG", "FG%"], ["NAME_FULL", "PPG", "FG%"], [1], "#e35b00", "🔥", "Top Scorer")
     h_rebs = build_box(rebounders, ["Name", "DR", "OR", "TOT"], ["NAME_FULL", "DR", "OR", "TOT"], [3], "#0055ff", "🗑️", "Rebounds")
-    h_3pt = build_box(shooters, ["Name", "M", "A", "%"], ["NAME_FULL", "3M", "3A", "3PCT"], [3], "#28a745", "🎯", "3-Points")
+    h_3pt = build_box(shooters, ["Name", "M", "A", "%"], ["NAME_FULL", "3M", "3A", "3PCT"], [3], "#28a745", "🎯", "Best 3pt")
     h_ft = build_box(fts, ["Name", "M", "A", "%"], ["NAME_FULL", "FTM", "FTA", "FTPCT"], [3], "#dc3545", "⚠️", "Worst FT")
 
+    # Build Row 2
+    h_as = build_box(assisters, ["Name", "AS"], ["NAME_FULL", "AS"], [1], "#ffc107", "🅰️", "Assists")
+    h_st = build_box(stealers, ["Name", "ST"], ["NAME_FULL", "ST"], [1], "#6f42c1", "✋", "Steals")
+    h_to = build_box(turnovers, ["Name", "TO"], ["NAME_FULL", "TO"], [1], "#fd7e14", "🔄", "Turnovers")
+    h_bs = build_box(blocks, ["Name", "BS"], ["NAME_FULL", "BS"], [1], "#343a40", "🧱", "Blocks")
+    h_pf = build_box(fouls, ["Name", "PF"], ["NAME_FULL", "PF"], [1], "#20c997", "🛑", "Fouls")
+
     return f"""
-<div style="display: flex; flex-direction: row; gap: 15px; margin-bottom: 20px; page-break-inside: avoid; font-family: Arial, sans-serif;">
-    {h_scorers} {h_rebs} {h_3pt} {h_ft}
+<div style="margin-bottom: 20px; page-break-inside: avoid; font-family: Arial, sans-serif;">
+    <!-- Row 1 -->
+    <div style="display: flex; flex-direction: row; gap: 10px; margin-bottom: 10px;">
+        {h_scorers} {h_rebs} {h_3pt} {h_ft}
+    </div>
+    <!-- Row 2 -->
+    <div style="display: flex; flex-direction: row; gap: 10px;">
+        {h_as} {h_st} {h_to} {h_bs} {h_pf}
+    </div>
 </div>
 """
 
@@ -276,39 +299,25 @@ def generate_team_stats_html(team_stats):
     t_2pct = calc_pct(ts['2m'], ts['2a'], ts['2pct'])
     t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
     t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
-    
-    border_css = "border: 1px solid #ccc;"
-
     return f"""
 <div style="font-family: Arial, sans-serif; margin-top: 20px; page-break-inside: avoid;">
-    <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-size: 16px;">Team Stats (AVG - Official API)</h2>
-    <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black; border: 1px solid #ccc;">
-        <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-            <th rowspan="2" style="{border_css} padding: 4px;">PPG</th>
-            <th colspan="3" style="{border_css} padding: 4px;">2P FG</th>
-            <th colspan="3" style="{border_css} padding: 4px;">3P FG</th>
-            <th colspan="3" style="{border_css} padding: 4px;">FT</th>
-            <th colspan="3" style="{border_css} padding: 4px;">REB</th>
-            <th rowspan="2" style="{border_css} padding: 4px;">AS</th>
-            <th rowspan="2" style="{border_css} padding: 4px;">TO</th>
-            <th rowspan="2" style="{border_css} padding: 4px;">ST</th>
-            <th rowspan="2" style="{border_css} padding: 4px;">PF</th>
-        </tr>
-        <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-            <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-            <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-            <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-            <th style="{border_css}">D</th><th style="{border_css}">O</th><th style="{border_css}">TOT</th>
-        </tr>
-        <tr style="font-weight: bold; background-color: #f9f9f9;">
-            <td style="{border_css} padding: 6px;">{ts['ppg']:.1f}</td>
-            <td style="{border_css}">{ts['2m']:.1f}</td><td style="{border_css}">{ts['2a']:.1f}</td><td style="{border_css}">{t_2pct:.1f}</td>
-            <td style="{border_css}">{ts['3m']:.1f}</td><td style="{border_css}">{ts['3a']:.1f}</td><td style="{border_css}">{t_3pct:.1f}</td>
-            <td style="{border_css}">{ts['ftm']:.1f}</td><td style="{border_css}">{ts['fta']:.1f}</td><td style="{border_css}">{t_ftpct:.1f}</td>
-            <td style="{border_css}">{ts['dr']:.1f}</td><td style="{border_css}">{ts['or']:.1f}</td><td style="{border_css}">{ts['tot']:.1f}</td>
-            <td style="{border_css}">{ts['as']:.1f}</td><td style="{border_css}">{ts['to']:.1f}</td><td style="{border_css}">{ts['st']:.1f}</td><td style="{border_css}">{ts['pf']:.1f}</td>
-        </tr>
-    </table>
+<h2 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-size: 16px;">Team Stats (AVG - Official API)</h2>
+<table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black; border: 1px solid #ccc;">
+<tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
+<th rowspan="2" style="{border_css} padding: 4px;">PPG</th><th colspan="3" style="{border_css} padding: 4px;">2P FG</th><th colspan="3" style="{border_css} padding: 4px;">3P FG</th><th colspan="3" style="{border_css} padding: 4px;">FT</th><th colspan="3" style="{border_css} padding: 4px;">REB</th><th rowspan="2" style="{border_css} padding: 4px;">AS</th><th rowspan="2" style="{border_css} padding: 4px;">TO</th><th rowspan="2" style="{border_css} padding: 4px;">ST</th><th rowspan="2" style="{border_css} padding: 4px;">PF</th>
+</tr>
+<tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
+<th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th><th style="{border_css}">D</th><th style="{border_css}">O</th><th style="{border_css}">TOT</th>
+</tr>
+<tr style="font-weight: bold; background-color: #f9f9f9;">
+<td style="{border_css} padding: 6px;">{ts['ppg']:.1f}</td>
+<td style="{border_css}">{ts['2m']:.1f}</td><td style="{border_css}">{ts['2a']:.1f}</td><td style="{border_css}">{t_2pct:.1f}</td>
+<td style="{border_css}">{ts['3m']:.1f}</td><td style="{border_css}">{ts['3a']:.1f}</td><td style="{border_css}">{t_3pct:.1f}</td>
+<td style="{border_css}">{ts['ftm']:.1f}</td><td style="{border_css}">{ts['fta']:.1f}</td><td style="{border_css}">{t_ftpct:.1f}</td>
+<td style="{border_css}">{ts['dr']:.1f}</td><td style="{border_css}">{ts['or']:.1f}</td><td style="{border_css}">{ts['tot']:.1f}</td>
+<td style="{border_css}">{ts['as']:.1f}</td><td style="{border_css}">{ts['to']:.1f}</td><td style="{border_css}">{ts['st']:.1f}</td><td style="{border_css}">{ts['pf']:.1f}</td>
+</tr>
+</table>
 </div>
 """
 
@@ -334,7 +343,6 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
 # --- ANSICHT: BEARBEITUNG ---
 if not st.session_state.print_mode:
     st.title(f"🏀 DBBL Scouting Pro {VERSION}")
-    
     st.subheader("1. Spieldaten")
     col_staffel, col_home, col_guest = st.columns([1, 2, 2])
     with col_staffel:
@@ -401,6 +409,7 @@ if not st.session_state.print_mode:
                     'ftm': ['freethrowsmadepergame'], 'fta': ['freethrowsattemptedpergame'], 'ftpct': ['freethrowssuccesspercent'],
                     'dr': ['defensivereboundspergame'], 'or': ['offensivereboundspergame'],
                     'as': ['assistspergame'], 'to': ['turnoverspergame'], 'st': ['stealspergame'], 'pf': ['foulscommittedpergame'],
+                    'bs': ['blockspergame', 'blockedshotspergame'],
                     'fgpct': ['fieldgoalsuccesspercent', 'fieldgoalpercentage']
                 }
                 final_cols = {}
@@ -433,7 +442,7 @@ if not st.session_state.print_mode:
                 if raw_fg.sum() == 0: df['FG%'] = df['2PCT'] 
                 else: df['FG%'] = raw_fg.apply(pct)
                 df['DR'] = get_v('dr'); df['OR'] = get_v('or')
-                df['AS'] = get_v('as'); df['TO'] = get_v('to'); df['ST'] = get_v('st'); df['PF'] = get_v('pf')
+                df['AS'] = get_v('as'); df['TO'] = get_v('to'); df['ST'] = get_v('st'); df['PF'] = get_v('pf'); df['BS'] = get_v('bs')
                 df['select'] = False
                 st.session_state.roster_df = df
                 st.session_state.game_meta = {'home_name': home_name, 'home_logo': get_logo_url(home_id), 'guest_name': guest_name, 'guest_logo': get_logo_url(guest_id), 'date': date_input.strftime('%d.%m.%Y'), 'time': time_input.strftime('%H:%M')}
@@ -443,6 +452,7 @@ if not st.session_state.print_mode:
         st.subheader("3. Spieler auswählen")
         edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']], column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)}, disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
         selected_indices = edited[edited['select']].index
+        
         if len(selected_indices) > 0:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
@@ -513,42 +523,23 @@ if not st.session_state.print_mode:
                 
                 if uploaded_files:
                     html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
-                    # Bilder verkleinern im HTML
                     for up in uploaded_files:
                         b64 = base64.b64encode(up.getvalue()).decode()
                         html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
                     html += "</div>"
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
+                st.session_state.final_html = html
                 
-                # PDF Generierung mit pdfkit (Falls vorhanden)
+                # PDF Generierung (Optional, falls pdfkit vorhanden)
                 if HAS_PDFKIT:
                     try:
-                        # PDF Optionen für sauberes A4
-                        options = {
-                            'page-size': 'A4',
-                            'margin-top': '10mm',
-                            'margin-right': '10mm',
-                            'margin-bottom': '10mm',
-                            'margin-left': '10mm',
-                            'encoding': "UTF-8",
-                            'no-outline': None
-                        }
-                        # HTML Wrapper
-                        full_html = f"""
-                        <!DOCTYPE html>
-                        <html>
-                        <head><meta charset="utf-8"></head>
-                        <body>{html}</body>
-                        </html>
-                        """
-                        pdf_data = pdfkit.from_string(full_html, False, options=options)
-                        st.session_state.pdf_bytes = pdf_data
-                    except Exception as e:
-                        st.warning(f"PDF Generierung fehlgeschlagen (wkhtmltopdf installiert?): {e}")
+                        options = {'page-size': 'A4', 'margin-top': '10mm', 'margin-right': '10mm', 'margin-bottom': '10mm', 'margin-left': '10mm', 'encoding': "UTF-8", 'no-outline': None}
+                        full_html = f"<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>{html}</body></html>"
+                        st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, options=options)
+                    except Exception:
                         st.session_state.pdf_bytes = None
-
-                st.session_state.final_html = html
+                
                 st.session_state.print_mode = True
                 st.rerun()
 
@@ -558,40 +549,23 @@ else:
         if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
             st.session_state.print_mode = False
             st.rerun()
-    
     with c2:
-        # Download Button (Nur wenn PDF erfolgreich erstellt wurde)
         if st.session_state.pdf_bytes:
-            st.download_button(
-                label="📄 PDF Herunterladen",
-                data=st.session_state.pdf_bytes,
-                file_name=f"scouting_report_{datetime.date.today()}.pdf",
-                mime="application/pdf"
-            )
+            st.download_button("📄 PDF Herunterladen", data=st.session_state.pdf_bytes, file_name=f"scouting_report_{datetime.date.today()}.pdf", mime="application/pdf")
         elif HAS_PDFKIT:
-             st.warning("PDF konnte nicht erstellt werden. Bitte Browser-Druck nutzen.")
-
-    st.markdown(st.session_state.final_html, unsafe_allow_html=True)
+            st.warning("PDF konnte nicht erstellt werden.")
     
-    # Browser Druck CSS (Fallback)
+    st.markdown(st.session_state.final_html, unsafe_allow_html=True)
     st.markdown("""
     <style>
     @media print {
         @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.65; }
+        body { margin: 0; padding: 0; zoom: 0.60; }
         .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
         [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton, .stDownloadButton { display: none !important; }
-        
-        /* Force Tables to Expand */
         table { width: 100% !important; table-layout: fixed !important; }
-        
-        /* Hide Scrollbars */
         ::-webkit-scrollbar { display: none; }
-        
-        /* Make all containers overflow visible */
         .stApp, [data-testid="stVerticalBlock"], div { overflow: visible !important; height: auto !important; }
-        
-        /* Ensure Images Scale */
         img { max-width: 100% !important; height: auto !important; }
     }
     </style>
