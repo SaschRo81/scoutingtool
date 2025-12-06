@@ -1,3 +1,4 @@
+# ganz oben
 import streamlit as st
 import pandas as pd
 import requests
@@ -5,7 +6,13 @@ import base64
 import datetime
 from io import BytesIO
 from PIL import Image
-import pdfkit
+
+try:
+    import pdfkit
+    HAS_PDFKIT = True
+except ImportError:
+    HAS_PDFKIT = False
+
 
 # --- VERSION & KONFIGURATION ---
 VERSION = "v2.9 (Logo Size Fix)"
@@ -57,7 +64,39 @@ TEAMS_DB = {
 if "print_mode" not in st.session_state:
     st.session_state.print_mode = False
 if "final_html" not in st.session_state:
-    st.session_state.final_html = ""
+    st.session_state.final_html = html
+
+    if HAS_PDFKIT:
+        full_html = f"""
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>
+        @page {{
+            size: A4 portrait;
+            margin: 10mm;
+        }}
+        body {{
+            font-family: Arial, sans-serif;
+        }}
+        img {{
+            max-width: 100%;
+        }}
+        </style>
+        </head>
+        <body>
+        {st.session_state.final_html}
+        </body>
+        </html>
+        """
+
+        # evtl. configuration, siehe unten
+        st.session_state.pdf_bytes = pdfkit.from_string(full_html, False)
+    else:
+        st.session_state.pdf_bytes = None   # kein PDF möglich
+
+    st.session_state.print_mode = True
+    st.experimental_rerun()
 if "pdf_bytes" not in st.session_state:
     st.session_state.pdf_bytes = None
 
@@ -295,9 +334,6 @@ else:
         st.session_state.print_mode = False
         st.experimental_rerun()
 
-    st.subheader("Scouting-Report Vorschau")
-
-    # Download-Button für PDF
     if st.session_state.pdf_bytes:
         st.download_button(
             "📄 Scouting-Report als PDF herunterladen",
@@ -306,7 +342,6 @@ else:
             mime="application/pdf",
         )
     else:
-        st.info("Noch kein PDF erzeugt. Bitte zuerst den Report generieren.")
+        st.info("PDF-Erzeugung ist in dieser Umgebung nicht verfügbar (pdfkit fehlt).")
 
-    # HTML-Vorschau
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
