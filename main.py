@@ -103,7 +103,8 @@ def optimize_image_base64(url):
             w_percent = (base_height / float(img.size[1]))
             w_size = int((float(img.size[0]) * float(w_percent)))
             img = img.resize((w_size, base_height), Image.Resampling.LANCZOS)
-            if img.mode in ("RGBA", "P"): img = img.convert("RGB")
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
             buffer = BytesIO()
             img.save(buffer, format="JPEG", quality=70)
             img_str = base64.b64encode(buffer.getvalue()).decode()
@@ -234,9 +235,7 @@ def generate_card_html(row, metadata, notes, color_code):
 <div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 20px; background-color: white; page-break-inside: avoid;">
 <div style="{header_style}"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
 <div style="display: flex; flex-direction: row;">
-<div style="width: 120px; min-width: 120px; border-right: 1px solid #ccc;">
-    <img src="{img_url}" style="width: 100%; height: 150px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
-</div>
+<div style="width: 120px; min-width: 120px; border-right: 1px solid #ccc;"><img src="{img_url}" style="width: 100%; height: 150px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'"></div>
 <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black;">
 <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
 <th rowspan="2" style="border: 1px solid black; padding: 4px;">Min</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">PPG</th>
@@ -245,10 +244,8 @@ def generate_card_html(row, metadata, notes, color_code):
 <th rowspan="2" style="border: 1px solid black; padding: 4px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">PF</th>
 </tr>
 <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
-<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th>
-<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th>
-<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th>
-<th style="border: 1px solid black;">DR</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
+<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th>
+<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">DR</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
 </tr>
 <tr>
 <td style="border: 1px solid black;">{row['MIN_DISPLAY']}</td><td style="border: 1px solid black;">{row['PPG']}</td>
@@ -280,4 +277,391 @@ def generate_team_stats_html(team_stats):
         return 0.0
 
     t_2pct = calc_pct(ts['2m'], ts['2a'], ts['2pct'])
-    t_3pct = calc_pct(ts['3m'], ts['3a'], t
+    t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
+    t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
+
+    return f"""
+<div style="font-family: Arial, sans-serif; margin-top: 30px; page-break-inside: avoid;">
+<h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG - Official API)</h2>
+<table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; border: 1px solid #000;">
+<tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
+<th rowspan="2" style="border: 1px solid black; padding: 6px;">PPG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">FT</th><th colspan="3" style="border: 1px solid black; padding: 6px;">REB</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">PF</th>
+</tr>
+<tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
+<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">D</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
+</tr>
+<tr style="font-weight: bold; background-color: #f9f9f9;">
+<td style="border: 1px solid black; padding: 8px;">{ts['ppg']:.1f}</td>
+<td style="border: 1px solid black;">{ts['2m']:.1f}</td><td style="border: 1px solid black;">{ts['2a']:.1f}</td><td style="border: 1px solid black;">{t_2pct:.1f}</td>
+<td style="border: 1px solid black;">{ts['3m']:.1f}</td><td style="border: 1px solid black;">{ts['3a']:.1f}</td><td style="border: 1px solid black;">{t_3pct:.1f}</td>
+<td style="border: 1px solid black;">{ts['ftm']:.1f}</td><td style="border: 1px solid black;">{ts['fta']:.1f}</td><td style="border: 1px solid black;">{t_ftpct:.1f}</td>
+<td style="border: 1px solid black;">{ts['dr']:.1f}</td><td style="border: 1px solid black;">{ts['or']:.1f}</td><td style="border: 1px solid black;">{ts['tot']:.1f}</td>
+<td style="border: 1px solid black;">{ts['as']:.1f}</td><td style="border: 1px solid black;">{ts['to']:.1f}</td><td style="border: 1px solid black;">{ts['st']:.1f}</td><td style="border: 1px solid black;">{ts['pf']:.1f}</td>
+</tr>
+</table>
+</div>
+"""
+
+def generate_custom_sections_html():
+    html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
+
+    def make_section(title, df):
+        if df.empty:
+            return ""
+        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px;'>{title}</h3>"
+        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; margin-bottom:20px;'>"
+        for _, r in df.iterrows():
+            c1 = r.get(df.columns[0], "")
+            c2 = r.get(df.columns[1], "")
+            section_html += (
+                f"<tr>"
+                f"<td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td>"
+                f"<td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td>"
+                f"</tr>"
+            )
+        section_html += "</table>"
+        return section_html
+
+    if 'facts_offense' in st.session_state:
+        html += make_section("Key Facts Offense", st.session_state.facts_offense)
+    if 'facts_defense' in st.session_state:
+        html += make_section("Key Facts Defense", st.session_state.facts_defense)
+    if 'facts_about' in st.session_state:
+        html += make_section("ALL ABOUT US", st.session_state.facts_about)
+    html += "</div>"
+    return html
+
+# --- ANSICHT: BEARBEITUNG ---
+if not st.session_state.print_mode:
+    st.title("🏀 DBBL Scouting: Einzel-Analyse")
+
+    st.subheader("1. Spieldaten")
+    col_staffel, col_home, col_guest = st.columns([1, 2, 2])
+
+    with col_staffel:
+        staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True)
+        teams_filtered = {k: v for k, v in TEAMS_DB.items() if v['staffel'] == staffel}
+        team_options = {v['name']: k for k, v in teams_filtered.items()}
+
+    with col_home:
+        home_name = st.selectbox("Heim-Team:", list(team_options.keys()), index=0)
+        home_id = team_options[home_name]
+        st.image(get_logo_url(home_id), width=100)
+
+    with col_guest:
+        guest_name = st.selectbox("Gast-Team:", list(team_options.keys()), index=1)
+        guest_id = team_options[guest_name]
+        st.image(get_logo_url(guest_id), width=100)
+
+    st.write("---")
+
+    scout_target = st.radio("Wen möchtest du scouten?", ["Gastteam (Gegner)", "Heimteam"], horizontal=True)
+    target_team_id = guest_id if scout_target == "Gastteam (Gegner)" else home_id
+
+    col_date, col_time = st.columns(2)
+    with col_date:
+        date_input = st.date_input("Datum", datetime.date.today())
+    with col_time:
+        time_input = st.time_input("Tip-Off", datetime.time(16, 0))
+
+    st.divider()
+
+    if st.button(f"2. Kader von {scout_target} laden", type="primary"):
+        api_url = f"https://api-s.dbbl.scb.world/teams/{target_team_id}/{SEASON_ID}/player-stats"
+        api_team = f"https://api-s.dbbl.scb.world/seasons/{SEASON_ID}/team-statistics?displayType=MAIN_ROUND&teamId={target_team_id}"
+        
+        try:
+            resp = requests.get(api_url, headers=API_HEADERS)
+            resp.raise_for_status()
+            data = resp.json()
+            raw = data if isinstance(data, list) else data.get('data', [])
+            
+            resp_t = requests.get(api_team, headers=API_HEADERS)
+            team_data_list = resp_t.json()
+            ts = {}
+            if team_data_list and isinstance(team_data_list, list):
+                td = team_data_list[0]
+                ts = {
+                    'ppg': td.get('pointsPerGame', 0),
+                    '2m': td.get('twoPointShotsMadePerGame', 0),
+                    '2a': td.get('twoPointShotsAttemptedPerGame', 0),
+                    '2pct': td.get('twoPointShotsSuccessPercent', 0),
+                    '3m': td.get('threePointShotsMadePerGame', 0),
+                    '3a': td.get('threePointShotsAttemptedPerGame', 0),
+                    '3pct': td.get('threePointShotsSuccessPercent', 0),
+                    'ftm': td.get('freeThrowsMadePerGame', 0),
+                    'fta': td.get('freeThrowsAttemptedPerGame', 0),
+                    'ftpct': td.get('freeThrowsSuccessPercent', 0),
+                    'dr': td.get('defensiveReboundsPerGame', 0),
+                    'or': td.get('offensiveReboundsPerGame', 0),
+                    'tot': td.get('totalReboundsPerGame', 0),
+                    'as': td.get('assistsPerGame', 0),
+                    'to': td.get('turnoversPerGame', 0),
+                    'st': td.get('stealsPerGame', 0),
+                    'pf': td.get('foulsCommittedPerGame', 0),
+                }
+            st.session_state.team_stats = ts
+
+            if raw:
+                df = pd.json_normalize(raw)
+                df.columns = [str(c).lower() for c in df.columns]
+
+                col_map = {
+                    'firstname': ['person.firstname', 'firstname'],
+                    'lastname': ['person.lastname', 'lastname'],
+                    'shirtnumber': ['jerseynumber', 'shirtnumber', 'no'],
+                    'id': ['id', 'person.id', 'personid'],
+                    'gp': ['matches', 'gamesplayed', 'games', 'gp'],
+                    'ppg': ['pointspergame'],
+                    'tot': ['totalreboundspergame'],
+                    'min_sec': ['secondsplayedpergame', 'minutespergame', 'avgminutes', 'minutes'],
+                    'sec_total': ['secondsplayed', 'totalminutes', 'totalseconds'],
+                    '2m': ['twopointshotsmadepergame'],
+                    '2a': ['twopointshotsattemptedpergame'],
+                    '2pct': ['twopointshotsuccesspercent'],
+                    '3m': ['threepointshotsmadepergame'],
+                    '3a': ['threepointshotsattemptedpergame'],
+                    '3pct': ['threepointshotsuccesspercent'],
+                    'ftm': ['freethrowsmadepergame'],
+                    'fta': ['freethrowsattemptedpergame'],
+                    'ftpct': ['freethrowssuccesspercent'],
+                    'dr': ['defensivereboundspergame'],
+                    'or': ['offensivereboundspergame'],
+                    'as': ['assistspergame'],
+                    'to': ['turnoverspergame'],
+                    'st': ['stealspergame'],
+                    'pf': ['foulscommittedpergame'],
+                    'fgpct': ['fieldgoalsuccesspercent', 'fieldgoalpercentage']
+                }
+
+                final_cols = {}
+                for t, p_list in col_map.items():
+                    for p in p_list:
+                        m = [c for c in df.columns if p in c]
+                        if m:
+                            final_cols[t] = sorted(m, key=len)[0]
+                            break
+                
+                fn = df[final_cols['firstname']].fillna('') if 'firstname' in final_cols else ''
+                ln = df[final_cols['lastname']].fillna('') if 'lastname' in final_cols else ''
+                df['NAME_FULL'] = (fn + " " + ln).str.strip()
+                df['NR'] = df[final_cols['shirtnumber']].fillna('-').astype(str).str.replace('.0', '', regex=False) if 'shirtnumber' in final_cols else '-'
+                df['PLAYER_ID'] = df[final_cols['id']].astype(str) if 'id' in final_cols else ""
+                
+                def get_v(k):
+                    return pd.to_numeric(df[final_cols[k]], errors='coerce').fillna(0) if k in final_cols else pd.Series([0.0]*len(df))
+
+                def pct(v):
+                    return round(v*100, 1) if v <= 1 else round(v, 1)
+
+                df['GP'] = get_v('gp').replace(0, 1)
+                min_raw = get_v('min_sec')
+                sec_total = get_v('sec_total')
+
+                df['MIN_FINAL'] = min_raw
+                mask_zero = df['MIN_FINAL'] <= 0
+                df.loc[mask_zero, 'MIN_FINAL'] = sec_total[mask_zero] / df.loc[mask_zero, 'GP']
+                df['MIN_DISPLAY'] = df['MIN_FINAL'].apply(format_minutes)
+
+                df['PPG'] = get_v('ppg')
+                df['TOT'] = get_v('tot')
+
+                df['2M'] = get_v('2m')
+                df['2A'] = get_v('2a')
+                df['2PCT'] = get_v('2pct').apply(pct)
+
+                df['3M'] = get_v('3m')
+                df['3A'] = get_v('3a')
+                df['3PCT'] = get_v('3pct').apply(pct)
+
+                df['FTM'] = get_v('ftm')
+                df['FTA'] = get_v('fta')
+                df['FTPCT'] = get_v('ftpct').apply(pct)
+
+                raw_fg = get_v('fgpct')
+                if raw_fg.sum() == 0:
+                    df['FG%'] = df['2PCT']
+                else:
+                    df['FG%'] = raw_fg.apply(pct)
+
+                df['DR'] = get_v('dr')
+                df['OR'] = get_v('or')
+                df['AS'] = get_v('as')
+                df['TO'] = get_v('to')
+                df['ST'] = get_v('st')
+                df['PF'] = get_v('pf')
+
+                # wichtige Spalte für Auswahl initialisieren (falls noch nicht vorhanden)
+                if 'select' not in df.columns:
+                    df['select'] = False
+
+                st.session_state.roster_df = df
+                st.session_state.game_meta = {
+                    'home_name': home_name,
+                    'home_logo': get_logo_url(home_id),
+                    'guest_name': guest_name,
+                    'guest_logo': get_logo_url(guest_id),
+                    'date': date_input.strftime('%d.%m.%Y'),
+                    'time': time_input.strftime('%H:%M')
+                }
+
+        except Exception as e:
+            st.error(f"Fehler: {e}")
+
+    if st.session_state.roster_df is not None:
+        st.subheader("3. Spieler auswählen")
+
+        # --- WICHTIG: data_editor-Ergebnis in Session-State zurückschreiben ---
+        edited = st.data_editor(
+            st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']],
+            column_config={
+                "select": st.column_config.CheckboxColumn("Scout?", default=False)
+            },
+            disabled=["NR", "NAME_FULL", "PPG", "TOT"],
+            hide_index=True,
+            key="roster_editor"
+        )
+
+        # Auswahl persistent machen
+        st.session_state.roster_df['select'] = edited['select']
+
+        selected_indices = edited[edited['select']].index
+
+        if len(selected_indices) > 0:
+            st.divider()
+            st.subheader("4. Notizen & Key Facts")
+
+            with st.form("input_form"):
+                st.write("**Spieler-Notizen:**")
+
+                selection = st.session_state.roster_df.loc[selected_indices]
+                results_data = []
+
+                for _, row in selection.iterrows():
+                    pid = row['PLAYER_ID']
+
+                    col_info, col_color = st.columns([3, 1])
+                    with col_info:
+                        st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
+                    with col_color:
+                        color_opt = st.selectbox(
+                            f"Markierung",
+                            ["Grau", "Grün", "Rot"],
+                            key=f"col_{pid}"
+                        )
+                        color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
+                        selected_color = color_map[color_opt]
+
+                    c1, c2 = st.columns(2)
+                    l1 = c1.text_input("L1", key=f"l1_{pid}")
+                    r1 = c2.text_input("R1", key=f"r1_{pid}")
+                    l2 = c1.text_input("L2", key=f"l2_{pid}")
+                    r2 = c2.text_input("R2", key=f"r2_{pid}")
+                    l3 = c1.text_input("L3", key=f"l3_{pid}")
+                    r3 = c2.text_input("R3", key=f"r3_{pid}")
+                    l4 = c1.text_input("L4", key=f"l4_{pid}")
+                    r4 = c2.text_input("R4", key=f"r4_{pid}")
+
+                    st.markdown("---")
+
+                    row_dict = row.to_dict()
+                    notes = {
+                        'l1': l1, 'l2': l2, 'l3': l3, 'l4': l4,
+                        'r1': r1, 'r2': r2, 'r3': r3, 'r4': r4
+                    }
+                    results_data.append((row_dict, notes, selected_color))
+
+                st.markdown("### Key Facts (Erscheinen am Ende)")
+                c_k1, c_k2, c_k3 = st.columns(3)
+
+                with c_k1:
+                    st.caption("Offense")
+                    st.session_state.facts_offense = st.data_editor(
+                        st.session_state.facts_offense,
+                        num_rows="dynamic",
+                        key="ed_off",
+                        hide_index=True
+                    )
+
+                with c_k2:
+                    st.caption("Defense")
+                    st.session_state.facts_defense = st.data_editor(
+                        st.session_state.facts_defense,
+                        num_rows="dynamic",
+                        key="ed_def",
+                        hide_index=True
+                    )
+
+                with c_k3:
+                    st.caption("All About Us")
+                    st.session_state.facts_about = st.data_editor(
+                        st.session_state.facts_about,
+                        num_rows="dynamic",
+                        key="ed_abt",
+                        hide_index=True
+                    )
+
+                st.divider()
+                st.subheader("5. Grafiken")
+
+                uploaded_files = st.file_uploader(
+                    "Upload",
+                    accept_multiple_files=True,
+                    type=['png', 'jpg', 'jpeg']
+                )
+
+                if st.form_submit_button("PDF Ansicht erstellen", type="primary"):
+                    full_df = st.session_state.roster_df
+
+                    html = generate_header_html(st.session_state.game_meta)
+                    html += generate_top3_html(full_df)
+
+                    for p_data, p_notes, p_color in results_data:
+                        meta = get_player_metadata(p_data['PLAYER_ID'])
+                        html += generate_card_html(p_data, meta, p_notes, p_color)
+
+                    html += generate_team_stats_html(st.session_state.team_stats)
+
+                    if uploaded_files:
+                        html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
+                        for up in uploaded_files:
+                            b64 = base64.b64encode(up.getvalue()).decode()
+                            html += (
+                                f"<div style='margin-bottom:20px;'>"
+                                f"<img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'>"
+                                f"</div>"
+                            )
+                        html += "</div>"
+
+                    html += generate_custom_sections_html()
+
+                    st.session_state.final_html = html
+                    st.session_state.print_mode = True
+                    st.rerun()
+
+# --- ANSICHT: DRUCK/PDF ---
+else:
+    if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
+        st.session_state.print_mode = False
+        st.rerun()
+
+    st.markdown(st.session_state.final_html, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <style>
+        @media print {
+            [data-testid="stHeader"],
+            [data-testid="stSidebar"],
+            [data-testid="stToolbar"],
+            footer,
+            .stButton {display: none !important;}
+            .block-container {
+                padding:0!important;
+                margin:0!important;
+                max_width:100%!important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
