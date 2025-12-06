@@ -498,16 +498,16 @@ if not st.session_state.print_mode:
                 html += generate_team_stats_html(st.session_state.team_stats)
                 
                if uploaded_files:
-    html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
-    for up in uploaded_files:
-        b64 = base64.b64encode(up.getvalue()).decode()
-        html += (
-            "<div style='margin-bottom:20px; page-break-inside: avoid;'>"
-            f"<img src='data:image/png;base64,{b64}' "
-            "style='max-width:100%; height:auto; border:1px solid #ccc; display:block;'>"
-            "</div>"
-        )
-    html += "</div>"
+                    html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
+                    for up in uploaded_files:
+                        b64 = base64.b64encode(up.getvalue()).decode()
+                        html += (
+                             <div style='margin-bottom:20px; page-break-inside: avoid;'>"
+                              f"<img src='data:image/png;base64,{b64}' "
+                              "style='max-width:100%; height:auto; border:1px solid #ccc; display:block;'>"
+                              "</div>"
+                         )
+                   html += "</div>"
 
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
@@ -595,5 +595,6 @@ else:
         """,
         unsafe_allow_html=True
     )
+
 
 
