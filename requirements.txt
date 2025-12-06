@@ -3,3 +3,6 @@ pandas
 requests
 lxml
 openpyxl
+Pillow
+pdfkit
+# + alles, was du sonst noch brauchst
