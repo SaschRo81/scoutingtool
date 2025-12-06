@@ -5,10 +5,9 @@ import base64
 import datetime
 from io import BytesIO
 from PIL import Image
-import streamlit.components.v1 as components
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v2.1 (Full Screen Preview)"
+VERSION = "v2.2 (Clean Print & Bottom Button)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -206,19 +205,19 @@ def generate_card_html(row, metadata, notes, color_code):
         height_str = f"{h:.2f}".replace('.', ',')
     except: height_str = "-"
     pos_str = clean_pos(metadata['pos'])
-    header_style = f"background-color: {color_code}; color: white; padding: 2px 10px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
+    header_style = f"background-color: {color_code}; color: white; padding: 5px 10px; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
     
     return f"""
-<div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 15px; background-color: white; page-break-inside: avoid;">
-<div style="{header_style}"><span>#{row['NR']} {row['NAME_FULL']}</span><span style="font-size:14px;">{height_str} m | {pos_str}</span></div>
+<div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 20px; background-color: white; page-break-inside: avoid;">
+<div style="{header_style}"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
 <div style="display: flex; flex-direction: row;">
-<div style="width: 100px; min-width: 100px; border-right: 1px solid #ccc;"><img src="{img_url}" style="width: 100%; height: 125px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'"></div>
-<table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: black;">
+<div style="width: 120px; min-width: 120px; border-right: 1px solid #ccc;"><img src="{img_url}" style="width: 100%; height: 150px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'"></div>
+<table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black;">
 <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
-<th rowspan="2" style="border: 1px solid black; padding: 2px;">Min</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">PPG</th>
-<th colspan="3" style="border: 1px solid black; padding: 2px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 2px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 2px;">FT</th>
-<th colspan="3" style="border: 1px solid black; padding: 2px;">REB</th>
-<th rowspan="2" style="border: 1px solid black; padding: 2px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 2px;">PF</th>
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">Min</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">PPG</th>
+<th colspan="3" style="border: 1px solid black; padding: 4px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 4px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 4px;">FT</th>
+<th colspan="3" style="border: 1px solid black; padding: 4px;">REB</th>
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">PF</th>
 </tr>
 <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
 <th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">DR</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
@@ -231,10 +230,10 @@ def generate_card_html(row, metadata, notes, color_code):
 <td style="border: 1px solid black;">{row['DR']}</td><td style="border: 1px solid black;">{row['OR']}</td><td style="border: 1px solid black;">{row['TOT']}</td>
 <td style="border: 1px solid black;">{row['AS']}</td><td style="border: 1px solid black;">{row['TO']}</td><td style="border: 1px solid black;">{row['ST']}</td><td style="border: 1px solid black;">{row['PF']}</td>
 </tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 20px; text-align: left; padding-left: 5px;">{notes.get('l1','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r1','')}</td></tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 20px; text-align: left; padding-left: 5px;">{notes.get('l2','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r2','')}</td></tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 20px; text-align: left; padding-left: 5px;">{notes.get('l3','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r3','')}</td></tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 20px; text-align: left; padding-left: 5px;">{notes.get('l4','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r4','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l1','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r1','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l2','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r2','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l3','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r3','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l4','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r4','')}</td></tr>
 </table>
 </div>
 </div>
@@ -251,17 +250,17 @@ def generate_team_stats_html(team_stats):
     t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
     t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
     return f"""
-<div style="font-family: Arial, sans-serif; margin-top: 20px; page-break-inside: avoid;">
-<h2 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-size: 16px;">Team Stats (AVG - Official API)</h2>
-<table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black; border: 1px solid #000;">
+<div style="font-family: Arial, sans-serif; margin-top: 30px; page-break-inside: avoid;">
+<h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG - Official API)</h2>
+<table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; border: 1px solid #000;">
 <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-<th rowspan="2" style="border: 1px solid black; padding: 4px;">PPG</th><th colspan="3" style="border: 1px solid black; padding: 4px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 4px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 4px;">FT</th><th colspan="3" style="border: 1px solid black; padding: 4px;">REB</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">PF</th>
+<th rowspan="2" style="border: 1px solid black; padding: 6px;">PPG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">FT</th><th colspan="3" style="border: 1px solid black; padding: 6px;">REB</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">PF</th>
 </tr>
 <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
 <th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">D</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
 </tr>
 <tr style="font-weight: bold; background-color: #f9f9f9;">
-<td style="border: 1px solid black; padding: 6px;">{ts['ppg']:.1f}</td>
+<td style="border: 1px solid black; padding: 8px;">{ts['ppg']:.1f}</td>
 <td style="border: 1px solid black;">{ts['2m']:.1f}</td><td style="border: 1px solid black;">{ts['2a']:.1f}</td><td style="border: 1px solid black;">{t_2pct:.1f}</td>
 <td style="border: 1px solid black;">{ts['3m']:.1f}</td><td style="border: 1px solid black;">{ts['3a']:.1f}</td><td style="border: 1px solid black;">{t_3pct:.1f}</td>
 <td style="border: 1px solid black;">{ts['ftm']:.1f}</td><td style="border: 1px solid black;">{ts['fta']:.1f}</td><td style="border: 1px solid black;">{t_ftpct:.1f}</td>
@@ -273,15 +272,15 @@ def generate_team_stats_html(team_stats):
 """
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
-    html = "<div style='margin-top: 20px; page-break-inside: avoid;'>"
+    html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
     def make_section(title, df):
         if df.empty: return ""
-        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:5px; font-size:16px;'>{title}</h3>"
-        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:11px; margin-bottom:15px;'>"
+        section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px;'>{title}</h3>"
+        section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; margin-bottom:20px;'>"
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], "")
             c2 = r.get(df.columns[1], "")
-            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:4px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:4px; vertical-align:top;'>{c2}</td></tr>"
+            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td></tr>"
         section_html += "</table>"
         return section_html
 
@@ -403,73 +402,97 @@ if not st.session_state.print_mode:
         st.subheader("3. Spieler auswählen")
         edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']], column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)}, disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
         selected_indices = edited[edited['select']].index
-        
         if len(selected_indices) > 0:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
             
-            with st.form("scouting_form"):
+            # WICHTIG: FORMULAR STARTET HIER
+            with st.form("complete_scouting_form"):
                 st.write("**Spieler-Notizen:**")
                 selection = st.session_state.roster_df.loc[selected_indices]
-                form_results = [] 
+                
+                # Wir merken uns die Keys, um sie später auszulesen
+                all_widgets_data = []
                 
                 for _, row in selection.iterrows():
                     pid = row['PLAYER_ID']
                     c_h, c_c = st.columns([3, 1])
                     c_h.markdown(f"##### #{row['NR']} {row['NAME_FULL']}")
+                    
                     saved_c = st.session_state.saved_colors.get(pid, "Grau")
                     try: idx = ["Grau", "Grün", "Rot"].index(saved_c)
                     except: idx = 0
+                    
                     col_opt = c_c.selectbox("Markierung", ["Grau", "Grün", "Rot"], key=f"col_{pid}", index=idx, label_visibility="collapsed")
                     
                     c1, c2 = st.columns(2)
-                    l1v = st.session_state.saved_notes.get(f"l1_{pid}", ""); l2v = st.session_state.saved_notes.get(f"l2_{pid}", "")
-                    l3v = st.session_state.saved_notes.get(f"l3_{pid}", ""); l4v = st.session_state.saved_notes.get(f"l4_{pid}", "")
-                    r1v = st.session_state.saved_notes.get(f"r1_{pid}", ""); r2v = st.session_state.saved_notes.get(f"r2_{pid}", "")
-                    r3v = st.session_state.saved_notes.get(f"r3_{pid}", ""); r4v = st.session_state.saved_notes.get(f"r4_{pid}", "")
+                    # Lade Werte aus Speicher oder leer
+                    l1v = st.session_state.saved_notes.get(f"l1_{pid}", "")
+                    l2v = st.session_state.saved_notes.get(f"l2_{pid}", "")
+                    l3v = st.session_state.saved_notes.get(f"l3_{pid}", "")
+                    l4v = st.session_state.saved_notes.get(f"l4_{pid}", "")
+                    r1v = st.session_state.saved_notes.get(f"r1_{pid}", "")
+                    r2v = st.session_state.saved_notes.get(f"r2_{pid}", "")
+                    r3v = st.session_state.saved_notes.get(f"r3_{pid}", "")
+                    r4v = st.session_state.saved_notes.get(f"r4_{pid}", "")
 
-                    l1=c1.text_input("L1", value=l1v, key=f"l1_{pid}", label_visibility="collapsed")
-                    l2=c1.text_input("L2", value=l2v, key=f"l2_{pid}", label_visibility="collapsed")
-                    l3=c1.text_input("L3", value=l3v, key=f"l3_{pid}", label_visibility="collapsed")
-                    l4=c1.text_input("L4", value=l4v, key=f"l4_{pid}", label_visibility="collapsed")
+                    l1 = c1.text_input("L1", value=l1v, key=f"l1_{pid}", label_visibility="collapsed")
+                    l2 = c1.text_input("L2", value=l2v, key=f"l2_{pid}", label_visibility="collapsed")
+                    l3 = c1.text_input("L3", value=l3v, key=f"l3_{pid}", label_visibility="collapsed")
+                    l4 = c1.text_input("L4", value=l4v, key=f"l4_{pid}", label_visibility="collapsed")
                     
-                    r1=c2.text_input("R1", value=r1v, key=f"r1_{pid}", label_visibility="collapsed")
-                    r2=c2.text_input("R2", value=r2v, key=f"r2_{pid}", label_visibility="collapsed")
-                    r3=c2.text_input("R3", value=r3v, key=f"r3_{pid}", label_visibility="collapsed")
-                    r4=c2.text_input("R4", value=r4v, key=f"r4_{pid}", label_visibility="collapsed")
+                    r1 = c2.text_input("R1", value=r1v, key=f"r1_{pid}", label_visibility="collapsed")
+                    r2 = c2.text_input("R2", value=r2v, key=f"r2_{pid}", label_visibility="collapsed")
+                    r3 = c2.text_input("R3", value=r3v, key=f"r3_{pid}", label_visibility="collapsed")
+                    r4 = c2.text_input("R4", value=r4v, key=f"r4_{pid}", label_visibility="collapsed")
                     
                     st.divider()
-                    form_results.append({'row': row, 'pid': pid, 'color': col_opt, 'notes': {'l1': l1, 'l2': l2, 'l3': l3, 'l4': l4, 'r1': r1, 'r2': r2, 'r3': r3, 'r4': r4}})
+                    
+                    # Wir speichern hier nur die Referenz, um beim Submit darauf zuzugreifen
+                    # Die Widgets (l1, r1) geben beim Rerun des Scripts den NEUEN Wert zurück
+                    all_widgets_data.append({
+                        'pid': pid,
+                        'row': row,
+                        'col': col_opt,
+                        'notes': {'l1':l1, 'l2':l2, 'l3':l3, 'l4':l4, 'r1':r1, 'r2':r2, 'r3':r3, 'r4':r4}
+                    })
 
-                submitted = st.form_submit_button("Speichern & PDF Generieren", type="primary")
+                st.markdown("### Key Facts")
+                c_k1, c_k2, c_k3 = st.columns(3)
+                # Data Editor im Formular
+                with c_k1: st.caption("Offense"); edited_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="ed_off", hide_index=True)
+                with c_k2: st.caption("Defense"); edited_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="ed_def", hide_index=True)
+                with c_k3: st.caption("All About Us"); edited_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="ed_abt", hide_index=True)
+                
+                st.markdown("### Grafiken")
+                uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
-            st.markdown("### Key Facts")
-            c_k1, c_k2, c_k3 = st.columns(3)
-            with c_k1: st.caption("Offense"); edited_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="editor_offense", hide_index=True)
-            with c_k2: st.caption("Defense"); edited_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="editor_defense", hide_index=True)
-            with c_k3: st.caption("All About Us"); edited_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="editor_about", hide_index=True)
-            
-            st.markdown("### Grafiken")
-            uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+                # BUTTON GANZ UNTEN
+                submitted = st.form_submit_button("Speichern & PDF Ansicht erstellen", type="primary")
 
+            # --- LOGIK NACH CLICK ---
             if submitted:
+                # 1. State Update
                 st.session_state.facts_offense = edited_off
                 st.session_state.facts_defense = edited_def
                 st.session_state.facts_about = edited_abt
                 
-                for item in form_results:
+                # 2. Notizen speichern
+                for item in all_widgets_data:
                     pid = item['pid']
-                    st.session_state.saved_colors[pid] = item['color']
-                    for k, v in item['notes'].items(): st.session_state.saved_notes[f"{k}_{pid}"] = v
+                    st.session_state.saved_colors[pid] = item['col']
+                    for k, v in item['notes'].items():
+                        st.session_state.saved_notes[f"{k}_{pid}"] = v
 
+                # 3. HTML Generieren
                 color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
                 full_df = st.session_state.roster_df
                 html = generate_header_html(st.session_state.game_meta)
                 html += generate_top3_html(full_df)
                 
-                for item in form_results:
+                for item in all_widgets_data:
                     meta = get_player_metadata(item['pid'])
-                    c_hex = color_map[item['color']]
+                    c_hex = color_map[item['col']]
                     html += generate_card_html(item['row'].to_dict(), meta, item['notes'], c_hex)
                 
                 html += generate_team_stats_html(st.session_state.team_stats)
@@ -482,18 +505,14 @@ if not st.session_state.print_mode:
                     html += "</div>"
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
+                
                 st.session_state.final_html = html
                 st.session_state.print_mode = True
                 st.rerun()
 
 else:
-    c1, c2 = st.columns([1, 5])
-    with c1:
-        if st.button("⬅️ Zurück (Bearbeiten)"):
-            st.session_state.print_mode = False
-            st.rerun()
-    with c2:
-        components.html(f"""<button onclick="window.print()" style="background-color:#ff4b4b; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold; font-family:sans-serif;">🖨️ Drucken (Dialog öffnen)</button>""", height=50)
-
+    if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
+        st.session_state.print_mode = False
+        st.rerun()
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-    st.markdown("""<style>@media print { @page {size: A4; margin: 10mm;} body { -webkit-print-color-adjust: exact; } [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton, iframe {display: none !important;} .block-container {padding:0!important;margin:0!important;max_width:100%!important;} }</style>""", unsafe_allow_html=True)
+    st.markdown("""<style>@media print {[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton {display: none !important;} .block-container {padding:0!important;margin:0!important;max_width:100%!important;}}</style>""", unsafe_allow_html=True)
