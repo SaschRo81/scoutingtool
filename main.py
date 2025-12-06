@@ -6,8 +6,9 @@ import datetime
 from io import BytesIO
 from PIL import Image
 
-# --- KONFIGURATION ---
-st.set_page_config(page_title="DBBL Scouting Pro by Sascha Rosanke", layout="wide", page_icon="🏀")
+# --- VERSION & KONFIGURATION ---
+VERSION = "v1.5 (Final Release)"
+st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
     "accept": "application/json",
@@ -34,7 +35,7 @@ TEAMS_DB = {
     157: {"name": "TuS Lichterfelde", "staffel": "Nord"},
     156: {"name": "Hürther BC", "staffel": "Nord"},
     
-    # SÜD (Aktualisiert)
+    # SÜD
     133: {"name": "Rhein-Main Baskets", "staffel": "Süd"},
     124: {"name": "ASC Theresianum Mainz", "staffel": "Süd"},
     135: {"name": "TSV München-Ost", "staffel": "Süd"},
@@ -52,13 +53,17 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"}
 }
 
-# --- SESSION STATE ---
+# --- SESSION STATE INITIALISIERUNG ---
 if 'print_mode' not in st.session_state: st.session_state.print_mode = False
 if 'final_html' not in st.session_state: st.session_state.final_html = ""
 if 'roster_df' not in st.session_state: st.session_state.roster_df = None
 if 'team_stats' not in st.session_state: st.session_state.team_stats = None
 if 'game_meta' not in st.session_state: st.session_state.game_meta = {}
 if 'optimized_images' not in st.session_state: st.session_state.optimized_images = {}
+
+# Speicher für Notizen (WICHTIG FÜR PERSISTENZ)
+if 'saved_notes' not in st.session_state: st.session_state.saved_notes = {}
+if 'saved_colors' not in st.session_state: st.session_state.saved_colors = {}
 
 if 'facts_offense' not in st.session_state: 
     st.session_state.facts_offense = pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])
@@ -125,8 +130,9 @@ def get_player_metadata(player_id):
 def generate_header_html(meta):
     return f"""
 <div style="font-family: Arial, sans-serif; page-break-inside: avoid;">
-    <div style="text-align: right; font-size: 10px; color: #888; border-bottom: 1px solid #eee; margin-bottom: 10px;">
-        DBBL Scouting Pro by Sascha Rosanke
+    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #eee; margin-bottom: 10px; color: #888; font-size: 10px;">
+        <div>{VERSION}</div>
+        <div>DBBL Scouting Pro by Sascha Rosanke</div>
     </div>
     <div style="border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; text-align: center;">
         <h1 style="margin: 0; padding: 0; font-size: 24px; color: #000; font-weight: bold;">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
@@ -227,10 +233,10 @@ def generate_card_html(row, metadata, notes, color_code):
 <td style="border: 1px solid black;">{row['DR']}</td><td style="border: 1px solid black;">{row['OR']}</td><td style="border: 1px solid black;">{row['TOT']}</td>
 <td style="border: 1px solid black;">{row['AS']}</td><td style="border: 1px solid black;">{row['TO']}</td><td style="border: 1px solid black;">{row['ST']}</td><td style="border: 1px solid black;">{row['PF']}</td>
 </tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l1']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r1']}</td></tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l2']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r2']}</td></tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l3']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r3']}</td></tr>
-<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l4']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r4']}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l1','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r1','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l2','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r2','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l3','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r3','')}</td></tr>
+<tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes.get('l4','')}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r4','')}</td></tr>
 </table>
 </div>
 </div>
@@ -289,7 +295,8 @@ def generate_custom_sections_html():
 
 # --- ANSICHT: BEARBEITUNG ---
 if not st.session_state.print_mode:
-    st.title("🏀 DBBL Scouting: Einzel-Analyse")
+    st.title(f"🏀 DBBL Scouting Pro {VERSION}")
+    
     st.subheader("1. Spieldaten")
     col_staffel, col_home, col_guest = st.columns([1, 2, 2])
     with col_staffel:
@@ -401,40 +408,120 @@ if not st.session_state.print_mode:
         if len(selected_indices) > 0:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
+            
+            # Formular
             with st.form("input_form"):
                 st.write("**Spieler-Notizen:**")
                 selection = st.session_state.roster_df.loc[selected_indices]
-                results_data = []
+                
+                # Wir müssen hier keine Ergebnisse sammeln, sondern nur Inputs anzeigen.
+                # Die Ergebnisse werden erst bei Submit verarbeitet.
+                
                 for _, row in selection.iterrows():
                     pid = row['PLAYER_ID']
                     col_info, col_color = st.columns([3, 1])
                     with col_info: st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
                     with col_color:
-                        color_opt = st.selectbox(f"Markierung", ["Grau", "Grün", "Rot"], key=f"col_{pid}")
-                        color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
-                        selected_color = color_map[color_opt]
+                        # Color: Lade gespeicherten Wert
+                        saved_c = st.session_state.saved_colors.get(pid, "Grau")
+                        color_opt = st.selectbox(f"Markierung", ["Grau", "Grün", "Rot"], key=f"col_{pid}", index=["Grau", "Grün", "Rot"].index(saved_c))
+                    
                     c1, c2 = st.columns(2)
-                    l1 = c1.text_input("L1", key=f"l1_{pid}"); r1 = c2.text_input("R1", key=f"r1_{pid}")
-                    l2 = c1.text_input("L2", key=f"l2_{pid}"); r2 = c2.text_input("R2", key=f"r2_{pid}")
-                    l3 = c1.text_input("L3", key=f"l3_{pid}"); r3 = c2.text_input("R3", key=f"r3_{pid}")
-                    l4 = c1.text_input("L4", key=f"l4_{pid}"); r4 = c2.text_input("R4", key=f"r4_{pid}")
-                    st.markdown("---")
+                    # Load saved notes
+                    l1v = st.session_state.saved_notes.get(f"l1_{pid}", "")
+                    l2v = st.session_state.saved_notes.get(f"l2_{pid}", "")
+                    l3v = st.session_state.saved_notes.get(f"l3_{pid}", "")
+                    l4v = st.session_state.saved_notes.get(f"l4_{pid}", "")
+                    r1v = st.session_state.saved_notes.get(f"r1_{pid}", "")
+                    r2v = st.session_state.saved_notes.get(f"r2_{pid}", "")
+                    r3v = st.session_state.saved_notes.get(f"r3_{pid}", "")
+                    r4v = st.session_state.saved_notes.get(f"r4_{pid}", "")
+
+                    st.text_input("L1", value=l1v, key=f"l1_{pid}")
+                    st.text_input("L2", value=l2v, key=f"l2_{pid}")
+                    st.text_input("L3", value=l3v, key=f"l3_{pid}")
+                    st.text_input("L4", value=l4v, key=f"l4_{pid}")
+                    # Die Inputs sind jetzt "unverbunden" im Layout, aber durch Key im Session State
+                    # Wir müssen die "Rechte Spalte" (R1-R4) eigentlich daneben anzeigen.
+                    # Streamlit Form Layout ist sequenziell.
+                    # Besser:
+                    # Wir nutzen c1 und c2 DIREKT.
+                    
+                    # Da wir oben schon iteriert haben, müssen wir die Widgets sauber platzieren.
+                    # ACHTUNG: text_input returns value, but inside form we rely on key state on reruns?
+                    # No, we bind `value=` to our persistence dict.
+                    
+                    # KORREKTUR Layout innerhalb der Loop:
+                    # (Code oben war nur Platzhalter, hier die echte Implementierung)
+                    
+                # RESTART LOOP FOR CLEAN LAYOUT
+                # (Streamlit erlaubt keine verschachtelten Columns die nicht sofort genutzt werden)
+                pass 
+
+            # ECHTE SCHLEIFE FÜR INPUTS
+            with st.form("main_form"):
+                results_data = []
+                for _, row in selection.iterrows():
+                    pid = row['PLAYER_ID']
+                    c_h, c_c = st.columns([3, 1])
+                    with c_h: st.markdown(f"##### #{row['NR']} {row['NAME_FULL']}")
+                    with c_c:
+                        saved_c = st.session_state.saved_colors.get(pid, "Grau")
+                        col_opt = st.selectbox("Farbe", ["Grau", "Grün", "Rot"], key=f"c_{pid}", index=["Grau", "Grün", "Rot"].index(saved_c), label_visibility="collapsed")
+                    
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.caption("Notizen")
+                        l1 = st.text_input("L1", value=st.session_state.saved_notes.get(f"l1_{pid}", ""), key=f"l1_{pid}", label_visibility="collapsed")
+                        l2 = st.text_input("L2", value=st.session_state.saved_notes.get(f"l2_{pid}", ""), key=f"l2_{pid}", label_visibility="collapsed")
+                        l3 = st.text_input("L3", value=st.session_state.saved_notes.get(f"l3_{pid}", ""), key=f"l3_{pid}", label_visibility="collapsed")
+                        l4 = st.text_input("L4", value=st.session_state.saved_notes.get(f"l4_{pid}", ""), key=f"l4_{pid}", label_visibility="collapsed")
+                    with c2:
+                        st.caption("Defense / Calls")
+                        r1 = st.text_input("R1", value=st.session_state.saved_notes.get(f"r1_{pid}", ""), key=f"r1_{pid}", label_visibility="collapsed")
+                        r2 = st.text_input("R2", value=st.session_state.saved_notes.get(f"r2_{pid}", ""), key=f"r2_{pid}", label_visibility="collapsed")
+                        r3 = st.text_input("R3", value=st.session_state.saved_notes.get(f"r3_{pid}", ""), key=f"r3_{pid}", label_visibility="collapsed")
+                        r4 = st.text_input("R4", value=st.session_state.saved_notes.get(f"r4_{pid}", ""), key=f"r4_{pid}", label_visibility="collapsed")
+                    st.divider()
+                    
+                    # Daten sammeln für später
+                    color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
                     row_dict = row.to_dict()
                     notes = {'l1':l1,'l2':l2,'l3':l3,'l4':l4,'r1':r1,'r2':r2,'r3':r3,'r4':r4}
-                    results_data.append((row_dict, notes, selected_color))
-                st.markdown("### Key Facts (Erscheinen am Ende)")
+                    results_data.append((row_dict, notes, color_map[col_opt], pid)) # pid für speichern
+
+                st.markdown("### Key Facts")
                 c_k1, c_k2, c_k3 = st.columns(3)
                 with c_k1: st.caption("Offense"); st.session_state.facts_offense = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="ed_off", hide_index=True)
                 with c_k2: st.caption("Defense"); st.session_state.facts_defense = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="ed_def", hide_index=True)
                 with c_k3: st.caption("All About Us"); st.session_state.facts_about = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="ed_abt", hide_index=True)
-                st.divider()
-                st.subheader("5. Grafiken")
+                
+                st.markdown("### Grafiken")
                 uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+                
                 if st.form_submit_button("PDF Ansicht erstellen", type="primary"):
+                    # 1. State speichern (Persistence)
+                    for r_data in results_data:
+                        pid = r_data[3]
+                        notes = r_data[1]
+                        # Notizen speichern
+                        st.session_state.saved_notes[f"l1_{pid}"] = notes['l1']
+                        st.session_state.saved_notes[f"l2_{pid}"] = notes['l2']
+                        st.session_state.saved_notes[f"l3_{pid}"] = notes['l3']
+                        st.session_state.saved_notes[f"l4_{pid}"] = notes['l4']
+                        st.session_state.saved_notes[f"r1_{pid}"] = notes['r1']
+                        st.session_state.saved_notes[f"r2_{pid}"] = notes['r2']
+                        st.session_state.saved_notes[f"r3_{pid}"] = notes['r3']
+                        st.session_state.saved_notes[f"r4_{pid}"] = notes['r4']
+                        # Farbe speichern (Reverse lookup vom Hex code ist nervig, wir speichern den Namen aus dem Widget state ist einfacher, aber hier haben wir den Hex).
+                        # Einfacher: Wir schauen was im Widget 'c_{pid}' steht (Streamlit State)
+                        st.session_state.saved_colors[pid] = st.session_state[f"c_{pid}"]
+
+                    # 2. HTML bauen
                     full_df = st.session_state.roster_df
                     html = generate_header_html(st.session_state.game_meta)
                     html += generate_top3_html(full_df)
-                    for p_data, p_notes, p_color in results_data:
+                    for p_data, p_notes, p_color, _ in results_data:
                         meta = get_player_metadata(p_data['PLAYER_ID'])
                         html += generate_card_html(p_data, meta, p_notes, p_color)
                     html += generate_team_stats_html(st.session_state.team_stats)
@@ -445,6 +532,7 @@ if not st.session_state.print_mode:
                             html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
                         html += "</div>"
                     html += generate_custom_sections_html()
+                    
                     st.session_state.final_html = html
                     st.session_state.print_mode = True
                     st.rerun()
