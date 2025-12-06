@@ -34,7 +34,7 @@ TEAMS_DB = {
     157: {"name": "TuS Lichterfelde", "staffel": "Nord"},
     156: {"name": "Hürther BC", "staffel": "Nord"},
     
-    # SÜD (Aktualisiert)
+    # SÜD
     133: {"name": "Rhein-Main Baskets", "staffel": "Süd"},
     124: {"name": "ASC Theresianum Mainz", "staffel": "Süd"},
     135: {"name": "TSV München-Ost", "staffel": "Süd"},
@@ -46,13 +46,14 @@ TEAMS_DB = {
     129: {"name": "Falcons Bad Homburg", "staffel": "Süd"},
     125: {"name": "USC BasCats Heidelberg", "staffel": "Süd"},
     127: {"name": "DJK Don Bosco Bamberg", "staffel": "Süd"},
-    131: {"name": "Lou's Foodtruck MTV Stuttgart", "staffel": "Süd"},
+    131: {"name": "MTV Stuttgart", "staffel": "Süd"},
     158: {"name": "VIMODROM Baskets Jena", "staffel": "Süd"},
     160: {"name": "BBU '01", "staffel": "Süd"},
-    159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"}
+    159: {"name": "Bamberg Baskets", "staffel": "Süd"}
 }
 
-# --- SESSION STATE ---
+# --- SESSION STATE INITIALISIERUNG ---
+# Wir nutzen Session State, um Daten zu behalten, wenn man "Zurück" klickt
 if 'print_mode' not in st.session_state: st.session_state.print_mode = False
 if 'final_html' not in st.session_state: st.session_state.final_html = ""
 if 'roster_df' not in st.session_state: st.session_state.roster_df = None
@@ -60,12 +61,14 @@ if 'team_stats' not in st.session_state: st.session_state.team_stats = None
 if 'game_meta' not in st.session_state: st.session_state.game_meta = {}
 if 'optimized_images' not in st.session_state: st.session_state.optimized_images = {}
 
+# Speicher für die neuen Sektionen (Key Facts)
 if 'facts_offense' not in st.session_state: 
     st.session_state.facts_offense = pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])
 if 'facts_defense' not in st.session_state: 
     st.session_state.facts_defense = pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])
 if 'facts_about' not in st.session_state: 
     st.session_state.facts_about = pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}])
+
 
 # --- HILFSFUNKTIONEN ---
 
@@ -86,26 +89,36 @@ def clean_pos(pos):
     return str(pos).replace('_', ' ').title()
 
 def optimize_image_base64(url):
+    """Lädt Bild, verkleinert es und gibt Base64 zurück (spart MB im PDF)."""
+    # Cache Check
     if url in st.session_state.optimized_images:
         return st.session_state.optimized_images[url]
+    
     if not url or "placeholder" in url:
-        return url
+        return url # Placeholders sind okay
+        
     try:
         response = requests.get(url, headers=API_HEADERS, timeout=3)
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content))
+            # Resize (Höhe max 150px, Ratio beibehalten)
             base_height = 150
             w_percent = (base_height / float(img.size[1]))
             w_size = int((float(img.size[0]) * float(w_percent)))
             img = img.resize((w_size, base_height), Image.Resampling.LANCZOS)
+            
+            # Convert to RGB (falls RGBA) und save as JPEG
             if img.mode in ("RGBA", "P"): img = img.convert("RGB")
+            
             buffer = BytesIO()
-            img.save(buffer, format="JPEG", quality=70)
+            img.save(buffer, format="JPEG", quality=70) # Kompression
             img_str = base64.b64encode(buffer.getvalue()).decode()
+            
             final_src = f"data:image/jpeg;base64,{img_str}"
-            st.session_state.optimized_images[url] = final_src
+            st.session_state.optimized_images[url] = final_src # Cache
             return final_src
-    except: pass
+    except:
+        pass
     return "https://via.placeholder.com/150?text=Err"
 
 def get_player_metadata(player_id):
@@ -115,8 +128,14 @@ def get_player_metadata(player_id):
         if resp.status_code == 200:
             data = resp.json()
             raw_img = data.get('imageUrl', '')
+            # Optimiere Bild sofort
             opt_img = optimize_image_base64(raw_img) if raw_img else ""
-            return {'img': opt_img, 'height': data.get('height', 0), 'pos': data.get('position', '-')}
+            
+            return {
+                'img': opt_img, 
+                'height': data.get('height', 0), 
+                'pos': data.get('position', '-')
+            }
     except: pass
     return {'img': '', 'height': 0, 'pos': '-'}
 
@@ -172,9 +191,13 @@ def generate_top3_html(df):
                 val = r[k]
                 if isinstance(val, float): val = f"{val:.1f}"
                 if k == 'NR': val = f"#{val}"
-                if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL']}"
-                if k != 'NR' and k != 'NAME_FULL': h += f"<td style='{style}'>{val}</td>"
-                elif k == 'NAME_FULL': h += f"<td style='{style}'>{val}</td>"
+                if k == 'NAME_FULL' and i == 0: 
+                    val = f"#{r['NR']} {r['NAME_FULL']}"
+                
+                if k != 'NR' and k != 'NAME_FULL': 
+                     h += f"<td style='{style}'>{val}</td>"
+                elif k == 'NAME_FULL':
+                     h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
         h += "</table>"
         return h
@@ -186,10 +209,22 @@ def generate_top3_html(df):
 
     return f"""
 <div style="display: flex; flex-direction: row; gap: 15px; margin-bottom: 30px; page-break-inside: avoid; font-family: Arial, sans-serif;">
-<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#e35b00; border-bottom: 2px solid #e35b00; font-size:13px;">🔥 Top Scorer</div>{h_scorers}</div>
-<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#0055ff; border-bottom: 2px solid #0055ff; font-size:13px;">🗑️ Rebounder</div>{h_rebs}</div>
-<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#28a745; border-bottom: 2px solid #28a745; font-size:13px;">🎯 Best 3pt</div>{h_3pt}</div>
-<div style="flex: 1; border: 1px solid #ccc; padding: 5px;"><div style="font-weight:bold; color:#dc3545; border-bottom: 2px solid #dc3545; font-size:13px;">⚠️ Worst FT</div>{h_ft}</div>
+<div style="flex: 1; border: 1px solid #ccc; padding: 5px;">
+<div style="font-weight:bold; color:#e35b00; border-bottom: 2px solid #e35b00; font-size:13px;">🔥 Top Scorer</div>
+{h_scorers}
+</div>
+<div style="flex: 1; border: 1px solid #ccc; padding: 5px;">
+<div style="font-weight:bold; color:#0055ff; border-bottom: 2px solid #0055ff; font-size:13px;">🗑️ Rebounder</div>
+{h_rebs}
+</div>
+<div style="flex: 1; border: 1px solid #ccc; padding: 5px;">
+<div style="font-weight:bold; color:#28a745; border-bottom: 2px solid #28a745; font-size:13px;">🎯 Best 3pt</div>
+{h_3pt}
+</div>
+<div style="flex: 1; border: 1px solid #ccc; padding: 5px;">
+<div style="font-weight:bold; color:#dc3545; border-bottom: 2px solid #dc3545; font-size:13px;">⚠️ Worst FT</div>
+{h_ft}
+</div>
 </div>
 """
 
@@ -201,31 +236,49 @@ def generate_card_html(row, metadata, notes, color_code):
         height_str = f"{h:.2f}".replace('.', ',')
     except: height_str = "-"
     pos_str = clean_pos(metadata['pos'])
+
     header_style = f"background-color: {color_code}; color: white; padding: 5px 10px; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
     
     return f"""
 <div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 20px; background-color: white; page-break-inside: avoid;">
-<div style="{header_style}"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
+<div style="{header_style}">
+<span>#{row['NR']} {row['NAME_FULL']}</span>
+<span>{height_str} m | Pos: {pos_str}</span>
+</div>
 <div style="display: flex; flex-direction: row;">
-<div style="width: 120px; min-width: 120px; border-right: 1px solid #ccc;"><img src="{img_url}" style="width: 100%; height: 150px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'"></div>
+<div style="width: 120px; min-width: 120px; border-right: 1px solid #ccc;">
+<img src="{img_url}" style="width: 100%; height: 150px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
+</div>
 <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black;">
 <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
-<th rowspan="2" style="border: 1px solid black; padding: 4px;">Min</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">PPG</th>
-<th colspan="3" style="border: 1px solid black; padding: 4px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 4px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 4px;">FT</th>
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">Min</th>
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">PPG</th>
+<th colspan="3" style="border: 1px solid black; padding: 4px;">2P FG</th>
+<th colspan="3" style="border: 1px solid black; padding: 4px;">3P FG</th>
+<th colspan="3" style="border: 1px solid black; padding: 4px;">FT</th>
 <th colspan="3" style="border: 1px solid black; padding: 4px;">REB</th>
-<th rowspan="2" style="border: 1px solid black; padding: 4px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 4px;">PF</th>
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">AS</th>
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">TO</th>
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">ST</th>
+<th rowspan="2" style="border: 1px solid black; padding: 4px;">PF</th>
 </tr>
 <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
-<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th>
-<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">DR</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
+<th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+<th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+<th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+<th style="border: 1px solid black;">DR</th> <th style="border: 1px solid black;">O</th> <th style="border: 1px solid black;">TOT</th>
 </tr>
 <tr>
-<td style="border: 1px solid black;">{row['MIN_DISPLAY']}</td><td style="border: 1px solid black;">{row['PPG']}</td>
-<td style="border: 1px solid black;">{row['2M']}</td><td style="border: 1px solid black;">{row['2A']}</td><td style="border: 1px solid black;">{row['2PCT']}</td>
-<td style="border: 1px solid black;">{row['3M']}</td><td style="border: 1px solid black;">{row['3A']}</td><td style="border: 1px solid black;">{row['3PCT']}</td>
-<td style="border: 1px solid black;">{row['FTM']}</td><td style="border: 1px solid black;">{row['FTA']}</td><td style="border: 1px solid black;">{row['FTPCT']}</td>
-<td style="border: 1px solid black;">{row['DR']}</td><td style="border: 1px solid black;">{row['OR']}</td><td style="border: 1px solid black;">{row['TOT']}</td>
-<td style="border: 1px solid black;">{row['AS']}</td><td style="border: 1px solid black;">{row['TO']}</td><td style="border: 1px solid black;">{row['ST']}</td><td style="border: 1px solid black;">{row['PF']}</td>
+<td style="border: 1px solid black;">{row['MIN_DISPLAY']}</td>
+<td style="border: 1px solid black;">{row['PPG']}</td>
+<td style="border: 1px solid black;">{row['2M']}</td> <td style="border: 1px solid black;">{row['2A']}</td> <td style="border: 1px solid black;">{row['2PCT']}</td>
+<td style="border: 1px solid black;">{row['3M']}</td> <td style="border: 1px solid black;">{row['3A']}</td> <td style="border: 1px solid black;">{row['3PCT']}</td>
+<td style="border: 1px solid black;">{row['FTM']}</td> <td style="border: 1px solid black;">{row['FTA']}</td> <td style="border: 1px solid black;">{row['FTPCT']}</td>
+<td style="border: 1px solid black;">{row['DR']}</td> <td style="border: 1px solid black;">{row['OR']}</td> <td style="border: 1px solid black;">{row['TOT']}</td>
+<td style="border: 1px solid black;">{row['AS']}</td>
+<td style="border: 1px solid black;">{row['TO']}</td>
+<td style="border: 1px solid black;">{row['ST']}</td>
+<td style="border: 1px solid black;">{row['PF']}</td>
 </tr>
 <tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l1']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r1']}</td></tr>
 <tr><td colspan="6" style="border: 1px solid black; height: 25px; text-align: left; padding-left: 5px;">{notes['l2']}</td><td colspan="10" style="border: 1px solid black; color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes['r2']}</td></tr>
@@ -239,57 +292,84 @@ def generate_card_html(row, metadata, notes, color_code):
 def generate_team_stats_html(team_stats):
     if not team_stats: return ""
     ts = team_stats
+    
     def calc_pct(made, att, api_val):
         if api_val > 0: return api_val
         if att > 0: return (made / att) * 100
         return 0.0
+
     t_2pct = calc_pct(ts['2m'], ts['2a'], ts['2pct'])
     t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
     t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
+
     return f"""
 <div style="font-family: Arial, sans-serif; margin-top: 30px; page-break-inside: avoid;">
 <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG - Official API)</h2>
 <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; border: 1px solid #000;">
 <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-<th rowspan="2" style="border: 1px solid black; padding: 6px;">PPG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">2P FG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">3P FG</th><th colspan="3" style="border: 1px solid black; padding: 6px;">FT</th><th colspan="3" style="border: 1px solid black; padding: 6px;">REB</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">AS</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">TO</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">ST</th><th rowspan="2" style="border: 1px solid black; padding: 6px;">PF</th>
+<th rowspan="2" style="border: 1px solid black; padding: 6px;">PPG</th>
+<th colspan="3" style="border: 1px solid black; padding: 6px;">2P FG</th>
+<th colspan="3" style="border: 1px solid black; padding: 6px;">3P FG</th>
+<th colspan="3" style="border: 1px solid black; padding: 6px;">FT</th>
+<th colspan="3" style="border: 1px solid black; padding: 6px;">REB</th>
+<th rowspan="2" style="border: 1px solid black; padding: 6px;">AS</th>
+<th rowspan="2" style="border: 1px solid black; padding: 6px;">TO</th>
+<th rowspan="2" style="border: 1px solid black; padding: 6px;">ST</th>
+<th rowspan="2" style="border: 1px solid black; padding: 6px;">PF</th>
 </tr>
 <tr style="background-color: #ddd; -webkit-print-color-adjust: exact; font-weight: bold;">
-<th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">M</th><th style="border: 1px solid black;">A</th><th style="border: 1px solid black;">%</th><th style="border: 1px solid black;">D</th><th style="border: 1px solid black;">O</th><th style="border: 1px solid black;">TOT</th>
+<th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+<th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+<th style="border: 1px solid black;">M</th> <th style="border: 1px solid black;">A</th> <th style="border: 1px solid black;">%</th>
+<th style="border: 1px solid black;">D</th> <th style="border: 1px solid black;">O</th> <th style="border: 1px solid black;">TOT</th>
 </tr>
 <tr style="font-weight: bold; background-color: #f9f9f9;">
 <td style="border: 1px solid black; padding: 8px;">{ts['ppg']:.1f}</td>
-<td style="border: 1px solid black;">{ts['2m']:.1f}</td><td style="border: 1px solid black;">{ts['2a']:.1f}</td><td style="border: 1px solid black;">{t_2pct:.1f}</td>
-<td style="border: 1px solid black;">{ts['3m']:.1f}</td><td style="border: 1px solid black;">{ts['3a']:.1f}</td><td style="border: 1px solid black;">{t_3pct:.1f}</td>
-<td style="border: 1px solid black;">{ts['ftm']:.1f}</td><td style="border: 1px solid black;">{ts['fta']:.1f}</td><td style="border: 1px solid black;">{t_ftpct:.1f}</td>
-<td style="border: 1px solid black;">{ts['dr']:.1f}</td><td style="border: 1px solid black;">{ts['or']:.1f}</td><td style="border: 1px solid black;">{ts['tot']:.1f}</td>
-<td style="border: 1px solid black;">{ts['as']:.1f}</td><td style="border: 1px solid black;">{ts['to']:.1f}</td><td style="border: 1px solid black;">{ts['st']:.1f}</td><td style="border: 1px solid black;">{ts['pf']:.1f}</td>
+<td style="border: 1px solid black;">{ts['2m']:.1f}</td> <td style="border: 1px solid black;">{ts['2a']:.1f}</td> <td style="border: 1px solid black;">{t_2pct:.1f}</td>
+<td style="border: 1px solid black;">{ts['3m']:.1f}</td> <td style="border: 1px solid black;">{ts['3a']:.1f}</td> <td style="border: 1px solid black;">{t_3pct:.1f}</td>
+<td style="border: 1px solid black;">{ts['ftm']:.1f}</td> <td style="border: 1px solid black;">{ts['fta']:.1f}</td> <td style="border: 1px solid black;">{t_ftpct:.1f}</td>
+<td style="border: 1px solid black;">{ts['dr']:.1f}</td> <td style="border: 1px solid black;">{ts['or']:.1f}</td> <td style="border: 1px solid black;">{ts['tot']:.1f}</td>
+<td style="border: 1px solid black;">{ts['as']:.1f}</td>
+<td style="border: 1px solid black;">{ts['to']:.1f}</td>
+<td style="border: 1px solid black;">{ts['st']:.1f}</td>
+<td style="border: 1px solid black;">{ts['pf']:.1f}</td>
 </tr>
 </table>
 </div>
 """
 
 def generate_custom_sections_html():
+    """Generiert HTML für die 3 neuen Sektionen (Key Facts)"""
     html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
+    
+    # Helper um Tabelle zu bauen
     def make_section(title, df):
         if df.empty: return ""
         section_html = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px;'>{title}</h3>"
         section_html += "<table style='width:100%; border-collapse:collapse; font-family:Arial; font-size:12px; margin-bottom:20px;'>"
         for _, r in df.iterrows():
+            # Spalte 1 Bold, Spalte 2 Normal
             c1 = r.get(df.columns[0], "")
             c2 = r.get(df.columns[1], "")
-            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td></tr>"
+            section_html += f"<tr><td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td>"
+            section_html += f"<td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td></tr>"
         section_html += "</table>"
         return section_html
 
-    if 'facts_offense' in st.session_state: html += make_section("Key Facts Offense", st.session_state.facts_offense)
-    if 'facts_defense' in st.session_state: html += make_section("Key Facts Defense", st.session_state.facts_defense)
-    if 'facts_about' in st.session_state: html += make_section("ALL ABOUT US", st.session_state.facts_about)
+    if 'facts_offense' in st.session_state:
+        html += make_section("Key Facts Offense", st.session_state.facts_offense)
+    if 'facts_defense' in st.session_state:
+        html += make_section("Key Facts Defense", st.session_state.facts_defense)
+    if 'facts_about' in st.session_state:
+        html += make_section("ALL ABOUT US", st.session_state.facts_about)
+    
     html += "</div>"
     return html
 
 # --- ANSICHT: BEARBEITUNG ---
 if not st.session_state.print_mode:
     st.title("🏀 DBBL Scouting: Einzel-Analyse")
+    
     st.subheader("1. Spieldaten")
     col_staffel, col_home, col_guest = st.columns([1, 2, 2])
     with col_staffel:
@@ -342,6 +422,7 @@ if not st.session_state.print_mode:
             if raw:
                 df = pd.json_normalize(raw)
                 df.columns = [str(c).lower() for c in df.columns]
+                
                 col_map = {
                     'firstname': ['person.firstname', 'firstname'],
                     'lastname': ['person.lastname', 'lastname'],
@@ -358,6 +439,7 @@ if not st.session_state.print_mode:
                     'as': ['assistspergame'], 'to': ['turnoverspergame'], 'st': ['stealspergame'], 'pf': ['foulscommittedpergame'],
                     'fgpct': ['fieldgoalsuccesspercent', 'fieldgoalpercentage']
                 }
+                
                 final_cols = {}
                 for t, p_list in col_map.items():
                     for p in p_list:
@@ -374,34 +456,53 @@ if not st.session_state.print_mode:
                 def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
 
                 df['GP'] = get_v('gp').replace(0, 1)
+                
                 min_raw = get_v('min_sec')
                 sec_total = get_v('sec_total')
+                
                 df['MIN_FINAL'] = min_raw
                 mask_zero = df['MIN_FINAL'] <= 0
                 df.loc[mask_zero, 'MIN_FINAL'] = sec_total[mask_zero] / df.loc[mask_zero, 'GP']
+                
                 df['MIN_DISPLAY'] = df['MIN_FINAL'].apply(format_minutes)
+                
                 df['PPG'] = get_v('ppg'); df['TOT'] = get_v('tot')
                 df['2M'] = get_v('2m'); df['2A'] = get_v('2a'); df['2PCT'] = get_v('2pct').apply(pct)
                 df['3M'] = get_v('3m'); df['3A'] = get_v('3a'); df['3PCT'] = get_v('3pct').apply(pct)
                 df['FTM'] = get_v('ftm'); df['FTA'] = get_v('fta'); df['FTPCT'] = get_v('ftpct').apply(pct)
+                
                 raw_fg = get_v('fgpct')
                 if raw_fg.sum() == 0: df['FG%'] = df['2PCT'] 
                 else: df['FG%'] = raw_fg.apply(pct)
+
                 df['DR'] = get_v('dr'); df['OR'] = get_v('or')
                 df['AS'] = get_v('as'); df['TO'] = get_v('to'); df['ST'] = get_v('st'); df['PF'] = get_v('pf')
+                
                 df['select'] = False
                 st.session_state.roster_df = df
-                st.session_state.game_meta = {'home_name': home_name, 'home_logo': get_logo_url(home_id), 'guest_name': guest_name, 'guest_logo': get_logo_url(guest_id), 'date': date_input.strftime('%d.%m.%Y'), 'time': time_input.strftime('%H:%M')}
-        except Exception as e: st.error(f"Fehler: {e}")
+                st.session_state.game_meta = {
+                    'home_name': home_name, 'home_logo': get_logo_url(home_id),
+                    'guest_name': guest_name, 'guest_logo': get_logo_url(guest_id),
+                    'date': date_input.strftime('%d.%m.%Y'),
+                    'time': time_input.strftime('%H:%M')
+                }
+        except Exception as e: 
+            st.error(f"Fehler beim Laden: {e}")
+            st.write(f"URL: {api_url}")
 
     if st.session_state.roster_df is not None:
         st.subheader("3. Spieler auswählen")
-        edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']], column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)}, disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
+        edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT']],
+                                column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False)},
+                                disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
         selected_indices = edited[edited['select']].index
+        
         if len(selected_indices) > 0:
             st.divider()
             st.subheader("4. Notizen & Key Facts")
+            
             with st.form("input_form"):
+                
                 st.write("**Spieler-Notizen:**")
                 selection = st.session_state.roster_df.loc[selected_indices]
                 results_data = []
@@ -413,38 +514,58 @@ if not st.session_state.print_mode:
                         color_opt = st.selectbox(f"Markierung", ["Grau", "Grün", "Rot"], key=f"col_{pid}")
                         color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
                         selected_color = color_map[color_opt]
+
                     c1, c2 = st.columns(2)
                     l1 = c1.text_input("L1", key=f"l1_{pid}"); r1 = c2.text_input("R1", key=f"r1_{pid}")
                     l2 = c1.text_input("L2", key=f"l2_{pid}"); r2 = c2.text_input("R2", key=f"r2_{pid}")
                     l3 = c1.text_input("L3", key=f"l3_{pid}"); r3 = c2.text_input("R3", key=f"r3_{pid}")
                     l4 = c1.text_input("L4", key=f"l4_{pid}"); r4 = c2.text_input("R4", key=f"r4_{pid}")
                     st.markdown("---")
+                    
                     row_dict = row.to_dict()
                     notes = {'l1':l1,'l2':l2,'l3':l3,'l4':l4,'r1':r1,'r2':r2,'r3':r3,'r4':r4}
                     results_data.append((row_dict, notes, selected_color))
+                
+                # --- NEUE SEKTIONEN: KEY FACTS ---
                 st.markdown("### Key Facts (Erscheinen am Ende)")
                 c_k1, c_k2, c_k3 = st.columns(3)
-                with c_k1: st.caption("Offense"); st.session_state.facts_offense = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="ed_off", hide_index=True)
-                with c_k2: st.caption("Defense"); st.session_state.facts_defense = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="ed_def", hide_index=True)
-                with c_k3: st.caption("All About Us"); st.session_state.facts_about = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="ed_abt", hide_index=True)
+                
+                with c_k1:
+                    st.caption("Offense")
+                    st.session_state.facts_offense = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", key="ed_off", hide_index=True)
+                with c_k2:
+                    st.caption("Defense")
+                    st.session_state.facts_defense = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", key="ed_def", hide_index=True)
+                with c_k3:
+                    st.caption("All About Us")
+                    st.session_state.facts_about = st.data_editor(st.session_state.facts_about, num_rows="dynamic", key="ed_abt", hide_index=True)
+
                 st.divider()
                 st.subheader("5. Grafiken")
                 uploaded_files = st.file_uploader("Upload", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+
                 if st.form_submit_button("PDF Ansicht erstellen", type="primary"):
                     full_df = st.session_state.roster_df
                     html = generate_header_html(st.session_state.game_meta)
                     html += generate_top3_html(full_df)
+                    
                     for p_data, p_notes, p_color in results_data:
                         meta = get_player_metadata(p_data['PLAYER_ID'])
                         html += generate_card_html(p_data, meta, p_notes, p_color)
+                    
                     html += generate_team_stats_html(st.session_state.team_stats)
+                    
                     if uploaded_files:
                         html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
                         for up in uploaded_files:
+                            # Wir optimieren hier nicht, weil Plays oft Schärfe brauchen
                             b64 = base64.b64encode(up.getvalue()).decode()
                             html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
                         html += "</div>"
+                    
+                    # Key Facts hinzufügen
                     html += generate_custom_sections_html()
+                    
                     st.session_state.final_html = html
                     st.session_state.print_mode = True
                     st.rerun()
