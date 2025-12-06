@@ -6,7 +6,7 @@ import datetime
 from io import BytesIO
 from PIL import Image
 
-# Versuchen, pdfkit zu importieren (für PDF Download)
+# Versuchen, pdfkit zu importieren
 try:
     import pdfkit
     HAS_PDFKIT = True
@@ -14,7 +14,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v3.4 (Split Columns Top3)"
+VERSION = "v3.5 (Layout Optimize & Bigger Stats)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -60,7 +60,7 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"}
 }
 
-# --- SESSION STATE INITIALISIERUNG ---
+# --- SESSION STATE ---
 if 'print_mode' not in st.session_state: st.session_state.print_mode = False
 if 'final_html' not in st.session_state: st.session_state.final_html = ""
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
@@ -68,7 +68,6 @@ if 'roster_df' not in st.session_state: st.session_state.roster_df = None
 if 'team_stats' not in st.session_state: st.session_state.team_stats = None
 if 'game_meta' not in st.session_state: st.session_state.game_meta = {}
 if 'optimized_images' not in st.session_state: st.session_state.optimized_images = {}
-
 if 'saved_notes' not in st.session_state: st.session_state.saved_notes = {}
 if 'saved_colors' not in st.session_state: st.session_state.saved_colors = {}
 
@@ -133,7 +132,7 @@ def get_player_metadata(player_id):
     except: pass
     return {'img': '', 'height': 0, 'pos': '-'}
 
-# --- HTML GENERATOREN (Alles Arial!) ---
+# --- HTML GENERATOREN ---
 
 def generate_header_html(meta):
     return f"""
@@ -142,17 +141,17 @@ def generate_header_html(meta):
         DBBL Scouting Pro by Sascha Rosanke
     </div>
     <div style="border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; text-align: center;">
-        <h1 style="margin: 0; padding: 0; font-size: 24px; color: #000; font-weight: bold; font-family: Arial, sans-serif;">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
+        <h1 style="margin: 0; padding: 0; font-size: 24px; color: #000; font-weight: bold;">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
         <br>
         <div style="display: flex; align-items: center; justify-content: center; gap: 40px;">
             <div style="text-align: center;">
                 <img src="{meta['home_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
-                <div style="font-weight: bold; margin-top: 5px; font-size: 16px; font-family: Arial, sans-serif;">{meta['home_name']}</div>
+                <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['home_name']}</div>
             </div>
-            <div style="font-size: 24px; font-weight: bold; color: #333; font-family: Arial, sans-serif;">VS</div>
+            <div style="font-size: 24px; font-weight: bold; color: #333;">VS</div>
             <div style="text-align: center;">
                 <img src="{meta['guest_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
-                <div style="font-weight: bold; margin-top: 5px; font-size: 16px; font-family: Arial, sans-serif;">{meta['guest_name']}</div>
+                <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['guest_name']}</div>
             </div>
         </div>
     </div>
@@ -160,7 +159,6 @@ def generate_header_html(meta):
 """
 
 def generate_top3_html(df):
-    # Sortieren
     scorers = df.sort_values(by='PPG', ascending=False).head(3)
     rebounders = df.sort_values(by='TOT', ascending=False).head(3)
     shooters = df[df['3M'] >= 0.5].sort_values(by='3PCT', ascending=False).head(3)
@@ -174,7 +172,6 @@ def generate_top3_html(df):
     blocks = df.sort_values(by='BS', ascending=False).head(3)
     fouls = df.sort_values(by='PF', ascending=False).head(3)
 
-    # Styles
     box_style = "flex: 1; border: 1px solid #ccc; padding: 0;"
     header_base = "padding: 2px 4px; font-weight: bold; font-size: 11px; border-bottom: 1px solid #eee; font-family: Arial, sans-serif;"
     table_style = "width:100%; font-size:10px; border-collapse:collapse; font-family: Arial, sans-serif;"
@@ -194,12 +191,11 @@ def generate_top3_html(df):
                 style = td_val
                 val = r[k]
                 
-                # Special Formatting
+                # --- FIX: KEIN # MEHR ---
                 if k == 'NR':
-                    val = f"#{val}"
+                    val = f"{val}" # Nur die Nummer
                 elif k == 'NAME_FULL':
                     style = td_name
-                    # Nur Nachname für Platz in der Tabelle
                     val = r['NAME_FULL'].split(' ')[-1]
                 elif isinstance(val, float):
                     val = f"{val:.1f}"
@@ -211,7 +207,6 @@ def generate_top3_html(df):
         h += "</table></div>"
         return h
 
-    # 9 Boxen - Jetzt mit getrennten Spalten für # und Name
     box_ppg = build_box(scorers, ["#", "Name", "PPG", "FG%"], ["NR", "NAME_FULL", "PPG", "FG%"], [2], "#e35b00", "🔥", "Top Scorer")
     box_reb = build_box(rebounders, ["#", "Name", "DR", "OR", "TOT"], ["NR", "NAME_FULL", "DR", "OR", "TOT"], [4], "#0055ff", "🗑️", "Rebounds")
     box_3pt = build_box(shooters, ["#", "Name", "M", "A", "%"], ["NR", "NAME_FULL", "3M", "3A", "3PCT"], [4], "#28a745", "🎯", "3-Points")
@@ -223,7 +218,6 @@ def generate_top3_html(df):
     box_blk = build_box(blocks, ["#", "Name", "BS"], ["NR", "NAME_FULL", "BS"], [2], "#343a40", "🧱", "Blocks")
     box_pf = build_box(fouls, ["#", "Name", "PF"], ["NR", "NAME_FULL", "PF"], [2], "#20c997", "🛑", "Fouls")
 
-    # 3x3 Grid Layout
     row_style = "display: flex; flex-direction: row; gap: 10px; margin-bottom: 10px;"
     
     return f"""
@@ -250,9 +244,13 @@ def generate_card_html(row, metadata, notes, color_code):
     pos_str = clean_pos(metadata['pos'])
     
     header_style = f"background-color: {color_code}; color: white; padding: 2px 10px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: Arial, sans-serif;"
-    table_css = "width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: black; font-family: Arial, sans-serif;"
+    
+    # --- ÄNDERUNG: SCHRIFTGRÖSSE 13PX & PADDING 1PX ---
+    table_css = "width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; font-family: Arial, sans-serif;"
     border_css = "border: 1px solid #ccc;" 
     bg_css = "background-color: #f0f0f0; -webkit-print-color-adjust: exact;"
+    # Kompaktes Padding damit alles passt
+    pad_style = "padding: 2px 1px;" 
 
     return f"""
 <div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 15px; background-color: white; page-break-inside: avoid;">
@@ -261,40 +259,44 @@ def generate_card_html(row, metadata, notes, color_code):
         <span style="font-size:14px;">{height_str} m | Pos: {pos_str}</span>
     </div>
     <div style="display: flex; flex-direction: row;">
-        <div style="width: 100px; min-width: 100px; border-right: 1px solid #ccc;">
+        <!-- BILD SCHMALER GEMACHT (80px) -->
+        <div style="width: 80px; min-width: 80px; border-right: 1px solid #ccc;">
             <img src="{img_url}" style="width: 100%; height: 125px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
         </div>
         <table style="{table_css}">
             <tr style="{bg_css}">
-                <th rowspan="2" style="{border_css} padding: 2px;">Min</th>
-                <th rowspan="2" style="{border_css} padding: 2px;">PPG</th>
-                <th colspan="3" style="{border_css} padding: 2px;">2P FG</th>
-                <th colspan="3" style="{border_css} padding: 2px;">3P FG</th>
-                <th colspan="3" style="{border_css} padding: 2px;">FT</th>
-                <th colspan="3" style="{border_css} padding: 2px;">REB</th>
-                <th rowspan="2" style="{border_css} padding: 2px;">AS</th>
-                <th rowspan="2" style="{border_css} padding: 2px;">TO</th>
-                <th rowspan="2" style="{border_css} padding: 2px;">ST</th>
-                <th rowspan="2" style="{border_css} padding: 2px;">PF</th>
+                <th rowspan="2" style="{border_css} {pad_style}">Min</th>
+                <th rowspan="2" style="{border_css} {pad_style}">PPG</th>
+                <th colspan="3" style="{border_css} {pad_style}">2P FG</th>
+                <th colspan="3" style="{border_css} {pad_style}">3P FG</th>
+                <th colspan="3" style="{border_css} {pad_style}">FT</th>
+                <th colspan="3" style="{border_css} {pad_style}">REB</th>
+                <th rowspan="2" style="{border_css} {pad_style}">AS</th>
+                <th rowspan="2" style="{border_css} {pad_style}">TO</th>
+                <th rowspan="2" style="{border_css} {pad_style}">ST</th>
+                <th rowspan="2" style="{border_css} {pad_style}">PF</th>
             </tr>
             <tr style="{bg_css}">
-                <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-                <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-                <th style="{border_css}">M</th><th style="{border_css}">A</th><th style="{border_css}">%</th>
-                <th style="{border_css}">DR</th><th style="{border_css}">O</th><th style="{border_css}">TOT</th>
+                <th style="{border_css} {pad_style} font-size:10px;">M</th><th style="{border_css} {pad_style} font-size:10px;">A</th><th style="{border_css} {pad_style} font-size:10px;">%</th>
+                <th style="{border_css} {pad_style} font-size:10px;">M</th><th style="{border_css} {pad_style} font-size:10px;">A</th><th style="{border_css} {pad_style} font-size:10px;">%</th>
+                <th style="{border_css} {pad_style} font-size:10px;">M</th><th style="{border_css} {pad_style} font-size:10px;">A</th><th style="{border_css} {pad_style} font-size:10px;">%</th>
+                <th style="{border_css} {pad_style} font-size:10px;">DR</th><th style="{border_css} {pad_style} font-size:10px;">O</th><th style="{border_css} {pad_style} font-size:10px;">TOT</th>
             </tr>
-            <tr>
-                <td style="{border_css}">{row['MIN_DISPLAY']}</td><td style="{border_css}">{row['PPG']}</td>
-                <td style="{border_css}">{row['2M']}</td><td style="{border_css}">{row['2A']}</td><td style="{border_css}">{row['2PCT']}</td>
-                <td style="{border_css}">{row['3M']}</td><td style="{border_css}">{row['3A']}</td><td style="{border_css}">{row['3PCT']}</td>
-                <td style="{border_css}">{row['FTM']}</td><td style="{border_css}">{row['FTA']}</td><td style="{border_css}">{row['FTPCT']}</td>
-                <td style="{border_css}">{row['DR']}</td><td style="{border_css}">{row['OR']}</td><td style="{border_css}">{row['TOT']}</td>
-                <td style="{border_css}">{row['AS']}</td><td style="{border_css}">{row['TO']}</td><td style="{border_css}">{row['ST']}</td><td style="{border_css}">{row['PF']}</td>
+            <tr style="font-weight: bold;">
+                <td style="{border_css} {pad_style}">{row['MIN_DISPLAY']}</td><td style="{border_css} {pad_style}">{row['PPG']}</td>
+                <td style="{border_css} {pad_style}">{row['2M']}</td><td style="{border_css} {pad_style}">{row['2A']}</td><td style="{border_css} {pad_style}">{row['2PCT']}</td>
+                <td style="{border_css} {pad_style}">{row['3M']}</td><td style="{border_css} {pad_style}">{row['3A']}</td><td style="{border_css} {pad_style}">{row['3PCT']}</td>
+                <td style="{border_css} {pad_style}">{row['FTM']}</td><td style="{border_css} {pad_style}">{row['FTA']}</td><td style="{border_css} {pad_style}">{row['FTPCT']}</td>
+                <td style="{border_css} {pad_style}">{row['DR']}</td><td style="{border_css} {pad_style}">{row['OR']}</td><td style="{border_css} {pad_style}">{row['TOT']}</td>
+                <td style="{border_css} {pad_style}">{row['AS']}</td>
+                <td style="{border_css} {pad_style}">{row['TO']}</td>
+                <td style="{border_css} {pad_style}">{row['ST']}</td>
+                <td style="{border_css} {pad_style}">{row['PF']}</td>
             </tr>
-            <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l1','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r1','')}</td></tr>
-            <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l2','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r2','')}</td></tr>
-            <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l3','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r3','')}</td></tr>
-            <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l4','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r4','')}</td></tr>
+            <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px; font-weight:normal;">{notes.get('l1','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r1','')}</td></tr>
+            <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px; font-weight:normal;">{notes.get('l2','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r2','')}</td></tr>
+            <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px; font-weight:normal;">{notes.get('l3','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r3','')}</td></tr>
+            <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px; font-weight:normal;">{notes.get('l4','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r4','')}</td></tr>
         </table>
     </div>
 </div>
@@ -586,7 +588,7 @@ else:
     <style>
     @media print {
         @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.60; }
+        body { margin: 0; padding: 0; zoom: 0.60; font-family: Arial, sans-serif; }
         .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
         [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton, .stDownloadButton { display: none !important; }
         table { width: 100% !important; table-layout: fixed !important; }
