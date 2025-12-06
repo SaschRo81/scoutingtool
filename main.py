@@ -547,29 +547,8 @@ if not st.session_state.print_mode:
                 st.rerun()
 
 else:
-    if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
+    if st.button("⬅️ Zurück"):
         st.session_state.print_mode = False
         st.rerun()
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-    st.markdown("""
-    <style>
-    @media print {
-        @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.60; }
-        .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
-        [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton { display: none !important; }
-        
-        /* Force Tables to Expand */
-        table { width: 100% !important; table-layout: fixed !important; }
-        
-        /* Hide Scrollbars */
-        ::-webkit-scrollbar { display: none; }
-        
-        /* Make all containers overflow visible */
-        .stApp, [data-testid="stVerticalBlock"], div { overflow: visible !important; height: auto !important; }
-        
-        /* Ensure Images Scale */
-        img { max-width: 100% !important; height: auto !important; }
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    st.markdown("""<style>@media print {[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton {display: none !important;} .block-container {padding:0!important;margin:0!important;max_width:100%!important;}}</style>""", unsafe_allow_html=True)
