@@ -314,7 +314,9 @@ else:
             mime="application/pdf",
         )
     else:
-        st.info("PDF-Erzeugung ist in dieser Umgebung nicht verfügbar (pdfkit fehlt).")
+        if HAS_PDFKIT:
+            st.warning("Es liegt noch kein PDF vor. Bitte Report neu generieren.")
+        else:
+            st.info("PDF-Erzeugung ist in dieser Umgebung nicht verfügbar (pdfkit fehlt).")
 
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-
