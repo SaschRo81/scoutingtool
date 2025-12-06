@@ -497,12 +497,18 @@ if not st.session_state.print_mode:
                 
                 html += generate_team_stats_html(st.session_state.team_stats)
                 
-                if uploaded_files:
-                    html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
-                    for up in uploaded_files:
-                        b64 = base64.b64encode(up.getvalue()).decode()
-                        html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
-                    html += "</div>"
+               if uploaded_files:
+    html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
+    for up in uploaded_files:
+        b64 = base64.b64encode(up.getvalue()).decode()
+        html += (
+            "<div style='margin-bottom:20px; page-break-inside: avoid;'>"
+            f"<img src='data:image/png;base64,{b64}' "
+            "style='max-width:100%; height:auto; border:1px solid #ccc; display:block;'>"
+            "</div>"
+        )
+    html += "</div>"
+
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
                 st.session_state.final_html = html
@@ -513,23 +519,81 @@ else:
     if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
         st.session_state.print_mode = False
         st.rerun()
+
+    # Erst allgemeines Layout "entfesseln"
+    st.markdown(
+        """
+        <style>
+        html, body {
+            height: auto !important;
+            overflow: visible !important;
+        }
+
+        /* Wichtige Streamlit-Container vom Scroll-Zwang befreien */
+        [data-testid="stAppViewContainer"],
+        [data-testid="stAppViewBlockContainer"],
+        .block-container {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Report anzeigen
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-    st.markdown("""
-    <style>
-    @media print {
-        @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.65; }
-        .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
-        [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton { display: none !important; }
-        
-        /* Force Tables to Expand */
-        table { width: 100% !important; table-layout: fixed !important; }
-        
-        /* Hide Scrollbars */
-        ::-webkit-scrollbar { display: none; }
-        
-        /* Make all containers overflow visible */
-        .stApp, [data-testid="stVerticalBlock"], div { overflow: visible !important; height: auto !important; }
-    }
-    </style>
-    """, unsafe_allow_html=True)
+
+    # Spezielle Regeln NUR für den Druck
+    st.markdown(
+        """
+        <style>
+        @media print {
+            @page { 
+                size: A4; 
+                margin: 5mm; 
+            }
+            
+            body {
+                margin: 0;
+                padding: 0;
+            }
+
+            [data-testid="stHeader"],
+            [data-testid="stSidebar"],
+            [data-testid="stToolbar"],
+            footer,
+            .stButton {
+                display: none !important;
+            }
+
+            [data-testid="stAppViewContainer"],
+            [data-testid="stAppViewBlockContainer"],
+            .block-container {
+                padding: 0 !important;
+                margin: 0 !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+
+            /* Tabellen auf Seitenbreite */
+            table {
+                width: 100% !important;
+                table-layout: fixed !important;
+            }
+
+            /* Scrollbars unterdrücken */
+            ::-webkit-scrollbar {
+                display: none !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+
