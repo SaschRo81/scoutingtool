@@ -7,7 +7,7 @@ from io import BytesIO
 from PIL import Image
 
 # --- KONFIGURATION ---
-VERSION = "v3.2 (PC Print Fix)"
+VERSION = "v3.1 (PDF Layout Fix)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -80,8 +80,10 @@ def format_minutes(val):
     try:
         v = float(val)
         if v <= 0: return "00:00"
-        if v > 48: mins = int(v // 60); secs = int(v % 60)
-        else: mins = int(v); secs = int((v % 1) * 60)
+        if v > 45: # Sekunden
+            mins = int(v // 60); secs = int(v % 60)
+        else: # Minuten
+            mins = int(v); secs = int((v % 1) * 60)
         return f"{mins:02d}:{secs:02d}"
     except: return "00:00"
 
@@ -98,7 +100,7 @@ def optimize_image_base64(url):
         response = requests.get(url, headers=API_HEADERS, timeout=3)
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content))
-            # High Res
+            # High Res für Druck
             base_height = 500
             w_percent = (base_height / float(img.size[1]))
             w_size = int((float(img.size[0]) * float(w_percent)))
@@ -161,7 +163,7 @@ def generate_top3_html(df):
     fts = df[df['FTA'] >= 1.0].sort_values(by='FTPCT', ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by='FTPCT', ascending=True).head(3)
 
-    # Styles
+    # Styles exakt wie im Screenshot
     box_style = "flex: 1; border: 1px solid #ccc; padding: 0;"
     header_base = "padding: 4px 8px; font-weight: bold; font-size: 12px; border-bottom: 1px solid #eee;"
     
@@ -173,6 +175,7 @@ def generate_top3_html(df):
     def build_table(d, headers, keys, bolds, color, icon, title):
         h = f"<div style='{box_style}'>"
         h += f"<div style='border-top: 3px solid {color}; {header_base} color: {color};'>{icon} {title}</div>"
+        
         h += f"<table style='{table_style}'><tr>"
         for head in headers: h += f"<th style='{th_style}'>{head}</th>"
         h += "</tr>"
@@ -180,12 +183,13 @@ def generate_top3_html(df):
             h += "<tr>"
             for i, k in enumerate(keys):
                 style = td_val
-                if i == 0: style = td_name
+                if i == 0: style = td_name # Name
                 if i in bolds: style += " font-weight:bold;"
                 val = r[k]
                 if isinstance(val, float): val = f"{val:.1f}"
                 if k == 'NR': val = f"#{val}"
                 if k == 'NAME_FULL' and i == 0: val = f"#{r['NR']} {r['NAME_FULL']}"
+                
                 if k != 'NR' and k != 'NAME_FULL': h += f"<td style='{style}'>{val}</td>"
                 elif k == 'NAME_FULL': h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
@@ -215,11 +219,14 @@ def generate_card_html(row, metadata, notes, color_code):
     except: height_str = "-"
     pos_str = clean_pos(metadata['pos'])
     
+    # Farben für Header
     text_color = "white"
+    
     header_style = f"background-color: {color_code}; color: {text_color}; padding: 3px 10px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
     
+    # Tabelle Styles (Dünne graue Linien)
     table_css = "width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: black;"
-    border_css = "border: 1px solid #ccc;" 
+    border_css = "border: 1px solid #aaa;" 
     bg_css = "background-color: #f0f0f0; -webkit-print-color-adjust: exact;"
 
     return f"""
@@ -229,9 +236,11 @@ def generate_card_html(row, metadata, notes, color_code):
         <span style="font-size:14px;">{height_str} m | Pos: {pos_str}</span>
     </div>
     <div style="display: flex; flex-direction: row;">
+        <!-- BILD LINKS -->
         <div style="width: 100px; min-width: 100px; border-right: 1px solid #ccc;">
             <img src="{img_url}" style="width: 100%; height: 125px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
         </div>
+        <!-- TABELLE RECHTS -->
         <table style="{table_css}">
             <tr style="{bg_css}">
                 <th rowspan="2" style="{border_css} padding: 2px;">Min</th>
@@ -260,6 +269,7 @@ def generate_card_html(row, metadata, notes, color_code):
                 <td style="{border_css}">{row['DR']}</td><td style="{border_css}">{row['OR']}</td><td style="{border_css}">{row['TOT']}</td>
                 <td style="{border_css}">{row['AS']}</td><td style="{border_css}">{row['TO']}</td><td style="{border_css}">{row['ST']}</td><td style="{border_css}">{row['PF']}</td>
             </tr>
+            <!-- Notizen Zeilen -->
             <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l1','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r1','')}</td></tr>
             <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l2','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r2','')}</td></tr>
             <tr><td colspan="6" style="{border_css} height: 20px; text-align: left; padding-left: 5px;">{notes.get('l3','')}</td><td colspan="10" style="{border_css} color: red; font-weight: bold; text-align: left; padding-left: 5px; -webkit-print-color-adjust: exact;">{notes.get('r3','')}</td></tr>
@@ -272,15 +282,17 @@ def generate_card_html(row, metadata, notes, color_code):
 def generate_team_stats_html(team_stats):
     if not team_stats: return ""
     ts = team_stats
+    
     def calc_pct(made, att, api_val):
         if api_val > 0: return api_val
         if att > 0: return (made / att) * 100
         return 0.0
+
     t_2pct = calc_pct(ts['2m'], ts['2a'], ts['2pct'])
     t_3pct = calc_pct(ts['3m'], ts['3a'], ts['3pct'])
     t_ftpct = calc_pct(ts['ftm'], ts['fta'], ts['ftpct'])
     
-    border_css = "border: 1px solid #ccc;"
+    border_css = "border: 1px solid #aaa;"
 
     return f"""
 <div style="font-family: Arial, sans-serif; margin-top: 20px; page-break-inside: avoid;">
@@ -422,21 +434,29 @@ if not st.session_state.print_mode:
                 def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
 
                 df['GP'] = get_v('gp').replace(0, 1)
+                
                 min_raw = get_v('min_sec')
                 sec_total = get_v('sec_total')
+                
                 df['MIN_FINAL'] = min_raw
+                # Minuten-Logik: Wenn PerGame <= 0, nimm Total/GP
                 mask_zero = df['MIN_FINAL'] <= 0
                 df.loc[mask_zero, 'MIN_FINAL'] = sec_total[mask_zero] / df.loc[mask_zero, 'GP']
+                
                 df['MIN_DISPLAY'] = df['MIN_FINAL'].apply(format_minutes)
+                
                 df['PPG'] = get_v('ppg'); df['TOT'] = get_v('tot')
                 df['2M'] = get_v('2m'); df['2A'] = get_v('2a'); df['2PCT'] = get_v('2pct').apply(pct)
                 df['3M'] = get_v('3m'); df['3A'] = get_v('3a'); df['3PCT'] = get_v('3pct').apply(pct)
                 df['FTM'] = get_v('ftm'); df['FTA'] = get_v('fta'); df['FTPCT'] = get_v('ftpct').apply(pct)
+                
                 raw_fg = get_v('fgpct')
                 if raw_fg.sum() == 0: df['FG%'] = df['2PCT'] 
                 else: df['FG%'] = raw_fg.apply(pct)
+
                 df['DR'] = get_v('dr'); df['OR'] = get_v('or')
                 df['AS'] = get_v('as'); df['TO'] = get_v('to'); df['ST'] = get_v('st'); df['PF'] = get_v('pf')
+                
                 df['select'] = False
                 st.session_state.roster_df = df
                 st.session_state.game_meta = {'home_name': home_name, 'home_logo': get_logo_url(home_id), 'guest_name': guest_name, 'guest_logo': get_logo_url(guest_id), 'date': date_input.strftime('%d.%m.%Y'), 'time': time_input.strftime('%H:%M')}
@@ -517,10 +537,12 @@ if not st.session_state.print_mode:
                 
                 if uploaded_files:
                     html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
+                    # Grid Layout für Grafiken (2 pro Zeile)
+                    html += "<div style='display: flex; flex-wrap: wrap; gap: 10px;'>"
                     for up in uploaded_files:
                         b64 = base64.b64encode(up.getvalue()).decode()
-                        html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
-                    html += "</div>"
+                        html += f"<div style='flex: 0 0 48%; margin-bottom:10px;'><img src='data:image/png;base64,{b64}' style='width:100%; border:1px solid #ccc;'></div>"
+                    html += "</div></div>"
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
                 st.session_state.final_html = html
@@ -536,16 +558,15 @@ else:
     <style>
     @media print {
         @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.60; }
+        body { margin: 0; padding: 0; zoom: 0.75; }
         .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
         [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton { display: none !important; }
         
         /* Force Tables to Expand */
         table { width: 100% !important; table-layout: fixed !important; }
         
-        /* Hide Scrollbars completely */
-        ::-webkit-scrollbar { display: none !important; }
-        * { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+        /* Hide Scrollbars */
+        ::-webkit-scrollbar { display: none; }
         
         /* Make all containers overflow visible */
         .stApp, [data-testid="stVerticalBlock"], div { overflow: visible !important; height: auto !important; }
