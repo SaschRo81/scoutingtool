@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import requests
+import base64
+import datetime
 
 # --- KONFIGURATION ---
 st.set_page_config(page_title="DBBL Scouting Pro", layout="wide", page_icon="🏀")
@@ -10,61 +12,146 @@ API_HEADERS = {
     "X-API-Key": "48673298c840c12a1646b737c83e5e5e"
 }
 
-# Teams nach Staffeln getrennt für die Auswahl
-TEAMS_NORD = {
-    112: "BBC Osnabrück", 121: "TG Neuss Tigers", 116: "Eimsbütteler TV",
-    114: "AVIDES Hurricanes", 123: "Bochum AstroLadies", 118: "Metropol Ladies",
-    111: "WINGS Leverkusen", 120: "Talents BonnRhöndorf", 113: "Bender Baskets Grünberg",
-    122: "TSVE Bielefeld", 117: "LionPride Braunschweig", 115: "ChemCats Chemnitz",
-    106: "Veilchen Ladies Göttingen", 119: "Oberhausen", 157: "TuS Lichterfelde",
-    156: "Hürther BC"
+# TEAM DATENBANK
+TEAMS_DB = {
+    # NORD
+    112: {"name": "BBC Osnabrück", "staffel": "Nord"},
+    121: {"name": "TG Neuss Tigers", "staffel": "Nord"},
+    116: {"name": "Eimsbütteler TV", "staffel": "Nord"},
+    114: {"name": "AVIDES Hurricanes", "staffel": "Nord"},
+    123: {"name": "Bochum AstroLadies", "staffel": "Nord"},
+    118: {"name": "Metropol Ladies", "staffel": "Nord"},
+    111: {"name": "WINGS Leverkusen", "staffel": "Nord"},
+    120: {"name": "Talents BonnRhöndorf", "staffel": "Nord"},
+    113: {"name": "Bender Baskets Grünberg", "staffel": "Nord"},
+    122: {"name": "TSVE Bielefeld", "staffel": "Nord"},
+    117: {"name": "LionPride Braunschweig", "staffel": "Nord"},
+    115: {"name": "ChemCats Chemnitz", "staffel": "Nord"},
+    106: {"name": "Veilchen Ladies Göttingen", "staffel": "Nord"},
+    119: {"name": "Oberhausen", "staffel": "Nord"},
+    157: {"name": "TuS Lichterfelde", "staffel": "Nord"},
+    156: {"name": "Hürther BC", "staffel": "Nord"},
+    
+    # SÜD
+    133: {"name": "Rhein-Main Baskets", "staffel": "Süd"},
+    124: {"name": "ASC Theresianum Mainz", "staffel": "Süd"},
+    135: {"name": "TSV München-Ost", "staffel": "Süd"},
+    126: {"name": "Dillingen Diamonds", "staffel": "Süd"},
+    130: {"name": "KuSG Leimen", "staffel": "Süd"},
+    132: {"name": "QOOL Sharks Würzburg", "staffel": "Süd"},
+    128: {"name": "Eisvögel USC Freiburg 2", "staffel": "Süd"},
+    134: {"name": "TSV 1880 Wasserburg", "staffel": "Süd"},
+    129: {"name": "Falcons Bad Homburg", "staffel": "Süd"},
+    125: {"name": "USC BasCats Heidelberg", "staffel": "Süd"},
+    127: {"name": "DJK Don Bosco Bamberg", "staffel": "Süd"},
+    131: {"name": "MTV Stuttgart", "staffel": "Süd"},
+    158: {"name": "VIMODROM Baskets Jena", "staffel": "Süd"},
+    160: {"name": "BBU '01", "staffel": "Süd"},
+    159: {"name": "Bamberg Baskets", "staffel": "Süd"}
 }
 
-TEAMS_SUED = {
-    130: "KuSG Leimen", 126: "Dillingen Diamonds", 132: "QOOL Sharks Würzburg",
-    128: "Eisvögel USC Freiburg 2", 134: "TSV 1880 Wasserburg", 129: "Falcons Bad Homburg",
-    125: "USC BasCats Heidelberg", 131: "MTV Stuttgart", 127: "DJK Don Bosco Bamberg",
-    133: "Rhein-Main Baskets", 124: "ASC Theresianum Mainz", 135: "TSV München-Ost",
-    158: "VIMODROM Baskets Jena", 160: "BBU '01", 159: "Bamberg Baskets"
-}
+# --- SESSION STATE ---
+if 'print_mode' not in st.session_state: st.session_state.print_mode = False
+if 'final_html' not in st.session_state: st.session_state.final_html = ""
+if 'roster_df' not in st.session_state: st.session_state.roster_df = None
+if 'game_meta' not in st.session_state: st.session_state.game_meta = {}
 
 # --- HILFSFUNKTIONEN ---
 
+def get_logo_url(team_id):
+    return f"https://api-s.dbbl.scb.world/images/teams/logo/2025/{team_id}"
+
+def format_minutes(val):
+    try:
+        v = float(val)
+        if v == 0: return "00:00"
+        if v > 48: mins = int(v // 60); secs = int(v % 60)
+        else: mins = int(v); secs = int((v % 1) * 60)
+        return f"{mins:02d}:{secs:02d}"
+    except: return "00:00"
+
+def clean_pos(pos):
+    if not pos or pd.isna(pos): return "-"
+    return str(pos).replace('_', ' ').title()
+
 def get_player_metadata(player_id):
-    """Holt Bild, Größe und Position vom season-players Endpunkt."""
     try:
         url = f"https://api-s.dbbl.scb.world/season-players/{player_id}"
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
             data = resp.json()
-            # Daten extrahieren mit Fallbacks
-            return {
-                'img': data.get('imageUrl', ''),
-                'height': data.get('height', 0),
-                'pos': data.get('position', '-')
-            }
-    except:
-        pass
+            return {'img': data.get('imageUrl', ''), 'height': data.get('height', 0), 'pos': data.get('position', '-')}
+    except: pass
     return {'img': '', 'height': 0, 'pos': '-'}
 
-def generate_card_html(row, metadata, notes):
-    """Erstellt das HTML für den PDF-Druck."""
-    
-    # Bild URL prüfen
-    img_url = metadata['img']
-    if not img_url: img_url = "https://via.placeholder.com/150?text=No+Img"
+def generate_header_html(meta):
+    # WICHTIG: Keine Einrückung im HTML String!
+    return f"""
+<div style="border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; text-align: center; font-family: Arial, sans-serif; page-break-inside: avoid;">
+    <div style="font-size: 14px; color: #666; margin-bottom: 10px;">Scouting Report | {meta['date']} - {meta['time']} Uhr</div>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 40px;">
+        <div style="text-align: center;">
+            <img src="{meta['home_logo']}" style="height: 80px; object-fit: contain;">
+            <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['home_name']}</div>
+        </div>
+        <div style="font-size: 24px; font-weight: bold; color: #333;">VS</div>
+        <div style="text-align: center;">
+            <img src="{meta['guest_logo']}" style="height: 80px; object-fit: contain;">
+            <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['guest_name']}</div>
+        </div>
+    </div>
+</div>
+"""
 
-    # Größe formatieren
+def generate_top3_html(df):
+    scorers = df.sort_values(by='PPG', ascending=False).head(3)
+    rebounders = df.sort_values(by='TOT', ascending=False).head(3)
+    shooters = df[df['3M'] >= 0.5].sort_values(by='3PCT', ascending=False).head(3)
+    if shooters.empty: shooters = df.sort_values(by='3PCT', ascending=False).head(3)
+    fts = df[df['FTA'] >= 1.0].sort_values(by='FTPCT', ascending=True).head(3)
+    if fts.empty: fts = df.sort_values(by='FTPCT', ascending=True).head(3)
+
+    def row_html(d, stat_col, show_pct=False):
+        rows = ""
+        for _, r in d.iterrows():
+            stat_val = r[stat_col]
+            val_display = f"{stat_val:.1f}%" if show_pct else f"{stat_val:.1f}"
+            rows += f"<tr><td style='border-bottom:1px solid #ddd;'>#{r['NR']} {r['NAME_FULL']}</td><td style='text-align:right; border-bottom:1px solid #ddd;'><b>{val_display}</b></td></tr>"
+        return rows
+
+    # WICHTIG: HTML String ganz linksbündig, damit Markdown es nicht als Code-Block erkennt
+    html = f"""
+<div style="display: flex; flex-direction: row; gap: 20px; margin-bottom: 30px; page-break-inside: avoid; font-family: Arial, sans-serif;">
+    <div style="flex: 1; border: 1px solid #ccc; padding: 10px;">
+        <div style="font-weight:bold; color:#e35b00; border-bottom: 2px solid #e35b00; margin-bottom:5px;">🔥 Top Scorer (PPG)</div>
+        <table style="width:100%; font-size:12px; border-collapse:collapse;">{row_html(scorers, 'PPG')}</table>
+    </div>
+    <div style="flex: 1; border: 1px solid #ccc; padding: 10px;">
+        <div style="font-weight:bold; color:#0055ff; border-bottom: 2px solid #0055ff; margin-bottom:5px;">🗑️ Rebounder (RPG)</div>
+        <table style="width:100%; font-size:12px; border-collapse:collapse;">{row_html(rebounders, 'TOT')}</table>
+    </div>
+    <div style="flex: 1; border: 1px solid #ccc; padding: 10px;">
+        <div style="font-weight:bold; color:#28a745; border-bottom: 2px solid #28a745; margin-bottom:5px;">🎯 Best 3pt (%)</div>
+        <table style="width:100%; font-size:12px; border-collapse:collapse;">{row_html(shooters, '3PCT', True)}</table>
+    </div>
+    <div style="flex: 1; border: 1px solid #ccc; padding: 10px;">
+        <div style="font-weight:bold; color:#dc3545; border-bottom: 2px solid #dc3545; margin-bottom:5px;">⚠️ Worst FT (%)</div>
+        <table style="width:100%; font-size:12px; border-collapse:collapse;">{row_html(fts, 'FTPCT', True)}</table>
+    </div>
+</div>
+"""
+    return html
+
+def generate_card_html(row, metadata, notes):
+    img_url = metadata['img'] if metadata['img'] else "https://via.placeholder.com/150?text=No+Img"
     try:
         h = float(metadata['height'])
-        if h > 3: h = h / 100 # cm in m umrechnen
+        if h > 3: h = h / 100
         height_str = f"{h:.2f}".replace('.', ',')
-    except:
-        height_str = "-"
+    except: height_str = "-"
+    pos_str = clean_pos(metadata['pos'])
 
-    pos_str = metadata['pos'] if metadata['pos'] else "-"
-
-    # HTML Template
+    # WICHTIG: Linksbündig!
     html = f"""
 <div style="font-family: Arial, sans-serif; border: 1px solid #ccc; margin-bottom: 20px; background-color: white; page-break-inside: avoid;">
     <div style="background-color: #5c9c30; color: white; padding: 5px 10px; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
@@ -73,8 +160,7 @@ def generate_card_html(row, metadata, notes):
     </div>
     <div style="display: flex; flex-direction: row;">
         <div style="width: 120px; min-width: 120px; border-right: 1px solid #ccc;">
-            <img src="{img_url}" style="width: 100%; height: 150px; object-fit: cover;" 
-                 onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
+            <img src="{img_url}" style="width: 100%; height: 150px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
         </div>
         <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black;">
             <tr style="background-color: #f0f0f0; -webkit-print-color-adjust: exact;">
@@ -117,235 +203,200 @@ def generate_card_html(row, metadata, notes):
 """
     return html
 
-# --- HAUPTPROGRAMM ---
-st.title("🏀 DBBL Scouting: Einzel-Analyse")
+# --- ANSICHT: BEARBEITUNG ---
+if not st.session_state.print_mode:
+    st.title("🏀 DBBL Scouting: Einzel-Analyse")
+    
+    # 1. SPIEL DATEN (Heim/Gast/Zeit)
+    st.subheader("1. Spieldaten")
+    col_staffel, col_home, col_guest = st.columns([1, 2, 2])
+    
+    with col_staffel:
+        staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True)
+        teams_filtered = {k: v for k, v in TEAMS_DB.items() if v['staffel'] == staffel}
+        team_options = {v['name']: k for k, v in teams_filtered.items()}
 
-# 1. TEAM WAHL
-c_team1, c_team2 = st.columns(2)
-with c_team1:
-    staffel = st.radio("Staffel wählen:", ["Süd", "Nord"], horizontal=True)
+    with col_home:
+        home_name = st.selectbox("Heim-Team:", list(team_options.keys()), index=0)
+        home_id = team_options[home_name]
+        st.image(get_logo_url(home_id), width=100)
 
-if staffel == "Süd":
-    teams_dict = TEAMS_SUED
-else:
-    teams_dict = TEAMS_NORD
+    with col_guest:
+        guest_name = st.selectbox("Gast-Team:", list(team_options.keys()), index=1)
+        guest_id = team_options[guest_name]
+        st.image(get_logo_url(guest_id), width=100)
 
-with c_team2:
-    selected_team_name = st.selectbox("Team wählen:", options=list(teams_dict.values()))
-    selected_team_id = [k for k, v in teams_dict.items() if v == selected_team_name][0]
+    # FRAGE: WEN SCOUTEN?
+    st.write("---")
+    scout_target = st.radio("Wen möchtest du scouten (Daten laden)?", ["Gastteam (Gegner)", "Heimteam"], horizontal=True)
+    target_team_id = guest_id if scout_target == "Gastteam (Gegner)" else home_id
 
-# Session State initialisieren für Datenhaltung
-if 'roster_df' not in st.session_state:
-    st.session_state.roster_df = None
+    col_date, col_time = st.columns(2)
+    with col_date: date_input = st.date_input("Datum", datetime.date.today())
+    with col_time: time_input = st.time_input("Tip-Off", datetime.time(16, 0))
 
-# Button: Kader Laden
-if st.button("1. Kader & Stats laden"):
-    api_url = f"https://api-s.dbbl.scb.world/teams/{selected_team_id}/2025/player-stats"
-    with st.spinner("Lade Daten..."):
+    # DATEN LADEN
+    st.divider()
+    if st.button(f"2. Kader von {scout_target} laden", type="primary"):
+        api_url = f"https://api-s.dbbl.scb.world/teams/{target_team_id}/2025/player-stats"
         try:
             resp = requests.get(api_url, headers=API_HEADERS)
-            resp.raise_for_status()
             data = resp.json()
-            raw_data = data if isinstance(data, list) else data.get('data', [])
-            
-            if raw_data:
-                df = pd.json_normalize(raw_data)
+            raw = data if isinstance(data, list) else data.get('data', [])
+            if raw:
+                df = pd.json_normalize(raw)
                 df.columns = [str(c).lower() for c in df.columns]
                 
-                # BASIS-DATEN AUFBEREITEN
+                # Mapping
                 col_map = {
                     'firstname': ['person.firstname', 'firstname'],
                     'lastname': ['person.lastname', 'lastname'],
                     'shirtnumber': ['jerseynumber', 'shirtnumber', 'no'],
-                    'id': ['id', 'person.id', 'personid'], # WICHTIG FÜR METADATEN API
-                    'ppg': ['pointspergame'],
-                    'tot_pg': ['totalreboundspergame'],
-                    '3m': ['threepointshotsmadepergame'],
-                    '3a': ['threepointshotsattemptedpergame'],
-                    '3pct': ['threepointshotsuccesspercent'],
-                    'ftpct': ['freethrowssuccesspercent'],
-                    'fta': ['freethrowsattemptedpergame']
+                    'id': ['id', 'person.id', 'personid'],
+                    'ppg': ['pointspergame'], 'tot': ['totalreboundspergame'],
+                    '3m': ['threepointshotsmadepergame'], '3pct': ['threepointshotsuccesspercent'], '3a': ['threepointshotsattemptedpergame'],
+                    'ftpct': ['freethrowssuccesspercent'], 'fta': ['freethrowsattemptedpergame'],
+                    'min_sec': ['secondsplayedpergame', 'minutespergame', 'avgminutes']
                 }
-                
                 final_cols = {}
-                for target, possibilities in col_map.items():
-                    for p in possibilities:
-                        matches = [c for c in df.columns if p in c]
-                        if matches:
-                            final_cols[target] = sorted(matches, key=len)[0]
+                for t, p_list in col_map.items():
+                    for p in p_list:
+                        m = [c for c in df.columns if p in c]
+                        if m:
+                            final_cols[t] = sorted(m, key=len)[0]
                             break
                 
-                # Name & Nummer
                 fn = df[final_cols['firstname']].fillna('') if 'firstname' in final_cols else ''
                 ln = df[final_cols['lastname']].fillna('') if 'lastname' in final_cols else ''
                 df['NAME_FULL'] = (fn + " " + ln).str.strip()
+                df['NR'] = df[final_cols['shirtnumber']].fillna('-').astype(str).str.replace('.0', '', regex=False) if 'shirtnumber' in final_cols else '-'
+                df['PLAYER_ID'] = df[final_cols['id']].astype(str) if 'id' in final_cols else ""
                 
-                if 'shirtnumber' in final_cols:
-                    df['NR'] = df[final_cols['shirtnumber']].fillna('-').astype(str).str.replace('.0', '', regex=False)
-                else: df['NR'] = '-'
-
-                if 'id' in final_cols: df['PLAYER_ID'] = df[final_cols['id']].astype(str)
-                else: df['PLAYER_ID'] = ""
-
-                # Stats für Vorauswahl (Top Scorer etc.)
-                def get_val(key): return pd.to_numeric(df[final_cols[key]], errors='coerce').fillna(0) if key in final_cols else 0.0
-                df['PPG'] = get_val('ppg')
-                df['TOT'] = get_val('tot_pg')
-                df['3M'] = get_val('3m')
-                df['3PCT'] = get_val('3pct')
-                df['FTPCT'] = get_val('ftpct')
-                df['FTA'] = get_val('fta')
-
-                # Vorauswahl (Top Scorer, Rebounder, 3er)
-                top_scorer = df.sort_values(by='PPG', ascending=False).head(3)
-                best_reb = df.sort_values(by='TOT', ascending=False).head(3)
+                def get_v(k): return pd.to_numeric(df[final_cols[k]], errors='coerce').fillna(0) if k in final_cols else 0.0
+                df['PPG'] = get_v('ppg'); df['TOT'] = get_v('tot'); 
+                df['3M'] = get_v('3m'); df['3PCT'] = get_v('3pct'); df['3A'] = get_v('3a')
+                df['FTPCT'] = get_v('ftpct'); df['FTA'] = get_v('fta')
                 
-                mask_3p = df['3M'] >= 0.5
-                best_3pt = df[mask_3p].sort_values(by='3PCT', ascending=False).head(3)
-                if best_3pt.empty: best_3pt = df.sort_values(by='3PCT', ascending=False).head(3)
+                # Keine Vorauswahl
+                df['select'] = False
                 
-                # Wir setzen standardmäßig Häkchen bei den Key Playern
-                key_ids = pd.concat([top_scorer, best_reb, best_3pt])['PLAYER_ID'].unique().tolist()
-                df['select'] = df['PLAYER_ID'].apply(lambda x: True if x in key_ids else False)
-
-                # Speichern
                 st.session_state.roster_df = df
-                st.session_state.raw_data_backup = df # Für die volle Stat-Berechnung später
-            else:
-                st.error("Keine Spieler gefunden.")
-        except Exception as e:
-            st.error(f"Fehler: {e}")
+                
+                # Meta Daten (Formatierung des Datums hier!)
+                st.session_state.game_meta = {
+                    'home_name': home_name, 'home_logo': get_logo_url(home_id),
+                    'guest_name': guest_name, 'guest_logo': get_logo_url(guest_id),
+                    'date': date_input.strftime('%d.%m.%Y'), # Hier wird das Datum formatiert
+                    'time': time_input.strftime('%H:%M')
+                }
 
-# 2. AUSWAHL ANZEIGEN (Wenn geladen)
-if st.session_state.roster_df is not None:
-    st.divider()
-    st.subheader("2. Spieler auswählen")
-    st.info("Setze Haken bei den Spielern, für die du eine Einzelkarte erstellen willst.")
-    
-    # Data Editor erlaubt das Ankreuzen
-    edited_df = st.data_editor(
-        st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT', 'PLAYER_ID']],
-        column_config={
-            "select": st.column_config.CheckboxColumn("Scouten?", default=True),
-            "PLAYER_ID": None # ID verstecken
-        },
-        disabled=["NR", "NAME_FULL", "PPG", "TOT"],
-        hide_index=True,
-        use_container_width=True
-    )
-    
-    # IDs der ausgewählten Spieler holen
-    selected_ids = edited_df[edited_df['select']]['PLAYER_ID'].tolist()
-    
-    # Button: Analyse Starten
-    st.divider()
-    if st.button("3. Einzelanalyse generieren"):
-        st.session_state.selected_ids = selected_ids
-        st.rerun()
+        except: st.error("Fehler beim Laden der Daten.")
 
-# 3. ANALYSE & INPUT FORMULAR
-if 'selected_ids' in st.session_state and st.session_state.roster_df is not None:
-    st.subheader("3. Scouting Bericht & Notizen")
-    
-    # Wir filtern das Original-DF nach den ausgewählten IDs
-    # Aber wir brauchen wieder die Vollen Spalten für die Tabelle (2P, 3P, etc)
-    # Da wir oben nur eine Light-Version hatten, nehmen wir das backup oder berechnen neu.
-    # Einfacher: Wir nutzen das `roster_df` (das alle Spalten hat, auch die versteckten) 
-    # und mappen jetzt nochmal sauber alles für die HTML Ausgabe.
-    
-    full_df = st.session_state.roster_df
-    final_selection = full_df[full_df['PLAYER_ID'].isin(st.session_state.selected_ids)].copy()
-    
-    # Mapping wiederholen/erweitern für alle Stats (falls oben nicht alle mapped waren)
-    # Um sicher zu gehen, nutzen wir die Rohdaten Logik für die Anzeige
-    col_map_full = {
-        'min_sec_pg': ['secondsplayedpergame'],
-        '2pm_pg': ['twopointshotsmadepergame'], '2pa_pg': ['twopointshotsattemptedpergame'], '2pct': ['twopointshotsuccesspercent'],
-        '3pm_pg': ['threepointshotsmadepergame'], '3pa_pg': ['threepointshotsattemptedpergame'], '3pct': ['threepointshotsuccesspercent'],
-        'ftm_pg': ['freethrowsmadepergame'], 'fta_pg': ['freethrowsattemptedpergame'], 'ftpct': ['freethrowssuccesspercent'],
-        'dr_pg': ['defensivereboundspergame'], 'or_pg': ['offensivereboundspergame'], 'tot_pg': ['totalreboundspergame'],
-        'as_pg': ['assistspergame'], 'to_pg': ['turnoverspergame'], 'st_pg': ['stealspergame'], 'pf_pg': ['foulscommittedpergame']
-    }
-    
-    cols = full_df.columns
-    final_cols_full = {}
-    for target, possibilities in col_map_full.items():
-        for p in possibilities:
-            matches = [c for c in cols if p in c]
-            if matches:
-                final_cols_full[target] = sorted(matches, key=len)[0]
-                break
-    
-    def get_val(row, key, decimals=1):
-        if key in final_cols_full: return pd.to_numeric(row[final_cols_full[key]], errors='coerce') #.fillna(0) -> NaN lassen für Formatierung? Nein, 0 ist ok
-        return 0.0
-    
-    # WICHTIG: Das Formular
-    # Alle Inputs kommen hier rein. Erst beim Klick auf "Update" wird neu geladen.
-    with st.form("scouting_input_form"):
-        st.write("Schreibe deine Notizen in die Felder. Klicke unten auf **'Ansicht aktualisieren'**, um die PDFs zu generieren.")
-        
-        # Container für Ergebnisse sammeln
-        results = []
+    # AUSWAHL & INPUT
+    if st.session_state.roster_df is not None:
+        st.subheader("3. Spieler auswählen")
+        edited = st.data_editor(st.session_state.roster_df[['select', 'NR', 'NAME_FULL', 'PPG', 'TOT', 'PLAYER_ID']],
+                                column_config={"select": st.column_config.CheckboxColumn("Scout?", default=False), "PLAYER_ID": None},
+                                disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
+        selected_ids = edited[edited['select']]['PLAYER_ID'].tolist()
 
-        for index, row in final_selection.iterrows():
-            p_id = str(row['NR']) + "_" + str(row['PLAYER_ID'])
-            
-            st.markdown(f"#### #{row['NR']} {row['NAME_FULL']}")
-            
-            # Inputs
-            c1, c2 = st.columns(2)
-            with c1:
-                st.caption("Notizen (Schwarz)")
-                l1 = st.text_input("Zeile 1 L", key=f"l1_{p_id}")
-                l2 = st.text_input("Zeile 2 L", key=f"l2_{p_id}")
-                l3 = st.text_input("Zeile 3 L", key=f"l3_{p_id}")
-                l4 = st.text_input("Zeile 4 L", key=f"l4_{p_id}")
-            with c2:
-                st.caption("Defense/Calls (Rot)")
-                r1 = st.text_input("Zeile 1 R", key=f"r1_{p_id}")
-                r2 = st.text_input("Zeile 2 R", key=f"r2_{p_id}")
-                r3 = st.text_input("Zeile 3 R", key=f"r3_{p_id}")
-                r4 = st.text_input("Zeile 4 R", key=f"r4_{p_id}")
-            
+        if selected_ids:
             st.divider()
+            st.subheader("4. Scouting Bericht & Notizen")
             
-            # Daten sammeln für HTML Generierung (passiert erst nach Submit)
-            player_data = row.to_dict()
-            
-            # Stats aufbereiten für HTML
-            player_data['MIN_DISPLAY'] = "00:00"
-            if 'min_sec_pg' in final_cols_full:
-                 t = get_val(row, 'min_sec_pg'); 
-                 player_data['MIN_DISPLAY'] = f"{int(t//60):02d}:{int(t%60):02d}" if t > 48 else f"{int(t)}:{int((t%1)*60):02d}"
+            with st.form("input_form"):
+                st.write("Notizen eingeben:")
+                full_df = st.session_state.roster_df
+                selection = full_df[full_df['PLAYER_ID'].isin(selected_ids)]
+                
+                # Mapping Detail
+                col_map_det = {
+                    'min_sec': ['secondsplayedpergame', 'minutespergame'],
+                    '2m': ['twopointshotsmadepergame'], '2a': ['twopointshotsattemptedpergame'], '2pct': ['twopointshotsuccesspercent'],
+                    '3m': ['threepointshotsmadepergame'], '3a': ['threepointshotsattemptedpergame'], '3pct': ['threepointshotsuccesspercent'],
+                    'ftm': ['freethrowsmadepergame'], 'fta': ['freethrowsattemptedpergame'], 'ftpct': ['freethrowssuccesspercent'],
+                    'dr': ['defensivereboundspergame'], 'or': ['offensivereboundspergame'], 'tot': ['totalreboundspergame'],
+                    'as': ['assistspergame'], 'to': ['turnoverspergame'], 'st': ['stealspergame'], 'pf': ['foulscommittedpergame']
+                }
+                cols = full_df.columns
+                final_cols_det = {}
+                for t, plist in col_map_det.items():
+                    for p in plist:
+                        m = [c for c in cols if p in c]
+                        if m: final_cols_det[t] = sorted(m, key=len)[0]; break
+                
+                def get_val_row(r, k): return pd.to_numeric(r[final_cols_det[k]], errors='coerce') if k in final_cols_det else 0.0
+                
+                results_data = []
 
-            def fix_pct(val): return round(val * 100, 1) if val <= 1.0 and val > 0 else round(val, 1)
+                for _, row in selection.iterrows():
+                    pid = row['PLAYER_ID']
+                    st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
+                    c1, c2 = st.columns(2)
+                    l1 = c1.text_input("L1", key=f"l1_{pid}"); r1 = c2.text_input("R1", key=f"r1_{pid}")
+                    l2 = c1.text_input("L2", key=f"l2_{pid}"); r2 = c2.text_input("R2", key=f"r2_{pid}")
+                    l3 = c1.text_input("L3", key=f"l3_{pid}"); r3 = c2.text_input("R3", key=f"r3_{pid}")
+                    l4 = c1.text_input("L4", key=f"l4_{pid}"); r4 = c2.text_input("R4", key=f"r4_{pid}")
+                    st.markdown("---")
+                    
+                    d = row.to_dict()
+                    d['MIN_DISPLAY'] = format_minutes(get_val_row(row, 'min_sec'))
+                    def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
+                    
+                    d['2M']=round(get_val_row(row,'2m'),1); d['2A']=round(get_val_row(row,'2a'),1); d['2%']=pct(get_val_row(row,'2pct'))
+                    d['3M']=round(get_val_row(row,'3m'),1); d['3A']=round(get_val_row(row,'3a'),1); d['3%']=pct(get_val_row(row,'3pct'))
+                    d['FTM']=round(get_val_row(row,'ftm'),1); d['FTA']=round(get_val_row(row,'fta'),1); d['FT%']=pct(get_val_row(row,'ftpct'))
+                    d['DR']=round(get_val_row(row,'dr'),1); d['OR']=round(get_val_row(row,'or'),1); d['TOT']=round(get_val_row(row,'tot'),1)
+                    d['AS']=round(get_val_row(row,'as'),1); d['TO']=round(get_val_row(row,'to'),1); d['ST']=round(get_val_row(row,'st'),1); d['PF']=round(get_val_row(row,'pf'),1)
+                    
+                    notes = {'l1':l1,'l2':l2,'l3':l3,'l4':l4,'r1':r1,'r2':r2,'r3':r3,'r4':r4}
+                    results_data.append((d, notes))
+                
+                st.subheader("5. Grafiken anhängen")
+                uploaded_files = st.file_uploader("Plays / Bilder hochladen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
-            player_data['2M'] = round(get_val(row, '2pm_pg'), 1); player_data['2A'] = round(get_val(row, '2pa_pg'), 1); player_data['2%'] = fix_pct(get_val(row, '2pct'))
-            player_data['3M'] = round(get_val(row, '3pm_pg'), 1); player_data['3A'] = round(get_val(row, '3pa_pg'), 1); player_data['3%'] = fix_pct(get_val(row, '3pct'))
-            player_data['FTM'] = round(get_val(row, 'ftm_pg'), 1); player_data['FTA'] = round(get_val(row, 'fta_pg'), 1); player_data['FT%'] = fix_pct(get_val(row, 'ftpct'))
-            player_data['DR'] = round(get_val(row, 'dr_pg'), 1); player_data['OR'] = round(get_val(row, 'or_pg'), 1); player_data['TOT'] = round(get_val(row, 'tot_pg'), 1)
-            player_data['AS'] = round(get_val(row, 'as_pg'), 1); player_data['TO'] = round(get_val(row, 'to_pg'), 1); 
-            player_data['ST'] = round(get_val(row, 'st_pg'), 1); player_data['PF'] = round(get_val(row, 'pf_pg'), 1)
+                submitted = st.form_submit_button("PDF Ansicht erstellen", type="primary")
             
-            notes = {'l1':l1, 'l2':l2, 'l3':l3, 'l4':l4, 'r1':r1, 'r2':r2, 'r3':r3, 'r4':r4}
-            
-            results.append((player_data, notes))
+            if submitted:
+                # HTML ZUSAMMENBAUEN
+                final_html = generate_header_html(st.session_state.game_meta)
+                final_html += generate_top3_html(full_df)
+                
+                for p_data, p_notes in results_data:
+                    meta = get_player_metadata(p_data['PLAYER_ID'])
+                    final_html += generate_card_html(p_data, meta, p_notes)
+                
+                if uploaded_files:
+                    final_html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
+                    for up_file in uploaded_files:
+                        bytes_data = up_file.getvalue()
+                        b64 = base64.b64encode(bytes_data).decode()
+                        final_html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max_width:100%; border:1px solid #ccc;'></div>"
+                    final_html += "</div>"
+                
+                st.session_state.final_html = final_html
+                st.session_state.print_mode = True
+                st.rerun()
 
-        # SUBMIT BUTTON
-        update_btn = st.form_submit_button("Ansicht aktualisieren (PDF erstellen)", type="primary")
-
-    # WENN SUBMIT GEDRÜCKT -> HTML GENERIEREN
-    if update_btn:
-        st.success("Ansicht aktualisiert! Scrolle nach unten für die Druckansicht.")
-        st.markdown("---")
-        st.subheader("🖨️ Druckansicht (Strg + P)")
-        
-        for p_data, p_notes in results:
-            # 1. Metadaten Live holen (Bild, Größe)
-            # Wir machen das hier, damit wir nicht 100 Calls am Anfang machen, sondern nur für die Auswahl
-            meta = get_player_metadata(p_data['PLAYER_ID'])
-            
-            # 2. HTML Generieren
-            html_code = generate_card_html(p_data, meta, p_notes)
-            st.markdown(html_code, unsafe_allow_html=True)
+# --- ANSICHT: DRUCK ---
+else:
+    if st.button("⬅️ Zurück zur Bearbeitung"):
+        st.session_state.print_mode = False
+        st.rerun()
+    
+    st.markdown(st.session_state.final_html, unsafe_allow_html=True)
+    
+    st.markdown("""
+        <style>
+            @media print {
+                [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton {
+                    display: none !important;
+                }
+                .block-container {
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    max_width: 100% !important;
+                }
+            }
+        </style>
+    """, unsafe_allow_html=True)
