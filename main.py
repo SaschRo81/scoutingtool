@@ -566,12 +566,11 @@ if not st.session_state.print_mode:
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
                 st.session_state.final_html = html
-                
-                if HAS_PDFKIT:
+             if HAS_PDFKIT:
     try:
         options = {
             'page-size': 'A4',
-            'orientation': 'Landscape',  # 👉 NEU: Querformat
+            'orientation': 'Landscape',  # Querformat
             'margin-top': '10mm',
             'margin-right': '10mm',
             'margin-bottom': '10mm',
@@ -600,7 +599,7 @@ if not st.session_state.print_mode:
                 }}
 
                 th, td {{
-                    padding: 2px 4px;   /* 👉 wenig Padding spart Breite */
+                    padding: 2px 4px;   /* wenig Padding spart Breite */
                 }}
 
                 th {{
@@ -617,8 +616,9 @@ if not st.session_state.print_mode:
     except Exception:
         st.session_state.pdf_bytes = None
 
-                st.session_state.print_mode = True
-                st.rerun()
+    # 👉 dieser Teil gehört NICHT in try/except
+    st.session_state.print_mode = True
+    st.rerun()
 
 else:
     c1, c2 = st.columns([1, 4])
@@ -628,70 +628,77 @@ else:
             st.rerun()
     with c2:
         if st.session_state.pdf_bytes:
-             st.download_button("📄 PDF Herunterladen", data=st.session_state.pdf_bytes, file_name=st.session_state.report_filename, mime="application/pdf")
+            st.download_button(
+                "📄 PDF Herunterladen",
+                data=st.session_state.pdf_bytes,
+                file_name=st.session_state.report_filename,
+                mime="application/pdf",
+            )
         elif HAS_PDFKIT:
-             st.warning("PDF konnte nicht erstellt werden.")
+            st.warning("PDF konnte nicht erstellt werden.")
 
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
     st.markdown(
-    """
-    <style>
-    @media print {
-        @page { size: A4 landscape; margin: 5mm; }  /* 👉 Querformat */
+        """
+        <style>
+        @media print {
+            @page { size: A4 landscape; margin: 5mm; }
 
-        body {
-            margin: 0;
-            padding: 0;
-            zoom: 0.6;                    /* etwas kleiner, aber lesbar */
-            font-family: Arial, sans-serif;
-            font-size: 11pt;
+            body {
+                margin: 0;
+                padding: 0;
+                zoom: 0.6;
+                font-family: Arial, sans-serif;
+                font-size: 11pt;
+            }
+
+            table {
+                width: 100% !important;
+                table-layout: auto !important;
+                font-size: 12pt !important;
+            }
+
+            th, td {
+                padding: 2px 4px !important;
+            }
+
+            th {
+                font-weight: bold;
+            }
+
+            .block-container {
+                padding: 0 !important;
+                max-width: none !important;
+                width: 100% !important;
+                overflow: visible !important;
+            }
+
+            [data-testid="stHeader"],
+            [data-testid="stSidebar"],
+            [data-testid="stToolbar"],
+            footer,
+            .stButton,
+            .stDownloadButton {
+                display: none !important;
+            }
+
+            ::-webkit-scrollbar { display: none; }
+
+            .stApp,
+            [data-testid="stVerticalBlock"],
+            div {
+                overflow: visible !important;
+                height: auto !important;
+            }
+
+            img {
+                max-width: 100% !important;
+                height: auto !important;
+            }
         }
-
-        table {
-            width: 100% !important;
-            table-layout: auto !important;
-            font-size: 12pt !important;   /* größer als Text, aber nicht übertrieben */
-        }
-
-        th, td {
-            padding: 2px 4px !important;  /* schmaler => mehr Spalten passen */
-        }
-
-        th {
-            font-weight: bold;
-        }
-
-        .block-container {
-            padding: 0 !important;
-            max-width: none !important;
-            width: 100% !important;
-            overflow: visible !important;
-        }
-
-        [data-testid="stHeader"],
-        [data-testid="stSidebar"],
-        [data-testid="stToolbar"],
-        footer,
-        .stButton,
-        .stDownloadButton {
-            display: none !important;
-        }
-
-        ::-webkit-scrollbar { display: none; }
-
-        .stApp,
-        [data-testid="stVerticalBlock"],
-        div {
-            overflow: visible !important;
-            height: auto !important;
-        }
-
-        img {
-            max-width: 100% !important;
-            height: auto !important;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+   
+               
