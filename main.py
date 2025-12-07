@@ -629,74 +629,69 @@ else:
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
     st.markdown("""
     <style>
-    st.markdown("""
-<style>
-@media print {
-    @page { size: A4; margin: 5mm; }
+st.markdown(
+    """
+    <style>
+    @media print {
+        @page { size: A4; margin: 5mm; }
 
-    body {
-        margin: 0;
-        padding: 0;
-        zoom: 0.65;
-        font-family: Arial, sans-serif;
-        font-size: 11pt;
+        body {
+            margin: 0;
+            padding: 0;
+            zoom: 0.65;
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
+        }
+
+        /* ✅ Tabellen größer machen */
+        table {
+            width: 100% !important;
+            table-layout: auto !important;
+            font-size: 13pt !important;
+        }
+
+        th {
+            font-size: 13.5pt !important;
+            font-weight: bold;
+        }
+
+        td {
+            font-size: 13pt !important;
+        }
+
+        .block-container {
+            padding: 0 !important;
+            max-width: none !important;
+            width: 100% !important;
+            overflow: visible !important;
+        }
+
+        [data-testid="stHeader"],
+        [data-testid="stSidebar"],
+        [data-testid="stToolbar"],
+        footer,
+        .stButton,
+        .stDownloadButton {
+            display: none !important;
+        }
+
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        .stApp,
+        [data-testid="stVerticalBlock"],
+        div {
+            overflow: visible !important;
+            height: auto !important;
+        }
+
+        img {
+            max-width: 100% !important;
+            height: auto !important;
+        }
     }
-
-    /* ✅ TABELLENSCHRIFT EXTRA GRÖSSER FÜR DRUCK */
-    table {
-        font-size: 13pt !important;
-    }
-
-    th {
-        font-size: 13.5pt !important;
-        font-weight: bold;
-    }
-
-    td {
-        font-size: 13pt !important;
-    }
-
-    .block-container {
-        padding: 0 !important;
-        max-width: none !important;
-        width: 100% !important;
-        overflow: visible !important;
-    }
-
-    [data-testid="stHeader"],
-    [data-testid="stSidebar"],
-    [data-testid="stToolbar"],
-    footer,
-    .stButton,
-    .stDownloadButton {
-        display: none !important;
-    }
-
-    table {
-        width: 100% !important;
-        table-layout: auto !important;
-    }
-
-    ::-webkit-scrollbar {
-        display: none;
-    }
-
-    .stApp,
-    [data-testid="stVerticalBlock"],
-    div {
-        overflow: visible !important;
-        height: auto !important;
-    }
-
-    img {
-        max-width: 100% !important;
-        height: auto !important;
-    }
-}
-</style>
-""", unsafe_allow_html=True)
-
     </style>
-    """, unsafe_allow_html=True)
-
-
+    """,
+    unsafe_allow_html=True,
+)
