@@ -627,9 +627,7 @@ else:
              st.warning("PDF konnte nicht erstellt werden.")
 
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
-    st.markdown("""
-    <style>
-st.markdown(
+    st.markdown(
     """
     <style>
     @media print {
@@ -643,7 +641,6 @@ st.markdown(
             font-size: 11pt;
         }
 
-        /* ✅ Tabellen größer machen */
         table {
             width: 100% !important;
             table-layout: auto !important;
@@ -693,5 +690,6 @@ st.markdown(
     }
     </style>
     """,
-    unsafe_allow_html=True,
+    unsafe_allow_html=True
 )
+
