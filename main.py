@@ -570,7 +570,43 @@ if not st.session_state.print_mode:
                 if HAS_PDFKIT:
                     try:
                         options = {'page-size': 'A4', 'margin-top': '10mm', 'margin-right': '10mm', 'margin-bottom': '10mm', 'margin-left': '10mm', 'encoding': "UTF-8", 'no-outline': None}
-                        full_html = f"<!DOCTYPE html><html><head><meta charset='utf-8'><style>body {{ font-family: Arial, sans-serif; }}</style></head><body>{html}</body></html>"
+                        full_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
+        }}
+
+        /* ✅ TABELLEN GEZIELT GRÖSSER */
+        table {{
+            font-size: 13pt;
+            border-collapse: collapse;
+        }}
+
+        th {{
+            font-size: 13.5pt;
+            font-weight: bold;
+        }}
+
+        td {{
+            font-size: 13pt;
+        }}
+
+        th, td {{
+            padding: 6px 8px;
+        }}
+    </style>
+</head>
+<body>
+    {html}
+</body>
+</html>
+"""
+
                         st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, options=options)
                     except Exception:
                         st.session_state.pdf_bytes = None
@@ -662,4 +698,5 @@ else:
 
     </style>
     """, unsafe_allow_html=True)
+
 
