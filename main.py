@@ -565,23 +565,70 @@ if not st.session_state.print_mode:
                     html += "</div>"
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
+                            if submitted:
+                st.session_state.facts_offense = edited_off
+                st.session_state.facts_defense = edited_def
+                st.session_state.facts_about = edited_abt
+                
+                # Report Filename (Team Name)
+                if scout_target == "Gastteam (Gegner)":
+                    team_name_clean = guest_name.replace(" ", "_")
+                else:
+                    team_name_clean = home_name.replace(" ", "_")
+                st.session_state.report_filename = f"Scouting_Report_{team_name_clean}.pdf"
+                
+                for item in form_results:
+                    pid = item['pid']
+                    st.session_state.saved_colors[pid] = item['color']
+                    for k, v in item['notes'].items():
+                        st.session_state.saved_notes[f"{k}_{pid}"] = v
+
+                color_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
+                full_df = st.session_state.roster_df
+                html = generate_header_html(st.session_state.game_meta)
+                html += generate_top3_html(full_df)
+                
+                for item in form_results:
+                    meta = get_player_metadata(item['pid'])
+                    c_hex = color_map[item['color']]
+                    html += generate_card_html(item['row'].to_dict(), meta, item['notes'], c_hex)
+                
+                html += generate_team_stats_html(st.session_state.team_stats)
+                
+                if uploaded_files:
+                    html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
+                    for up in uploaded_files:
+                        b64 = base64.b64encode(up.getvalue()).decode()
+                        html += (
+                            "<div style='margin-bottom:20px;'>"
+                            f"<img src='data:image/png;base64,{b64}' "
+                            "style='max-width:100%; border:1px solid #ccc;'>"
+                            "</div>"
+                        )
+                    html += "</div>"
+                
+                html += generate_custom_sections_html(
+                    st.session_state.facts_offense,
+                    st.session_state.facts_defense,
+                    st.session_state.facts_about,
+                )
                 st.session_state.final_html = html
 
+                # ---------- PDF ERZEUGEN MIT PDFKIT ----------
                 if HAS_PDFKIT:
-    try:
-        options = {
-            'page-size': 'A4',
-            'orientation': 'Landscape',
-            'margin-top': '10mm',
-            'margin-right': '10mm',
-            'margin-bottom': '10mm',
-            'margin-left': '10mm',
-            'encoding': "UTF-8",
-            'no-outline': None,
-        }
+                    try:
+                        options = {
+                            'page-size': 'A4',
+                            'orientation': 'Landscape',  # Querformat
+                            'margin-top': '10mm',
+                            'margin-right': '10mm',
+                            'margin-bottom': '10mm',
+                            'margin-left': '10mm',
+                            'encoding': "UTF-8",
+                            'no-outline': None,
+                        }
 
-        full_html = f"""
-<!DOCTYPE html>
+                        full_html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset='utf-8'>
@@ -610,15 +657,19 @@ if not st.session_state.print_mode:
 <body>
     {html}
 </body>
-</html>
-"""
-        st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, options=options)
+</html>"""
+                        st.session_state.pdf_bytes = pdfkit.from_string(
+                            full_html, False, options=options
+                        )
+                    except Exception:
+                        st.session_state.pdf_bytes = None
+                else:
+                    st.session_state.pdf_bytes = None
 
-    except Exception:
-        st.session_state.pdf_bytes = None
+                # In den Print-Modus wechseln
+                st.session_state.print_mode = True
+                st.rerun()
 
-    st.session_state.print_mode = True
-    st.rerun()
 
 else:
     c1, c2 = st.columns([1, 4])
@@ -702,3 +753,4 @@ else:
         """,
         unsafe_allow_html=True
     )
+
