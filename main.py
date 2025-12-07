@@ -566,11 +566,12 @@ if not st.session_state.print_mode:
                 
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
                 st.session_state.final_html = html
-             if HAS_PDFKIT:
+
+            if HAS_PDFKIT:
     try:
         options = {
             'page-size': 'A4',
-            'orientation': 'Landscape',  # Querformat
+            'orientation': 'Landscape',
             'margin-top': '10mm',
             'margin-right': '10mm',
             'margin-bottom': '10mm',
@@ -580,43 +581,42 @@ if not st.session_state.print_mode:
         }
 
         full_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset='utf-8'>
-            <style>
-                body {{
-                    font-family: Arial, sans-serif;
-                    font-size: 11pt;
-                }}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
+        }}
 
-                /* Tabellen etwas größer, aber kompakt */
-                table {{
-                    width: 100%;
-                    table-layout: auto;
-                    font-size: 12pt;
-                    border-collapse: collapse;
-                }}
+        table {{
+            width: 100%;
+            table-layout: auto;
+            font-size: 12pt;
+            border-collapse: collapse;
+        }}
 
-                th, td {{
-                    padding: 2px 4px;   /* wenig Padding spart Breite */
-                }}
+        th, td {{
+            padding: 2px 4px;
+        }}
 
-                th {{
-                    font-weight: bold;
-                }}
-            </style>
-        </head>
-        <body>
-            {html}
-        </body>
-        </html>
-        """
+        th {{
+            font-weight: bold;
+        }}
+    </style>
+</head>
+<body>
+    {html}
+</body>
+</html>
+"""
         st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, options=options)
+
     except Exception:
         st.session_state.pdf_bytes = None
 
-    # 👉 dieser Teil gehört NICHT in try/except
     st.session_state.print_mode = True
     st.rerun()
 
@@ -626,18 +626,20 @@ else:
         if st.button("⬅️ Zurück (Daten bleiben erhalten)"):
             st.session_state.print_mode = False
             st.rerun()
+
     with c2:
         if st.session_state.pdf_bytes:
             st.download_button(
                 "📄 PDF Herunterladen",
                 data=st.session_state.pdf_bytes,
                 file_name=st.session_state.report_filename,
-                mime="application/pdf",
+                mime="application/pdf"
             )
         elif HAS_PDFKIT:
             st.warning("PDF konnte nicht erstellt werden.")
 
     st.markdown(st.session_state.final_html, unsafe_allow_html=True)
+
     st.markdown(
         """
         <style>
@@ -698,7 +700,6 @@ else:
         }
         </style>
         """,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
-   
-               
+              
