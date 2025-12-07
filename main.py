@@ -14,7 +14,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 # --- VERSION & KONFIGURATION ---
-VERSION = "v3.5 (Layout Optimize & Bigger Stats)"
+VERSION = "v3.6 (Fonts >=12px, Filename, Fix Layout)"
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
 
 API_HEADERS = {
@@ -68,6 +68,8 @@ if 'roster_df' not in st.session_state: st.session_state.roster_df = None
 if 'team_stats' not in st.session_state: st.session_state.team_stats = None
 if 'game_meta' not in st.session_state: st.session_state.game_meta = {}
 if 'optimized_images' not in st.session_state: st.session_state.optimized_images = {}
+if 'report_filename' not in st.session_state: st.session_state.report_filename = "scouting_report.pdf"
+
 if 'saved_notes' not in st.session_state: st.session_state.saved_notes = {}
 if 'saved_colors' not in st.session_state: st.session_state.saved_colors = {}
 
@@ -141,16 +143,16 @@ def generate_header_html(meta):
         DBBL Scouting Pro by Sascha Rosanke
     </div>
     <div style="border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; text-align: center;">
-        <h1 style="margin: 0; padding: 0; font-size: 24px; color: #000; font-weight: bold;">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
+        <h1 style="margin: 0; padding: 0; font-size: 26px; color: #000; font-weight: bold;">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
         <br>
         <div style="display: flex; align-items: center; justify-content: center; gap: 40px;">
             <div style="text-align: center;">
-                <img src="{meta['home_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
+                <img src="{meta['home_logo']}" style="height: 60px; max-width: 150px; object-fit: contain;">
                 <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['home_name']}</div>
             </div>
             <div style="font-size: 24px; font-weight: bold; color: #333;">VS</div>
             <div style="text-align: center;">
-                <img src="{meta['guest_logo']}" style="height: 50px; max-width: 150px; object-fit: contain;">
+                <img src="{meta['guest_logo']}" style="height: 60px; max-width: 150px; object-fit: contain;">
                 <div style="font-weight: bold; margin-top: 5px; font-size: 16px;">{meta['guest_name']}</div>
             </div>
         </div>
@@ -173,11 +175,11 @@ def generate_top3_html(df):
     fouls = df.sort_values(by='PF', ascending=False).head(3)
 
     box_style = "flex: 1; border: 1px solid #ccc; padding: 0;"
-    header_base = "padding: 2px 4px; font-weight: bold; font-size: 12px; border-bottom: 1px solid #eee; font-family: Arial, sans-serif;"
+    header_base = "padding: 4px; font-weight: bold; font-size: 13px; border-bottom: 1px solid #eee; font-family: Arial, sans-serif;"
     table_style = "width:100%; font-size:12px; border-collapse:collapse; font-family: Arial, sans-serif;"
-    th_style = "text-align:center; color:#555; padding:2px; font-size:12px; background-color: #f9f9f9; border-bottom: 1px solid #eee;"
-    td_val = "text-align:center; padding:2px; border-bottom:1px solid #eee;"
-    td_name = "text-align:left; padding:2px; border-bottom:1px solid #eee; white-space:nowrap; overflow:hidden; max-width:90px;"
+    th_style = "text-align:center; color:#555; padding:3px; font-size:12px; background-color: #f9f9f9; border-bottom: 1px solid #eee;"
+    td_val = "text-align:center; padding:3px; border-bottom:1px solid #eee;"
+    td_name = "text-align:left; padding:3px; border-bottom:1px solid #eee; white-space:nowrap; overflow:hidden; max-width:90px;"
 
     def build_box(d, headers, keys, bolds, color, icon, title):
         h = f"<div style='{box_style}'>"
@@ -190,10 +192,8 @@ def generate_top3_html(df):
             for i, k in enumerate(keys):
                 style = td_val
                 val = r[k]
-                
-                # --- FIX: KEIN # MEHR ---
                 if k == 'NR':
-                    val = f"{val}" # Nur die Nummer
+                    val = f"{val}"
                 elif k == 'NAME_FULL':
                     style = td_name
                     val = r['NAME_FULL'].split(' ')[-1]
@@ -245,11 +245,11 @@ def generate_card_html(row, metadata, notes, color_code):
     
     header_style = f"background-color: {color_code}; color: white; padding: 2px 10px; font-weight: bold; font-size: 16px; display: flex; justify-content: space-between; align-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: Arial, sans-serif;"
     
-    # --- ÄNDERUNG: SCHRIFTGRÖSSE 13PX & PADDING 1PX ---
-    table_css = "width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; font-family: Arial, sans-serif;"
+    # SCHRIFTGROESSE 12px MINIMUM
+    table_css = "width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: black; font-family: Arial, sans-serif;"
     border_css = "border: 1px solid #ccc;" 
     bg_css = "background-color: #f0f0f0; -webkit-print-color-adjust: exact;"
-    # Kompaktes Padding damit alles passt
+    # Padding reduziert, damit 18 Spalten passen
     pad_style = "padding: 2px 1px;" 
 
     return f"""
@@ -259,7 +259,7 @@ def generate_card_html(row, metadata, notes, color_code):
         <span style="font-size:14px;">{height_str} m | Pos: {pos_str}</span>
     </div>
     <div style="display: flex; flex-direction: row;">
-        <!-- BILD SCHMALER GEMACHT (80px) -->
+        <!-- BILD 80px -->
         <div style="width: 80px; min-width: 80px; border-right: 1px solid #ccc;">
             <img src="{img_url}" style="width: 100%; height: 125px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
         </div>
@@ -533,6 +533,13 @@ if not st.session_state.print_mode:
                 st.session_state.facts_defense = edited_def
                 st.session_state.facts_about = edited_abt
                 
+                # Report Filename (Team Name)
+                if scout_target == "Gastteam (Gegner)":
+                    team_name_clean = guest_name.replace(" ", "_")
+                else:
+                    team_name_clean = home_name.replace(" ", "_")
+                st.session_state.report_filename = f"Scouting_Report_{team_name_clean}.pdf"
+                
                 for item in form_results:
                     pid = item['pid']
                     st.session_state.saved_colors[pid] = item['color']
@@ -579,7 +586,7 @@ else:
             st.rerun()
     with c2:
         if st.session_state.pdf_bytes:
-             st.download_button("📄 PDF Herunterladen", data=st.session_state.pdf_bytes, file_name=f"scouting_report_{datetime.date.today()}.pdf", mime="application/pdf")
+             st.download_button("📄 PDF Herunterladen", data=st.session_state.pdf_bytes, file_name=st.session_state.report_filename, mime="application/pdf")
         elif HAS_PDFKIT:
              st.warning("PDF konnte nicht erstellt werden.")
 
@@ -588,14 +595,13 @@ else:
     <style>
     @media print {
         @page { size: A4; margin: 5mm; }
-        body { margin: 0; padding: 0; zoom: 0.60; font-family: Arial, sans-serif; }
+        body { margin: 0; padding: 0; zoom: 0.55; font-family: Arial, sans-serif; }
         .block-container { padding: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
         [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stToolbar"], footer, .stButton, .stDownloadButton { display: none !important; }
-        table { width: 100% !important; table-layout: fixed !important; }
+        table { width: 100% !important; table-layout: auto !important; }
         ::-webkit-scrollbar { display: none; }
         .stApp, [data-testid="stVerticalBlock"], div { overflow: visible !important; height: auto !important; }
         img { max-width: 100% !important; height: auto !important; }
     }
     </style>
     """, unsafe_allow_html=True)
-
