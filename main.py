@@ -567,7 +567,7 @@ if not st.session_state.print_mode:
                 html += generate_custom_sections_html(st.session_state.facts_offense, st.session_state.facts_defense, st.session_state.facts_about)
                 st.session_state.final_html = html
 
-            if HAS_PDFKIT:
+                if HAS_PDFKIT:
     try:
         options = {
             'page-size': 'A4',
@@ -702,4 +702,3 @@ else:
         """,
         unsafe_allow_html=True
     )
-              
