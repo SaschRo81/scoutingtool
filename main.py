@@ -568,48 +568,54 @@ if not st.session_state.print_mode:
                 st.session_state.final_html = html
                 
                 if HAS_PDFKIT:
-                    try:
-                        options = {'page-size': 'A4', 'margin-top': '10mm', 'margin-right': '10mm', 'margin-bottom': '10mm', 'margin-left': '10mm', 'encoding': "UTF-8", 'no-outline': None}
-                        full_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset='utf-8'>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            font-size: 11pt;
-        }}
+    try:
+        options = {
+            'page-size': 'A4',
+            'orientation': 'Landscape',  # 👉 NEU: Querformat
+            'margin-top': '10mm',
+            'margin-right': '10mm',
+            'margin-bottom': '10mm',
+            'margin-left': '10mm',
+            'encoding': "UTF-8",
+            'no-outline': None,
+        }
 
-        /* ✅ TABELLEN GEZIELT GRÖSSER */
-        table {{
-            font-size: 13pt;
-            border-collapse: collapse;
-        }}
+        full_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    font-size: 11pt;
+                }}
 
-        th {{
-            font-size: 13.5pt;
-            font-weight: bold;
-        }}
+                /* Tabellen etwas größer, aber kompakt */
+                table {{
+                    width: 100%;
+                    table-layout: auto;
+                    font-size: 12pt;
+                    border-collapse: collapse;
+                }}
 
-        td {{
-            font-size: 13pt;
-        }}
+                th, td {{
+                    padding: 2px 4px;   /* 👉 wenig Padding spart Breite */
+                }}
 
-        th, td {{
-            padding: 6px 8px;
-        }}
-    </style>
-</head>
-<body>
-    {html}
-</body>
-</html>
-"""
-
-                        st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, options=options)
-                    except Exception:
-                        st.session_state.pdf_bytes = None
+                th {{
+                    font-weight: bold;
+                }}
+            </style>
+        </head>
+        <body>
+            {html}
+        </body>
+        </html>
+        """
+        st.session_state.pdf_bytes = pdfkit.from_string(full_html, False, options=options)
+    except Exception:
+        st.session_state.pdf_bytes = None
 
                 st.session_state.print_mode = True
                 st.rerun()
@@ -631,12 +637,12 @@ else:
     """
     <style>
     @media print {
-        @page { size: A4; margin: 5mm; }
+        @page { size: A4 landscape; margin: 5mm; }  /* 👉 Querformat */
 
         body {
             margin: 0;
             padding: 0;
-            zoom: 0.65;
+            zoom: 0.6;                    /* etwas kleiner, aber lesbar */
             font-family: Arial, sans-serif;
             font-size: 11pt;
         }
@@ -644,16 +650,15 @@ else:
         table {
             width: 100% !important;
             table-layout: auto !important;
-            font-size: 13pt !important;
+            font-size: 12pt !important;   /* größer als Text, aber nicht übertrieben */
+        }
+
+        th, td {
+            padding: 2px 4px !important;  /* schmaler => mehr Spalten passen */
         }
 
         th {
-            font-size: 13.5pt !important;
             font-weight: bold;
-        }
-
-        td {
-            font-size: 13pt !important;
         }
 
         .block-container {
@@ -672,9 +677,7 @@ else:
             display: none !important;
         }
 
-        ::-webkit-scrollbar {
-            display: none;
-        }
+        ::-webkit-scrollbar { display: none; }
 
         .stApp,
         [data-testid="stVerticalBlock"],
@@ -690,6 +693,5 @@ else:
     }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
-
