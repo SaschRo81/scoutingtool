@@ -92,7 +92,7 @@ CSS_STYLES = """
     .stats-table { 
         width: 100%; 
         border-collapse: collapse; 
-        font-size: 14px;  /* <--- HIER DREHEN: Vorher war 11px. Probier 13px oder 14px. */
+        font-size: 40px;  /* <--- HIER DREHEN: Vorher war 11px. Probier 13px oder 14px. */
         text-align: center; 
         color: black; 
     }
