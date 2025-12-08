@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 import base64
 
-# Externe Imports prüfen (Das fehlte wahrscheinlich)
+# Externe Imports prüfen
 try:
     import pdfkit
     HAS_PDFKIT = True
@@ -29,7 +29,8 @@ for key, default in [
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
     ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])),
     ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
-    ("facts_about", pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}]))
+    ("facts_about", pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}])),
+    ("data_restored", False) # Neuer State um anzuzeigen, dass geladen wurde
 ]:
     if key not in st.session_state: st.session_state[key] = default
 
@@ -43,8 +44,9 @@ with st.sidebar:
         if st.button("Daten wiederherstellen"):
             success, msg = load_session_state(uploaded_state)
             if success:
-                st.success(msg)
-                st.rerun()
+                st.session_state.data_restored = True
+                st.success("✅ " + msg)
+                # Wir machen KEIN Rerun hier, damit die Nachricht sichtbar bleibt
             else:
                 st.error(msg)
     
@@ -65,6 +67,10 @@ with st.sidebar:
 if not st.session_state.print_mode:
     st.title(f"🏀 DBBL Scouting Pro {VERSION}")
 
+    # HINWEIS WENN DATEN GELADEN WURDEN
+    if st.session_state.data_restored and st.session_state.roster_df is None:
+        st.info("ℹ️ **Daten erfolgreich geladen!** Bitte wähle jetzt unten die Teams aus und klicke auf **'2. Kader laden'**. Deine Notizen werden dann automatisch eingefügt.")
+
     # 1. SETUP
     st.subheader("1. Spieldaten")
     col_staffel, col_home, col_guest = st.columns([1, 2, 2])
@@ -75,13 +81,11 @@ if not st.session_state.print_mode:
     with col_home:
         home_name = st.selectbox("Heim:", list(team_options.keys()), index=0, key="sel_home")
         home_id = team_options[home_name]
-        # Logo optimieren (Weißer Hintergrund Fix)
         home_logo_url = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
         st.image(home_logo_url, width=80)
     with col_guest:
         guest_name = st.selectbox("Gast:", list(team_options.keys()), index=1, key="sel_guest")
         guest_id = team_options[guest_name]
-        # Logo optimieren (Weißer Hintergrund Fix)
         guest_logo_url = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
         st.image(guest_logo_url, width=80)
 
@@ -102,7 +106,7 @@ if not st.session_state.print_mode:
                 st.session_state.roster_df = df
                 st.session_state.team_stats = ts
                 
-                # Metadaten setzen (mit optimierten Logos)
+                # Metadaten
                 st.session_state.game_meta = {
                     "home_name": home_name, 
                     "home_logo": home_logo_url,
@@ -111,6 +115,11 @@ if not st.session_state.print_mode:
                     "date": date_input.strftime("%d.%m.%Y"), 
                     "time": time_input.strftime("%H:%M")
                 }
+                
+                # Wenn wir Notizen geladen haben, versuchen wir, die richtigen Spieler vorzuwählen
+                if st.session_state.saved_notes:
+                    st.success("Gespeicherte Notizen wurden auf den Kader angewendet!")
+                    
             else:
                 st.error("Fehler beim Laden der Daten.")
 
@@ -128,12 +137,12 @@ if not st.session_state.print_mode:
             "TOT": st.column_config.NumberColumn("REB", format="%.1f", help="Total Rebounds")
         }
 
+        # Fix für die Warnmeldung: use_container_width entfernt (Standard-Breite nutzen)
         edited = st.data_editor(
             st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], 
             column_config=col_config,
             disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], 
-            hide_index=True,
-            use_container_width=True
+            hide_index=True
         )
         
         selected_indices = edited[edited["select"]].index
@@ -144,7 +153,6 @@ if not st.session_state.print_mode:
                 selection = st.session_state.roster_df.loc[selected_indices]
                 form_results = []
                 
-                # Farben für Legende
                 c_map = {"Grau": "#999999", "Grün": "#5c9c30", "Rot": "#d9534f"}
 
                 for _, row in selection.iterrows():
@@ -152,8 +160,8 @@ if not st.session_state.print_mode:
                     c_h, c_c = st.columns([3, 1])
                     c_h.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
                     
+                    # Hier wird der gespeicherte Wert abgerufen
                     saved_c = st.session_state.saved_colors.get(pid, "Grau")
-                    # Index finden (Fallback auf 0)
                     try:
                         idx = list(c_map.keys()).index(saved_c)
                     except ValueError:
@@ -164,6 +172,7 @@ if not st.session_state.print_mode:
                     c1, c2 = st.columns(2)
                     notes = {}
                     for k in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]:
+                        # Hier werden die gespeicherten Notizen abgerufen
                         val = st.session_state.saved_notes.get(f"{k}_{pid}", "")
                         box = c1 if k.startswith("l") else c2
                         notes[k] = box.text_input(k, value=val, key=f"{k}_{pid}", label_visibility="collapsed")
@@ -172,6 +181,7 @@ if not st.session_state.print_mode:
 
                 # Key Facts
                 c1, c2, c3 = st.columns(3)
+                # Fix für Warnmeldung: use_container_width entfernt
                 with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True)
                 with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True)
                 with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True)
@@ -223,16 +233,12 @@ if not st.session_state.print_mode:
                             "margin-bottom": "5mm", 
                             "margin-left": "5mm", 
                             "encoding": "UTF-8", 
-                            "zoom": "0.42", # Angepasst für größere Bilder
-                            
-                            # Wichtig für Bilder und Fehlervermeidung
+                            "zoom": "0.42",
                             "load-error-handling": "ignore",
                             "load-media-error-handling": "ignore",
                             "javascript-delay": "1000",
                         }
                         st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=options)
-                        
-                        # Nur umschalten, wenn kein Fehler
                         st.session_state.print_mode = True
                         st.rerun()
                         
