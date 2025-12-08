@@ -92,17 +92,15 @@ CSS_STYLES = """
     .stats-table { 
         width: 100%; 
         border-collapse: collapse; 
-        font-size: 12px;  /* <--- HIER DREHEN: Vorher war 11px. Probier 13px oder 14px. */
+        font-size: 20px;       /* <--- HIER ÄNDERN: Probier 20px oder 22px */
         text-align: center; 
         color: black; 
     }
-
-    /* HIER ÄNDERN FÜR ABSTÄNDE IN DEN ZELLEN (Damit die Tabelle nicht zu breit wird) */
+    
+    /* Damit die Tabelle nicht zu breit wird bei großer Schrift, mach das Padding klein */
     .stats-table th, .stats-table td { 
         border: 1px solid #ccc; 
-        padding: 3px 2px; /* <--- HIER DREHEN: Die erste Zahl ist oben/unten, die zweite links/rechts. 
-                                  Wenn die Tabelle rechts abgeschnitten wird, mach die zweite Zahl kleiner (z.B. 1px). */
-        
+        padding: 2px 1px;      /* <--- HIER: 1. Zahl (oben/unten), 2. Zahl (links/rechts) */
     }
 
     .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
