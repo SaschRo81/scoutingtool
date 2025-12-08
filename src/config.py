@@ -160,7 +160,7 @@ CSS_STYLES = """
         height: 24px;           /* Zeile etwas höher machen */
         text-align: left; 
         padding-left: 5px;
-        font-size: 18px;        /* Schriftgröße explizit erhöht (wie Header) */
+        font-size: 20px;        /* Schriftgröße explizit erhöht (wie Header) */
         vertical-align: middle; /* Auch hier schön mittig */
     }
     
