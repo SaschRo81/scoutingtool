@@ -176,8 +176,8 @@ if not st.session_state.print_mode:
                             "encoding": "UTF-8", 
                             
                             # HIER ÄNDERN:
-                            # 0.46 sorgt dafür, dass die Tabelle inkl. Bild gerade so drauf passt
-                            "zoom": "0.46",  
+                            # 0.44 gleicht das breitere Bild aus
+                            "zoom": "0.44",  
                             
                             "load-error-handling": "ignore",
                             "load-media-error-handling": "ignore",
