@@ -5,9 +5,7 @@ def generate_header_html(meta):
     return f"""
 <div class="report-header">
     <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro</div>
-    <!-- H1 für Scouting Report -->
     <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
-    
     <div class="matchup-container">
         <div class="team-logo-box">
             <img src="{meta['home_logo']}" class="team-logo-img">
@@ -44,7 +42,7 @@ def generate_top3_html(df: pd.DataFrame) -> str:
         h += f"<table class='top3-table' style='width:100%; font-size: {FONT_SIZE}; border-collapse: collapse;'>"
         h += "<tr>"
         for head in headers: 
-            h += f"<th style='padding:4px; background-color:#f9f9f9; border-bottom:1px solid #ccc;'>{head}</th>"
+            h += f"<th style='padding:4px; background-color:#f2f2f2; border-bottom:1px solid #ccc;'>{head}</th>"
         h += "</tr>"
         for _, r in d.iterrows():
             h += "<tr>"
@@ -59,7 +57,6 @@ def generate_top3_html(df: pd.DataFrame) -> str:
         h += "</table></div>"
         return h
 
-    # HIER IST DIE ÄNDERUNG: FG% BEI TOP SCORER HINZUGEFÜGT
     html = "<div class='top3-container'>"
     html += build_box(scorers, ["#", "Name", "PPG", "FG%"], ["NR", "NAME_FULL", "PPG", "FG%"], [2], "#e35b00", "Top Scorer")
     html += build_box(rebounders, ["#", "Name", "D", "O", "TOT"], ["NR", "NAME_FULL", "DR", "OR", "TOT"], [4], "#0055ff", "Rebounds")
@@ -88,22 +85,18 @@ def generate_card_html(row, metadata, notes, color_code):
     except: height_str = "-"
     pos_str = clean_pos(metadata["pos"])
 
-     return f"""
+    return f"""
 <div class="player-card">
     <div class="card-header" style="background-color: {color_code};">
         <span>#{row['NR']} {row['NAME_FULL']}</span>
-        <!-- HIER GEÄNDERT: style="font-size:12px;" entfernt! Jetzt ist es groß. -->
         <span>{height_str} m | Pos: {pos_str}</span>
     </div>
     <div class="card-body">
-        <!-- NEUES LAYOUT: TABELLE STATT FLEXBOX -->
         <table class="layout-table">
             <tr>
-                <!-- Linke Spalte: Bild -->
                 <td class="layout-img-cell">
-                    <img src="{img_url}" class="player-img" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
+                    <img src="{img_url}" class="player-img">
                 </td>
-                <!-- Rechte Spalte: Stats Tabelle -->
                 <td class="layout-stats-cell">
                     <table class="stats-table">
                         <tr class="bg-gray">
@@ -142,7 +135,7 @@ def generate_team_stats_html(ts):
     return f"""
 <div class="team-stats-container">
     <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG)</h2>
-    <table class="stats-table">
+    <table class="stats-table" style="font-size: 20px;">
         <tr class="bg-gray font-bold">
             <th rowspan="2" style="padding: 4px;">PPG</th>
             <th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th>
@@ -165,11 +158,7 @@ def generate_team_stats_html(ts):
 """
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
-    # HIER GEÄNDERT: "page-break-before: always" erzwingt eine neue Seite
     html = "<div style='page-break-before: always;'>"
-    
-    # ... der Rest der Funktion bleibt gleich ...
-    
     def make_section(title, df):
         if df.empty: return ""
         sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-size: 26px;'>{title}</h3>"
