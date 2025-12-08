@@ -133,22 +133,39 @@ CSS_STYLES = """
     
     /* Stats Tabelle */
     .stats-table { 
-        width: 100%; border-collapse: collapse; 
-        font-size: 17px; /* Größe für Zoom 0.44 */
-        text-align: center; color: black; white-space: nowrap;
+        width: 100%; 
+        border-collapse: collapse; 
+        font-size: 16px; 
+        text-align: center; 
+        color: black; 
     }
     
-    /* HIER GEÄNDERT: Helleres Grau für Tabellenköpfe */
+    /* HIER GEÄNDERT: Mehr Platz und vertikale Zentrierung */
+    .stats-table th, .stats-table td { 
+        border: 1px solid #ccc; 
+        padding: 5px 0px;       /* Vorher 2px -> Jetzt 5px für mehr Luft oben/unten */
+        vertical-align: middle; /* Zwingt den Text in die vertikale Mitte */
+        letter-spacing: -0.5px;
+    }
+
     .bg-gray { 
-        background-color: #e6e6e6; /* Deutlich heller als vorher */
+        background-color: #e6e6e6; 
         -webkit-print-color-adjust: exact; 
     }
     
-    .stats-table th, .stats-table td { 
-        border: 1px solid #ccc; 
-        padding: 1px 0px; 
-        letter-spacing: -0.5px;
+    .font-bold { font-weight: bold; }
+    
+    /* HIER GEÄNDERT: Schriftgröße für die manuellen Notizen (asdf...) */
+    .note-row td { 
+        height: 24px;           /* Zeile etwas höher machen */
+        text-align: left; 
+        padding-left: 5px;
+        font-size: 18px;        /* Schriftgröße explizit erhöht (wie Header) */
+        vertical-align: middle; /* Auch hier schön mittig */
     }
+    
+    .note-left { font-weight: normal; }
+    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; }
 
     .font-bold { font-weight: bold; }
     .note-row td { height: 20px; text-align: left; padding-left: 5px; }
