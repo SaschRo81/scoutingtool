@@ -70,7 +70,7 @@ CSS_STYLES = """
     .top3-container { display: flex; flex-direction: row; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; }
     .stat-box { flex: 1; border: 1px solid #ccc; }
     .stat-title { padding: 4px; font-weight: bold; font-size: 13px; border-bottom: 1px solid #eee; }
-    .top3-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+    .top3-table { width: 100%; font-size: 12x; border-collapse: collapse; }
     .top3-table th { background-color: #f9f9f9; text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
     .top3-table td { text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
 
