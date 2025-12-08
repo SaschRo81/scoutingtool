@@ -146,7 +146,7 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
     def make_section(title, df):
         if df.empty: return ""
         sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px;'>{title}</h3>"
-        sh += "<table style='width:100%; border-collapse:collapse; font-size:12px; margin-bottom:20px;'>"
+        sh += "<table style='width:100%; border-collapse:collapse; font-size:15px; margin-bottom:20px;'>"
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], ""); c2 = r.get(df.columns[1], "")
             sh += f"<tr><td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td></tr>"
