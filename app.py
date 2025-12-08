@@ -153,14 +153,14 @@ if not st.session_state.print_mode:
                         # HIER definierst du "options"
                         options = {
                             "page-size": "A4", 
-                            "orientation": "Landscape",
+                            "orientation": "Portrait",
                             "margin-top": "5mm", 
                             "margin-right": "5mm", 
                             "margin-bottom": "5mm", 
                             "margin-left": "5mm", 
                             "encoding": "UTF-8", 
                             "no-outline": None, 
-                            "zoom": "0.8",  # <--- Hier Zoom anpassen (z.B. 0.75)
+                            "zoom": "0.5",  # <--- Hier Zoom anpassen (z.B. 0.75)
                             "disable-smart-shrinking": None
                         }
                         
