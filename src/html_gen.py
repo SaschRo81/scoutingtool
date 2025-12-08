@@ -4,7 +4,7 @@ from src.utils import clean_pos
 def generate_header_html(meta):
     return f"""
 <div class="report-header">
-    <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
+    <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro</div>
     <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
     <div class="matchup-container">
         <div class="team-logo-box">
@@ -21,13 +21,13 @@ def generate_header_html(meta):
 """
 
 def generate_top3_html(df: pd.DataFrame) -> str:
+    # 1. Daten sortieren
     scorers = df.sort_values(by="PPG", ascending=False).head(3)
     rebounders = df.sort_values(by="TOT", ascending=False).head(3)
     shooters = df[df["3M"] >= 0.5].sort_values(by="3PCT", ascending=False).head(3)
     if shooters.empty: shooters = df.sort_values(by="3PCT", ascending=False).head(3)
     fts = df[df["FTA"] >= 1.0].sort_values(by="FTPCT", ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by="FTPCT", ascending=True).head(3)
-    
     assisters = df.sort_values(by="AS", ascending=False).head(3)
     stealers = df.sort_values(by="ST", ascending=False).head(3)
     turnovers = df.sort_values(by="TO", ascending=False).head(3)
@@ -57,6 +57,7 @@ def generate_top3_html(df: pd.DataFrame) -> str:
         h += "</table></div>"
         return h
 
+    # 2. Statistik-Boxen bauen
     html = "<div class='top3-container'>"
     html += build_box(scorers, ["#", "Name", "PPG", "FG%"], ["NR", "NAME_FULL", "PPG", "FG%"], [2], "#e35b00", "Top Scorer")
     html += build_box(rebounders, ["#", "Name", "D", "O", "TOT"], ["NR", "NAME_FULL", "DR", "OR", "TOT"], [4], "#0055ff", "Rebounds")
@@ -74,7 +75,31 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     html += build_box(blocks, ["#", "Name", "BS"], ["NR", "NAME_FULL", "BS"], [2], "#343a40", "Blocks")
     html += build_box(fouls, ["#", "Name", "PF"], ["NR", "NAME_FULL", "PF"], [2], "#20c997", "Fouls")
     html += "</div>"
-    return html
+
+    # 3. HIER NEU: Die Legende einfügen
+    # Farben müssen exakt mit src/config.py bzw. app.py übereinstimmen
+    c_green = "#5c9c30"
+    c_gray = "#999999"
+    c_red = "#d9534f"
+
+    legend_html = f"""
+    <div style="display: flex; gap: 30px; margin-top: 5px; margin-bottom: 20px; font-size: 18px; color: #333;">
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div>
+            <strong>Shooter</strong>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>
+            Normal
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>
+            Non-Shooter
+        </div>
+    </div>
+    """
+    
+    return html + legend_html
 
 def generate_card_html(row, metadata, notes, color_code):
     img_url = metadata["img"] if metadata["img"] else "https://via.placeholder.com/150?text=No+Img"
