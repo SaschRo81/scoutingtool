@@ -111,9 +111,9 @@ CSS_STYLES = """
         width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;
     }
     .layout-img-cell {
-        width: 100px;
-        min-width: 100px;
-        max-width: 100px;
+        width: 140px;
+        min-width: 140px;
+        max-width: 140px;
         vertical-align: top;
         padding: 0;
         border-right: 1px solid #ccc;
@@ -123,7 +123,13 @@ CSS_STYLES = """
         padding: 0;
         width: auto;
     }
-    .player-img { width: 100%; height: 140px; object-fit: cover; display: block; }
+    /* Das Bild selbst */
+    .player-img { 
+        width: 100%; 
+        height: 160px;      /* <--- HIER ERHÖHEN (z.B. auf 160px oder 180px) */
+        object-fit: cover; 
+        display: block; 
+    }
     
     /* Stats Tabelle */
     .stats-table { 
