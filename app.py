@@ -141,7 +141,7 @@ if not st.session_state.print_mode:
                     for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
 
                 # Build HTML
-                c_map = {"Grau": "#666666", "Grün": "#5c9c30", "Rot": "#d9534f"}
+                c_map = {"Grau": "#999999", "Grün": "#5c9c30", "Rot": "#d9534f"}
                 html = generate_header_html(st.session_state.game_meta)
                 html += generate_top3_html(st.session_state.roster_df)
                 for item in form_results:
