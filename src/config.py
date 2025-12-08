@@ -92,8 +92,8 @@ CSS_STYLES = """
     
     /* HIER GEÄNDERT: Bild-Box schmaler machen (Platz sparen!) */
     .player-img-box { 
-        width: 50px;       /* War vorher breiter */
-        min-width: 50px; 
+        width: 80px;       /* War vorher breiter */
+        min-width: 80px; 
         border-right: 1px solid #ccc; 
     }
     .player-img { width: 100%; height: 125px; object-fit: cover; }
@@ -102,15 +102,17 @@ CSS_STYLES = """
     .stats-table { 
         width: 100%; 
         border-collapse: collapse; 
-        font-size: 18px;    /* War 20px. 18px bei Zoom 0.46 ist immer noch sehr gut lesbar (ca 11pt) */
+        font-size: 17px;    /* War 20px. 18px bei Zoom 0.46 ist immer noch sehr gut lesbar (ca 11pt) */
         text-align: center; 
         color: black; 
+        white-space: nowrap; /* Verhindert unnötige Umbrüche, hält es eng */
     }
     
     /* Padding minimieren */
     .stats-table th, .stats-table td { 
         border: 1px solid #ccc; 
-        padding: 2px 0px;   /* 0px seitlich für maximalen Platz */
+        padding: 1px 0px;        /* Fast gar kein Innenabstand */
+        letter-spacing: -0.5px;  /* Zieht die Zahlen enger zusammen! */
     }
 
     .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
