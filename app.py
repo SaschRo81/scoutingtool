@@ -44,7 +44,9 @@ with st.sidebar:
     
     st.divider()
     if st.session_state.roster_df is not None:
-        st.download_button("💾 Speichern", export_session_state(), f"Save_{datetime.date.today()}.json", "application/json")
+        # Dateiname für das Savegame auch schön formatieren
+        save_name = f"Save_{datetime.date.today()}.json"
+        st.download_button("💾 Speichern", export_session_state(), save_name, "application/json")
 
 # --- HAUPTANSICHT ---
 if not st.session_state.print_mode:
@@ -55,14 +57,12 @@ if not st.session_state.print_mode:
     c1, c2, c3 = st.columns([1, 2, 2])
     with c1: 
         staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True)
-        # HIER WAR DER FEHLER: Wir müssen wieder Name -> ID mappen
         teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-        team_options = {v["name"]: k for k, v in teams_filtered.items()} # Name als Key, ID als Value
+        team_options = {v["name"]: k for k, v in teams_filtered.items()}
     
     with c2:
-        # Hier nutzen wir jetzt die Namen für die Box, holen aber die ID
         home_name = st.selectbox("Heim:", list(team_options.keys()), 0, key="sel_home")
-        home_id = team_options[home_name] # Das ist jetzt wieder eine INT Zahl (z.B. 112)
+        home_id = team_options[home_name]
         
         if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != home_name:
              st.session_state.logo_h = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
@@ -70,7 +70,7 @@ if not st.session_state.print_mode:
         
     with c3:
         guest_name = st.selectbox("Gast:", list(team_options.keys()), 1, key="sel_guest")
-        guest_id = team_options[guest_name] # Das ist jetzt wieder eine INT Zahl
+        guest_id = team_options[guest_name]
         
         if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != guest_name:
              st.session_state.logo_g = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
@@ -87,14 +87,12 @@ if not st.session_state.print_mode:
     # 2. DATEN LADEN
     st.divider()
     
-    # Logik: Daten sind da UND gehören zum aktuell ausgewählten Team
     data_ready = st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid
     
-    # Der Button lädt neu. Wenn data_ready True ist, überspringen wir das Laden aber zeigen den Inhalt
     if st.button(f"2. Kader von {target} laden", type="primary") or data_ready:
         
         if not data_ready:
-            with st.spinner(f"Lade Daten für Team-ID {tid}..."):
+            with st.spinner(f"Lade Daten für Team {tid}..."):
                 df, ts = fetch_team_data(tid, SEASON_ID)
                 if df is not None:
                     st.session_state.roster_df = df
@@ -103,14 +101,13 @@ if not st.session_state.print_mode:
                 else:
                     st.error(f"Fehler API: Konnte Daten für Team {tid} nicht laden.")
         
-        # Meta update
         st.session_state.game_meta = {
             "home_name": home_name, "home_logo": st.session_state.logo_h,
             "guest_name": guest_name, "guest_logo": st.session_state.logo_g,
             "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H:%M")
         }
 
-    # 3. EDITIEREN (Anzeige nur wenn Daten da)
+    # 3. EDITIEREN
     if st.session_state.roster_df is not None:
         st.subheader("3. Auswahl & Notizen")
         
@@ -163,6 +160,7 @@ if not st.session_state.print_mode:
                 with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea")
                 
                 up_files = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"])
+                
                 if st.form_submit_button("Speichern & Generieren", type="primary"):
                     st.session_state.facts_offense = e_off
                     st.session_state.facts_defense = e_def
@@ -171,8 +169,14 @@ if not st.session_state.print_mode:
                         st.session_state.saved_colors[item["pid"]] = item["color"]
                         for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
                     
+                    # --- HIER WIRD DER DATEINAME GENERIERT ---
                     t_name = (guest_name if target == "Gastteam (Gegner)" else home_name).replace(" ", "_")
-                    st.session_state.report_filename = f"Scout_{t_name}.pdf"
+                    date_str = d_inp.strftime("%d.%m.%Y")
+                    # Zeit mit Bindestrich statt Doppelpunkt für gültigen Dateinamen
+                    time_str = t_inp.strftime("%H-%M") 
+                    
+                    st.session_state.report_filename = f"Scouting_Report_{t_name}_{date_str}_{time_str}.pdf"
+                    # -----------------------------------------
                     
                     html = generate_header_html(st.session_state.game_meta)
                     html += generate_top3_html(st.session_state.roster_df)
