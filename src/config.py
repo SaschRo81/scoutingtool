@@ -60,83 +60,83 @@ CSS_STYLES = """
 <style>
     body { font-family: 'Arial', sans-serif; font-size: 12px; }
     
-    /* ... Header Styles bleiben gleich ... */
+    /* --- HEADER BEREICH --- */
     .report-header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-    .report-title { font-size: 26px; font-weight: bold; margin: 0; color: #000; }
-    .matchup-container { display: flex; align-items: center; justify-content: center; gap: 40px; margin-top: 10px; }
+    
+    /* Scouting Report Titel größer (H1) */
+    .report-title { font-size: 32px; font-weight: bold; margin: 0 0 10px 0; color: #000; }
+    
+    .matchup-container { display: flex; align-items: center; justify-content: center; gap: 50px; margin-top: 15px; }
     .team-logo-box { text-align: center; }
-    .team-logo-img { height: 60px; max-width: 150px; object-fit: contain; }
-    .vs-text { font-size: 24px; font-weight: bold; color: #333; }
+    
+    /* Logos größer */
+    .team-logo-img { height: 90px; max-width: 200px; object-fit: contain; }
+    
+    /* Teamnamen größer */
+    .team-name-text { font-size: 18px; font-weight: bold; margin-top: 8px; }
+    
+    .vs-text { font-size: 30px; font-weight: bold; color: #333; }
 
-    /* ... Top 3 Styles bleiben gleich ... */
+    /* --- TOP 3 BOXEN --- */
     .top3-container { display: flex; flex-direction: row; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; }
     .stat-box { flex: 1; border: 1px solid #ccc; }
     .top3-table { width: 100%; font-size: 11px; border-collapse: collapse; }
-    .top3-table th { background-color: #f9f9f9; text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
+    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
     .top3-table td { text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
 
-    /* ... weiter oben ... */
-
-    /* SPIELER KARTE */
+    /* --- SPIELER KARTE --- */
     .player-card { 
         border: 1px solid #ccc; margin-bottom: 15px; 
         background-color: white; page-break-inside: avoid; 
         font-family: Arial, sans-serif;
     }
     
-    /* HIER GEÄNDERT: Flexbox entfernt, ist jetzt Standard-Block */
-    .card-body { 
-        width: 100%;
-    }
-    
-    /* NEU: Layout-Tabelle für Bild + Stats */
-    .layout-table {
-        width: 100%;
-        border-collapse: collapse;
-        border: none;
-        margin: 0; padding: 0;
-        table-layout: fixed; /* Zwingt den Browser, Breite einzuhalten */
-    }
-    
-    /* Zelle für das Bild (Fest 80px) */
-    .layout-img-cell {
-        width: 80px;
-        min-width: 80px;
-        max-width: 80px;
-        vertical-align: top;
-        padding: 0;
-        border-right: 1px solid #ccc;
-    }
-    
-    /* Zelle für die Stats (Restliche Breite) */
-    .layout-stats-cell {
-        vertical-align: top;
-        padding: 0;
-        width: auto;
+    /* Header (Farb-Balken): Text größer & vertikal zentriert */
+    .card-header { 
+        color: white; 
+        padding: 5px 12px; /* Mehr Padding */
+        font-weight: bold; 
+        font-size: 18px;   /* Größere Schrift */
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; /* Vertikal zentrieren */
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        line-height: 1.2;
     }
 
+    .card-body { width: 100%; }
+    
+    /* Layout Tabelle (Bild links, Stats rechts) */
+    .layout-table {
+        width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;
+    }
+    .layout-img-cell {
+        width: 80px; min-width: 80px; max-width: 80px;
+        vertical-align: top; padding: 0; border-right: 1px solid #ccc;
+    }
+    .layout-stats-cell { vertical-align: top; padding: 0; width: auto; }
     .player-img { width: 100%; height: 125px; object-fit: cover; display: block; }
     
-    /* HIER GEÄNDERT: Schriftgröße auf 16px (sicherer Wert) */
+    /* Stats Tabelle */
     .stats-table { 
-        width: 100%; 
-        border-collapse: collapse; 
-        font-size: 16px;    /* 16px ist sicher. Wenn es passt, kannst du später auf 17px hoch. */
-        text-align: center; 
-        color: black; 
+        width: 100%; border-collapse: collapse; 
+        font-size: 17px; /* Größe für Zoom 0.44 */
+        text-align: center; color: black; white-space: nowrap;
+    }
+    
+    /* HIER GEÄNDERT: Helleres Grau für Tabellenköpfe */
+    .bg-gray { 
+        background-color: #e6e6e6; /* Deutlich heller als vorher */
+        -webkit-print-color-adjust: exact; 
     }
     
     .stats-table th, .stats-table td { 
         border: 1px solid #ccc; 
-        padding: 2px 0px; 
+        padding: 1px 0px; 
         letter-spacing: -0.5px;
     }
 
-    /* ... weiter unten ... */
-
-    .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
     .font-bold { font-weight: bold; }
-    
     .note-row td { height: 20px; text-align: left; padding-left: 5px; }
     .note-left { font-weight: normal; }
     .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; }
@@ -144,7 +144,7 @@ CSS_STYLES = """
     .team-stats-container { margin-top: 30px; page-break-inside: avoid; }
     
     @media print {
-        body { -webkit-print-color-adjust: exact; zoom: 0.46; } /* Auch hier Zoom anpassen */
+        body { -webkit-print-color-adjust: exact; zoom: 0.44; }
         .no-print { display: none; }
     }
 </style>
