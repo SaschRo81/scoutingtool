@@ -125,7 +125,7 @@ CSS_STYLES = """
     }
     /* Das Bild selbst */
     .player-img { 
-        width: 100%; 
+        width: 140px; 
         height: 160px;      /* <--- HIER ERHÖHEN (z.B. auf 160px oder 180px) */
         object-fit: cover; 
         display: block; 
