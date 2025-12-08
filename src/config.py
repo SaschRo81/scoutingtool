@@ -56,8 +56,6 @@ TEAMS_DB = {
 }
 
 # Zentrales CSS
-# ... oberer Teil bleibt gleich ...
-
 CSS_STYLES = """
 <style>
     body { font-family: 'Arial', sans-serif; font-size: 12px; }
@@ -77,43 +75,64 @@ CSS_STYLES = """
     .top3-table th { background-color: #f9f9f9; text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
     .top3-table td { text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
 
+    /* ... weiter oben ... */
+
     /* SPIELER KARTE */
     .player-card { 
         border: 1px solid #ccc; margin-bottom: 15px; 
         background-color: white; page-break-inside: avoid; 
         font-family: Arial, sans-serif;
     }
-    .card-header { 
-        color: white; padding: 3px 10px; font-weight: bold; font-size: 14px; 
-        display: flex; justify-content: space-between; align-items: center;
-        -webkit-print-color-adjust: exact; print-color-adjust: exact;
-    }
-    .card-body { display: flex; flex-direction: row; }
     
-    /* HIER GEÄNDERT: Bild-Box schmaler machen (Platz sparen!) */
-    .player-img-box { 
-        width: 80px;       /* War vorher breiter */
-        min-width: 80px; 
-        border-right: 1px solid #ccc; 
+    /* HIER GEÄNDERT: Flexbox entfernt, ist jetzt Standard-Block */
+    .card-body { 
+        width: 100%;
     }
-    .player-img { width: 100%; height: 125px; object-fit: cover; }
     
-    /* HIER GEÄNDERT: Schriftgröße minimal kleiner (18px), damit alles passt */
+    /* NEU: Layout-Tabelle für Bild + Stats */
+    .layout-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: none;
+        margin: 0; padding: 0;
+        table-layout: fixed; /* Zwingt den Browser, Breite einzuhalten */
+    }
+    
+    /* Zelle für das Bild (Fest 80px) */
+    .layout-img-cell {
+        width: 80px;
+        min-width: 80px;
+        max-width: 80px;
+        vertical-align: top;
+        padding: 0;
+        border-right: 1px solid #ccc;
+    }
+    
+    /* Zelle für die Stats (Restliche Breite) */
+    .layout-stats-cell {
+        vertical-align: top;
+        padding: 0;
+        width: auto;
+    }
+
+    .player-img { width: 100%; height: 125px; object-fit: cover; display: block; }
+    
+    /* HIER GEÄNDERT: Schriftgröße auf 16px (sicherer Wert) */
     .stats-table { 
         width: 100%; 
         border-collapse: collapse; 
-        font-size: 17px;    /* War 20px. 18px bei Zoom 0.46 ist immer noch sehr gut lesbar (ca 11pt) */
+        font-size: 16px;    /* 16px ist sicher. Wenn es passt, kannst du später auf 17px hoch. */
         text-align: center; 
         color: black; 
-        white-space: nowrap; /* Verhindert unnötige Umbrüche, hält es eng */
     }
     
-    /* Padding minimieren */
     .stats-table th, .stats-table td { 
         border: 1px solid #ccc; 
-        padding: 1px 0px;        /* Fast gar kein Innenabstand */
-        letter-spacing: -0.5px;  /* Zieht die Zahlen enger zusammen! */
+        padding: 2px 0px; 
+        letter-spacing: -0.5px;
     }
+
+    /* ... weiter unten ... */
 
     .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
     .font-bold { font-weight: bold; }
