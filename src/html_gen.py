@@ -34,60 +34,42 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     blocks = df.sort_values(by="BS", ascending=False).head(3)
     fouls = df.sort_values(by="PF", ascending=False).head(3)
 
-    # Schriftgröße für den PDF Zoom (0.55) anpassen -> 20px entspricht ca 11-12pt
     FONT_SIZE = "20px"
 
     def build_box(d, headers, keys, bolds, color, title):
         h = f"<div class='stat-box'>"
-        # Titel ohne Emoji, dafür größer und fett
         h += f"<div class='stat-title' style='border-top: 4px solid {color}; color: {color}; font-size: 22px; padding: 5px;'>{title}</div>"
-        
-        # Tabelle mit fester Schriftgröße für PDF
         h += f"<table class='top3-table' style='width:100%; font-size: {FONT_SIZE}; border-collapse: collapse;'>"
         h += "<tr>"
         for head in headers: 
             h += f"<th style='padding:4px; background-color:#f9f9f9; border-bottom:1px solid #ccc;'>{head}</th>"
         h += "</tr>"
-        
         for _, r in d.iterrows():
             h += "<tr>"
             for i, k in enumerate(keys):
                 val = r[k]
                 style = f"padding:4px; border-bottom:1px solid #eee; font-size: {FONT_SIZE};"
-                
-                if i in bolds: 
-                    style += " font-weight:bold;"
-                
-                if k == "NAME_FULL": 
-                    val = val.split(" ")[-1] # Nur Nachname
-                elif isinstance(val, float): 
-                    val = f"{val:.1f}"
-                
+                if i in bolds: style += " font-weight:bold;"
+                if k == "NAME_FULL": val = val.split(" ")[-1]
+                elif isinstance(val, float): val = f"{val:.1f}"
                 h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
         h += "</table></div>"
         return h
 
-    # HIER WURDEN DIE SPALTEN (M/A, D/O) HINZUGEFÜGT:
-
-    # Zeile 1
+    # HIER IST DIE ÄNDERUNG: FG% BEI TOP SCORER HINZUGEFÜGT
     html = "<div class='top3-container'>"
-    html += build_box(scorers, ["#", "Name", "PPG"], ["NR", "NAME_FULL", "PPG"], [2], "#e35b00", "Top Scorer")
-    # Rebounds jetzt mit D / O / TOT
+    html += build_box(scorers, ["#", "Name", "PPG", "FG%"], ["NR", "NAME_FULL", "PPG", "FG%"], [2], "#e35b00", "Top Scorer")
     html += build_box(rebounders, ["#", "Name", "D", "O", "TOT"], ["NR", "NAME_FULL", "DR", "OR", "TOT"], [4], "#0055ff", "Rebounds")
-    # 3er jetzt mit M / A / %
     html += build_box(shooters, ["#", "Name", "M", "A", "%"], ["NR", "NAME_FULL", "3M", "3A", "3PCT"], [4], "#28a745", "3-Points")
     html += "</div>"
     
-    # Zeile 2
     html += "<div class='top3-container'>"
-    # Freiwürfe jetzt mit M / A / %
     html += build_box(fts, ["#", "Name", "M", "A", "%"], ["NR", "NAME_FULL", "FTM", "FTA", "FTPCT"], [4], "#dc3545", "Weak FT")
     html += build_box(assisters, ["#", "Name", "AS"], ["NR", "NAME_FULL", "AS"], [2], "#ffc107", "Assists")
     html += build_box(turnovers, ["#", "Name", "TO"], ["NR", "NAME_FULL", "TO"], [2], "#fd7e14", "Turnovers")
     html += "</div>"
     
-    # Zeile 3
     html += "<div class='top3-container'>"
     html += build_box(stealers, ["#", "Name", "ST"], ["NR", "NAME_FULL", "ST"], [2], "#6f42c1", "Steals")
     html += build_box(blocks, ["#", "Name", "BS"], ["NR", "NAME_FULL", "BS"], [2], "#343a40", "Blocks")
