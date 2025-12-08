@@ -31,7 +31,11 @@ def fetch_team_data(team_id, season_id):
         resp = requests.get(api_url, headers=API_HEADERS)
         resp_t = requests.get(api_team, headers=API_HEADERS)
         
-        if resp.status_code != 200 or resp_t.status_code != 200:
+        if resp.status_code != 200:
+            st.error(f"API Fehler (Kader): Code {resp.status_code}")
+            return None, None
+        if resp_t.status_code != 200:
+            st.error(f"API Fehler (Team-Stats): Code {resp_t.status_code}")
             return None, None
 
         raw_data = resp.json()
@@ -96,6 +100,14 @@ def fetch_team_data(team_id, season_id):
             df["2M"] = get_v("2m"); df["2A"] = get_v("2a"); df["2PCT"] = get_v("2pct").apply(pct)
             df["3M"] = get_v("3m"); df["3A"] = get_v("3a"); df["3PCT"] = get_v("3pct").apply(pct)
             df["FTM"] = get_v("ftm"); df["FTA"] = get_v("fta"); df["FTPCT"] = get_v("ftpct").apply(pct)
+            
+            # --- HIER IST DIE WICHTIGE ÄNDERUNG ---
+            # FG% (Feldwurfquote) berechnen, damit es keinen KeyError gibt
+            total_made = df["2M"] + df["3M"]
+            total_att = df["2A"] + df["3A"]
+            df["FG%"] = (total_made / total_att * 100).fillna(0).round(1)
+            # -------------------------------------
+
             df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
             df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
             df["select"] = False
@@ -103,4 +115,5 @@ def fetch_team_data(team_id, season_id):
         return df, ts
 
     except Exception as e:
+        st.error(f"Kritischer Fehler bei Datenverarbeitung: {e}")
         return None, None
