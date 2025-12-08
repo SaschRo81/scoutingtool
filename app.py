@@ -160,7 +160,7 @@ if not st.session_state.print_mode:
                             "margin-left": "5mm", 
                             "encoding": "UTF-8", 
                             "no-outline": None, 
-                            "zoom": "0.2",  # <--- Hier Zoom anpassen (z.B. 0.75)
+                            "zoom": "0.55",  # <--- Hier Zoom anpassen (z.B. 0.75)
                             "disable-smart-shrinking": None
                         }
                         
