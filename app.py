@@ -18,6 +18,7 @@ from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
     generate_team_stats_html, generate_custom_sections_html
 )
+# (Optional) State Manager falls du ihn später doch brauchst
 from src.state_manager import export_session_state, load_session_state
 
 st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
@@ -29,47 +30,13 @@ for key, default in [
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
     ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])),
     ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
-    ("facts_about", pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}])),
-    ("data_restored", False) # Neuer State um anzuzeigen, dass geladen wurde
+    ("facts_about", pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}]))
 ]:
     if key not in st.session_state: st.session_state[key] = default
-
-# --- SIDEBAR: SPEICHERN / LADEN ---
-with st.sidebar:
-    st.header("💾 Spielstand")
-    
-    # 1. LADEN
-    uploaded_state = st.file_uploader("Alten Stand laden (JSON)", type=["json"])
-    if uploaded_state:
-        if st.button("Daten wiederherstellen"):
-            success, msg = load_session_state(uploaded_state)
-            if success:
-                st.session_state.data_restored = True
-                st.success("✅ " + msg)
-                # Wir machen KEIN Rerun hier, damit die Nachricht sichtbar bleibt
-            else:
-                st.error(msg)
-    
-    st.divider()
-    
-    # 2. SPEICHERN
-    if st.session_state.roster_df is not None:
-        json_data = export_session_state()
-        file_name = f"Savegame_{datetime.date.today()}.json"
-        st.download_button(
-            label="💾 Aktuellen Stand sichern",
-            data=json_data,
-            file_name=file_name,
-            mime="application/json"
-        )
 
 # --- ANSICHT: BEARBEITUNG ---
 if not st.session_state.print_mode:
     st.title(f"🏀 DBBL Scouting Pro {VERSION}")
-
-    # HINWEIS WENN DATEN GELADEN WURDEN
-    if st.session_state.data_restored and st.session_state.roster_df is None:
-        st.info("ℹ️ **Daten erfolgreich geladen!** Bitte wähle jetzt unten die Teams aus und klicke auf **'2. Kader laden'**. Deine Notizen werden dann automatisch eingefügt.")
 
     # 1. SETUP
     st.subheader("1. Spieldaten")
@@ -81,13 +48,18 @@ if not st.session_state.print_mode:
     with col_home:
         home_name = st.selectbox("Heim:", list(team_options.keys()), index=0, key="sel_home")
         home_id = team_options[home_name]
-        home_logo_url = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
-        st.image(home_logo_url, width=80)
+        # Logo einmalig laden und cachen
+        if "logo_home_cache" not in st.session_state or st.session_state.game_meta.get("home_name") != home_name:
+             st.session_state.logo_home_cache = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
+        st.image(st.session_state.logo_home_cache, width=80)
+        
     with col_guest:
         guest_name = st.selectbox("Gast:", list(team_options.keys()), index=1, key="sel_guest")
         guest_id = team_options[guest_name]
-        guest_logo_url = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
-        st.image(guest_logo_url, width=80)
+        # Logo einmalig laden und cachen
+        if "logo_guest_cache" not in st.session_state or st.session_state.game_meta.get("guest_name") != guest_name:
+             st.session_state.logo_guest_cache = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
+        st.image(st.session_state.logo_guest_cache, width=80)
 
     st.write("---")
     scout_target = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, key="sel_target")
@@ -99,29 +71,30 @@ if not st.session_state.print_mode:
 
     # 2. LOAD DATA
     st.divider()
-    if st.button(f"2. Kader von {scout_target} laden", type="primary"):
-        with st.spinner("Lade API Daten..."):
-            df, ts = fetch_team_data(target_team_id, SEASON_ID)
-            if df is not None:
-                st.session_state.roster_df = df
-                st.session_state.team_stats = ts
-                
-                # Metadaten
-                st.session_state.game_meta = {
-                    "home_name": home_name, 
-                    "home_logo": home_logo_url,
-                    "guest_name": guest_name, 
-                    "guest_logo": guest_logo_url,
-                    "date": date_input.strftime("%d.%m.%Y"), 
-                    "time": time_input.strftime("%H:%M")
-                }
-                
-                # Wenn wir Notizen geladen haben, versuchen wir, die richtigen Spieler vorzuwählen
-                if st.session_state.saved_notes:
-                    st.success("Gespeicherte Notizen wurden auf den Kader angewendet!")
-                    
-            else:
-                st.error("Fehler beim Laden der Daten.")
+    # Wir prüfen, ob wir Daten laden müssen oder ob sie schon da sind
+    data_loaded = st.session_state.roster_df is not None
+    
+    if st.button(f"2. Kader von {scout_target} laden", type="primary") or (data_loaded and st.session_state.get("target_id_check") == target_team_id):
+        # Nur neu laden, wenn Button gedrückt oder ID gewechselt, sonst Cache nutzen
+        if not data_loaded or st.session_state.get("target_id_check") != target_team_id:
+            with st.spinner("Lade API Daten..."):
+                df, ts = fetch_team_data(target_team_id, SEASON_ID)
+                if df is not None:
+                    st.session_state.roster_df = df
+                    st.session_state.team_stats = ts
+                    st.session_state.target_id_check = target_team_id # Merken, welches Team geladen ist
+                else:
+                    st.error("Fehler beim Laden der Daten.")
+
+        # Metadaten immer aktualisieren
+        st.session_state.game_meta = {
+            "home_name": home_name, 
+            "home_logo": st.session_state.logo_home_cache,
+            "guest_name": guest_name, 
+            "guest_logo": st.session_state.logo_guest_cache,
+            "date": date_input.strftime("%d.%m.%Y"), 
+            "time": time_input.strftime("%H:%M")
+        }
 
     # 3. SELECT & EDIT
     if st.session_state.roster_df is not None:
@@ -137,14 +110,16 @@ if not st.session_state.print_mode:
             "TOT": st.column_config.NumberColumn("REB", format="%.1f", help="Total Rebounds")
         }
 
-        # Fix für die Warnmeldung: use_container_width entfernt (Standard-Breite nutzen)
+        # WICHTIG: key="player_selector" sorgt dafür, dass die Häkchen bleiben!
         edited = st.data_editor(
             st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], 
             column_config=col_config,
             disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], 
-            hide_index=True
+            hide_index=True,
+            key="player_selector" 
         )
         
+        # Auswahl aus dem Editor holen
         selected_indices = edited[edited["select"]].index
 
         if len(selected_indices) > 0:
@@ -160,19 +135,14 @@ if not st.session_state.print_mode:
                     c_h, c_c = st.columns([3, 1])
                     c_h.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
                     
-                    # Hier wird der gespeicherte Wert abgerufen
                     saved_c = st.session_state.saved_colors.get(pid, "Grau")
-                    try:
-                        idx = list(c_map.keys()).index(saved_c)
-                    except ValueError:
-                        idx = 0
-                        
+                    try: idx = list(c_map.keys()).index(saved_c)
+                    except ValueError: idx = 0
                     col_opt = c_c.selectbox("Farbe", list(c_map.keys()), key=f"c_{pid}", index=idx, label_visibility="collapsed")
                     
                     c1, c2 = st.columns(2)
                     notes = {}
                     for k in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]:
-                        # Hier werden die gespeicherten Notizen abgerufen
                         val = st.session_state.saved_notes.get(f"{k}_{pid}", "")
                         box = c1 if k.startswith("l") else c2
                         notes[k] = box.text_input(k, value=val, key=f"{k}_{pid}", label_visibility="collapsed")
@@ -181,16 +151,15 @@ if not st.session_state.print_mode:
 
                 # Key Facts
                 c1, c2, c3 = st.columns(3)
-                # Fix für Warnmeldung: use_container_width entfernt
-                with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True)
-                with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True)
-                with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True)
+                with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="ed_off")
+                with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True, key="ed_def")
+                with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ed_abt")
                 
                 up_files = st.file_uploader("Plays Upload", accept_multiple_files=True, type=["png","jpg"])
                 submitted = st.form_submit_button("Speichern & Generieren", type="primary")
 
             if submitted:
-                # Save State
+                # Save State - WICHTIG: Hier speichern wir alles ab
                 st.session_state.facts_offense = e_off
                 st.session_state.facts_defense = e_def
                 st.session_state.facts_about = e_abt
@@ -199,9 +168,10 @@ if not st.session_state.print_mode:
                 
                 for item in form_results:
                     st.session_state.saved_colors[item["pid"]] = item["color"]
-                    for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
+                    for k, v in item["notes"].items(): 
+                        st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
 
-                # Build HTML
+                # HTML bauen
                 html = generate_header_html(st.session_state.game_meta)
                 html += generate_top3_html(st.session_state.roster_df)
                 
@@ -221,45 +191,41 @@ if not st.session_state.print_mode:
                 html += generate_custom_sections_html(e_off, e_def, e_abt)
                 st.session_state.final_html = html
 
-                # Generate PDF
+                # PDF Generieren
                 if HAS_PDFKIT:
                     try:
                         full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
                         options = {
-                            "page-size": "A4", 
-                            "orientation": "Portrait",
-                            "margin-top": "5mm", 
-                            "margin-right": "5mm", 
-                            "margin-bottom": "5mm", 
-                            "margin-left": "5mm", 
-                            "encoding": "UTF-8", 
-                            "zoom": "0.42",
-                            "load-error-handling": "ignore",
-                            "load-media-error-handling": "ignore",
-                            "javascript-delay": "1000",
+                            "page-size": "A4", "orientation": "Portrait",
+                            "margin-top": "5mm", "margin-right": "5mm", "margin-bottom": "5mm", "margin-left": "5mm", 
+                            "encoding": "UTF-8", "zoom": "0.44",
+                            "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000",
                         }
                         st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=options)
                         st.session_state.print_mode = True
                         st.rerun()
-                        
                     except Exception as e:
                         st.error(f"PDF Error: {e}")
                 else:
-                    st.warning("PDFKit nicht verfügbar. Zeige nur Vorschau.")
+                    st.warning("PDFKit nicht da.")
                     st.session_state.print_mode = True
                     st.rerun()
 
 else:
-    # PRINT MODE
+    # --- VORSCHAU MODUS ---
+    # Hier ist der Button, der dich zurückbringt
+    
+    # Header mit Zurück und Download
     c1, c2 = st.columns([1, 4])
     with c1:
-        if st.button("⬅️ Zurück"):
+        # Dieser Button bringt dich zurück in den Edit-Modus
+        # Da wir 'key="player_selector"' nutzen, bleiben deine Häkchen erhalten!
+        if st.button("⬅️ Bearbeiten"):
             st.session_state.print_mode = False
             st.rerun()
     with c2:
         if st.session_state.pdf_bytes:
-            st.download_button("📄 Download PDF", st.session_state.pdf_bytes, st.session_state.report_filename, "application/pdf")
-        elif HAS_PDFKIT: st.warning("PDF Generierung fehlgeschlagen.")
-        else: st.info("PDFKit nicht installiert.")
+            st.download_button("📄 PDF Herunterladen", st.session_state.pdf_bytes, st.session_state.report_filename, "application/pdf")
     
+    st.divider()
     st.markdown(CSS_STYLES + st.session_state.final_html, unsafe_allow_html=True)
