@@ -1,13 +1,16 @@
 import streamlit as st
 
 # Version
-VERSION = "v4.1 (Modular)"
+VERSION = "v4.3 (Secure Mode)"
 
-# API Konfiguration
+# --- API KONFIGURATION ---
 try:
+    # Wir holen den Key NUR aus den Secrets
     API_KEY = st.secrets["dbbl_api_key"]
 except Exception:
-    API_KEY = "" # Fallback oder Fehler werfen
+    # Wenn der Key fehlt, brechen wir kontrolliert ab
+    st.error("🚨 API-Key fehlt! Bitte in den Streamlit Cloud Settings unter 'Secrets' eintragen.")
+    st.stop()
 
 API_HEADERS = {
     "accept": "application/json",
