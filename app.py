@@ -137,10 +137,13 @@ if not st.session_state.print_mode:
                     html += generate_card_html(item["row"].to_dict(), meta, item["notes"], c_map[item["color"]])
                 html += generate_team_stats_html(st.session_state.team_stats)
                 if up_files:
-                    html += "<div style='page-break-before:always'><h2>Plays</h2>"
+                    # HIER GEÄNDERT: Neue Seite für Grafiken erzwingen
+                    html += "<div style='page-break-before: always;'><h2>Plays & Grafiken</h2>"
+                    
                     for f in up_files:
                         b64 = base64.b64encode(f.getvalue()).decode()
-                        html += f"<div><img src='data:image/png;base64,{b64}' style='max-width:100%; border:1px solid #ccc'></div>"
+                        # Optional: max-height setzen, damit große Bilder nicht die Seite sprengen
+                        html += f"<div style='margin-bottom:20px;'><img src='data:image/png;base64,{b64}' style='max-width:100%; max-height:900px; border:1px solid #ccc'></div>"
                     html += "</div>"
                 html += generate_custom_sections_html(e_off, e_def, e_abt)
                 st.session_state.final_html = html
