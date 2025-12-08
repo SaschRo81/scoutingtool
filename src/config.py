@@ -111,11 +111,19 @@ CSS_STYLES = """
         width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;
     }
     .layout-img-cell {
-        width: 80px; min-width: 80px; max-width: 80px;
-        vertical-align: top; padding: 0; border-right: 1px solid #ccc;
+        width: 100px;
+        min-width: 100px;
+        max-width: 100px;
+        vertical-align: top;
+        padding: 0;
+        border-right: 1px solid #ccc;
     }
-    .layout-stats-cell { vertical-align: top; padding: 0; width: auto; }
-    .player-img { width: 100%; height: 125px; object-fit: cover; display: block; }
+    .layout-stats-cell {
+        vertical-align: top;
+        padding: 0;
+        width: auto;
+    }
+    .player-img { width: 100%; height: 140px; object-fit: cover; display: block; }
     
     /* Stats Tabelle */
     .stats-table { 
