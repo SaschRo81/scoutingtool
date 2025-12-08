@@ -88,11 +88,12 @@ def generate_card_html(row, metadata, notes, color_code):
     except: height_str = "-"
     pos_str = clean_pos(metadata["pos"])
 
-    return f"""
+     return f"""
 <div class="player-card">
     <div class="card-header" style="background-color: {color_code};">
         <span>#{row['NR']} {row['NAME_FULL']}</span>
-        <span style="font-size:12px;">{height_str} m | Pos: {pos_str}</span>
+        <!-- HIER GEÄNDERT: style="font-size:12px;" entfernt! Jetzt ist es groß. -->
+        <span>{height_str} m | Pos: {pos_str}</span>
     </div>
     <div class="card-body">
         <!-- NEUES LAYOUT: TABELLE STATT FLEXBOX -->
