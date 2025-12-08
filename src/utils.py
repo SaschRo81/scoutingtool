@@ -1,35 +1,3 @@
-import streamlit as st
-import pandas as pd
-import requests
-import base64
-from io import BytesIO
-from PIL import Image
-from src.config import API_HEADERS
-
-# Grauer Platzhalter (Base64)
-GRAY_BOX_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
-
-def get_logo_url(team_id: int, season_id: str) -> str:
-    return f"https://api-s.dbbl.scb.world/images/teams/logo/{season_id}/{team_id}"
-
-def format_minutes(val):
-    try:
-        v = float(val)
-        if v <= 0: return "00:00"
-        if v > 48:
-            mins = int(v // 60)
-            secs = int(v % 60)
-        else:
-            mins = int(v)
-            secs = int((v % 1) * 60)
-        return f"{mins:02d}:{secs:02d}"
-    except Exception:
-        return "00:00"
-
-def clean_pos(pos):
-    if not pos or pd.isna(pos): return "-"
-    return str(pos).replace("_", " ").title()
-
 @st.cache_data(show_spinner=False)
 def optimize_image_base64(url):
     if not url or "placeholder" in url:
@@ -46,22 +14,26 @@ def optimize_image_base64(url):
                 w_size = int(float(img.size[0]) * float(w_percent))
                 img = img.resize((w_size, base_height), Image.Resampling.LANCZOS)
 
-            # 2. Format bestimmen (Transparenz erhalten!)
-            buffer = BytesIO()
+            # 2. TRICK: Transparenz durch Weiß ersetzen
+            # Erstelle ein neues Bild mit weißem Hintergrund
+            new_img = Image.new("RGB", img.size, (255, 255, 255))
             
-            # Wenn das Bild Transparenz hat (RGBA) oder Palette (P) ist -> PNG speichern
+            # Wenn das Originalbild Transparenz hat, klebe es drauf
             if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
-                img.save(buffer, format="PNG")
-                mime_type = "image/png"
+                # Alpha-Kanal als Maske nutzen
+                if img.mode != 'RGBA':
+                    img = img.convert('RGBA')
+                new_img.paste(img, mask=img.split()[3])
             else:
-                # Sonst als JPEG speichern (besser komprimiert für Fotos)
-                if img.mode != "RGB":
-                    img = img.convert("RGB")
-                img.save(buffer, format="JPEG", quality=80)
-                mime_type = "image/jpeg"
+                new_img.paste(img)
 
+            # 3. Als JPEG speichern (hat keine Transparenz -> also weißer Hintergrund)
+            buffer = BytesIO()
+            new_img.save(buffer, format="JPEG", quality=90)
             img_str = base64.b64encode(buffer.getvalue()).decode()
-            return f"data:{mime_type};base64,{img_str}"
+            
+            # Immer als JPEG zurückgeben
+            return f"data:image/jpeg;base64,{img_str}"
             
     except Exception:
         pass
