@@ -84,6 +84,9 @@ def fetch_team_data(team_id, season_id):
             def get_v(k): return pd.to_numeric(df[final_cols[k]], errors="coerce").fillna(0) if k in final_cols else pd.Series([0.0]*len(df))
             def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
             
+            def get_v(k): return pd.to_numeric(df[final_cols[k]], errors="coerce").fillna(0) if k in final_cols else pd.Series([0.0]*len(df))
+            def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
+            
             df["GP"] = get_v("gp").replace(0,1)
             min_raw = get_v("min_sec")
             sec_total = get_v("sec_total")
@@ -92,10 +95,18 @@ def fetch_team_data(team_id, season_id):
             df.loc[mask_zero, "MIN_FINAL"] = sec_total[mask_zero] / df.loc[mask_zero, "GP"]
             df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
             
+            # Stats laden
             df["PPG"] = get_v("ppg"); df["TOT"] = get_v("tot")
             df["2M"] = get_v("2m"); df["2A"] = get_v("2a"); df["2PCT"] = get_v("2pct").apply(pct)
             df["3M"] = get_v("3m"); df["3A"] = get_v("3a"); df["3PCT"] = get_v("3pct").apply(pct)
             df["FTM"] = get_v("ftm"); df["FTA"] = get_v("fta"); df["FTPCT"] = get_v("ftpct").apply(pct)
+            
+            # NEU: FG% BERECHNEN (Gesamtquote aus 2er und 3er)
+            # Wir berechnen das selbst, um sicherzugehen, dass der Wert da ist
+            total_made = df["2M"] + df["3M"]
+            total_att = df["2A"] + df["3A"]
+            df["FG%"] = (total_made / total_att * 100).fillna(0).round(1)
+
             df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
             df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
             df["select"] = False
