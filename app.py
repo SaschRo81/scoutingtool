@@ -12,6 +12,7 @@ except ImportError:
 
 # Module aus SRC
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
+from src.utils import get_logo_url, optimize_image_base64
 from src.utils import get_logo_url
 from src.api import fetch_team_data, get_player_metadata_cached
 from src.html_gen import (
@@ -62,17 +63,28 @@ if not st.session_state.print_mode:
 
     # 2. LOAD DATA
     st.divider()
+    # ...
     if st.button(f"2. Kader von {scout_target} laden", type="primary"):
         with st.spinner("Lade API Daten..."):
             df, ts = fetch_team_data(target_team_id, SEASON_ID)
             if df is not None:
                 st.session_state.roster_df = df
                 st.session_state.team_stats = ts
+                
+                # --- HIER IST DIE ÄNDERUNG ---
+                # Wir wandeln die URLs direkt in Base64 um, damit pdfkit kein Internet braucht
+                home_logo_url = get_logo_url(home_id, SEASON_ID)
+                guest_logo_url = get_logo_url(guest_id, SEASON_ID)
+                
                 st.session_state.game_meta = {
-                    "home_name": home_name, "home_logo": get_logo_url(home_id, SEASON_ID),
-                    "guest_name": guest_name, "guest_logo": get_logo_url(guest_id, SEASON_ID),
-                    "date": date_input.strftime("%d.%m.%Y"), "time": time_input.strftime("%H:%M")
+                    "home_name": home_name, 
+                    "home_logo": optimize_image_base64(home_logo_url), # <--- Umwandeln!
+                    "guest_name": guest_name, 
+                    "guest_logo": optimize_image_base64(guest_logo_url), # <--- Umwandeln!
+                    "date": date_input.strftime("%d.%m.%Y"), 
+                    "time": time_input.strftime("%H:%M")
                 }
+                # -----------------------------
             else:
                 st.error("Fehler beim Laden der Daten.")
 
@@ -149,11 +161,11 @@ if not st.session_state.print_mode:
                 st.session_state.final_html = html
 
                 # Generate PDF
+                # Generate PDF
                 if HAS_PDFKIT:
                     try:
                         full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
                         
-                        # HIER definierst du "options"
                         options = {
                             "page-size": "A4", 
                             "orientation": "Portrait",
@@ -162,23 +174,25 @@ if not st.session_state.print_mode:
                             "margin-bottom": "5mm", 
                             "margin-left": "5mm", 
                             "encoding": "UTF-8", 
-                            "no-outline": None, 
-                            "zoom": "0.55",  # <--- Hier Zoom anpassen (z.B. 0.75)
-                            "disable-smart-shrinking": None
+                            
+                            # "no-outline": None,            <-- LÖSCHEN (verursacht Fehler)
+                            # "disable-smart-shrinking": None, <-- LÖSCHEN (verursacht Fehler)
+                            
+                            "zoom": "0.5",  # Dein Zoom-Wert
+                            
+                            # Optional: Manchmal hilft das bei Netzwerk-Problemen (falls Bilder doch noch URLs sind)
+                            "enable-local-file-access": "",
+                            "load-error-handling": "ignore"
                         }
                         
-                        # FEHLER KORRIGIERT: Hier stand vorher "options=opts". Es muss "options=options" heißen!
                         st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=options)
                         
-                        # WICHTIG: Das Rerun darf nur passieren, wenn es geklappt hat!
-                        # Sonst siehst du den Fehler nicht.
+                        # Rerun nur bei Erfolg
                         st.session_state.print_mode = True
                         st.rerun()
 
                     except Exception as e:
-                        # Jetzt bleibt der Fehler stehen und du kannst ihn lesen
                         st.error(f"PDF Error: {e}")
-                        # Falls "No wkhtmltopdf executable found" kommt -> packages.txt fehlt!
 
 else:
     # PRINT MODE
