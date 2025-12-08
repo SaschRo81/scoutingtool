@@ -111,9 +111,9 @@ CSS_STYLES = """
         width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;
     }
     .layout-img-cell {
-        width: 140px;
-        min-width: 140px;
-        max-width: 140px;
+        width: 160px;
+        min-width: 160px;
+        max-width: 160px;
         vertical-align: top;
         padding: 0;
         border-right: 1px solid #ccc;
@@ -125,7 +125,7 @@ CSS_STYLES = """
     }
     /* Das Bild selbst */
     .player-img { 
-        width: 140px; 
+        width: 100%; 
         height: 160px;      /* <--- HIER ERHÖHEN (z.B. auf 160px oder 180px) */
         object-fit: cover; 
         display: block; 
