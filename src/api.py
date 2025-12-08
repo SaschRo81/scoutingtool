@@ -1,65 +1,106 @@
 import streamlit as st
+import requests
 import pandas as pd
-import datetime
-import base64
+from src.config import API_HEADERS
+from src.utils import optimize_image_base64, format_minutes
 
-# ... (deine Imports bleiben gleich) ...
-from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-from src.utils import get_logo_url, optimize_image_base64
-from src.api import fetch_team_data, get_player_metadata_cached
-from src.html_gen import (
-    generate_header_html, generate_top3_html, generate_card_html, 
-    generate_team_stats_html, generate_custom_sections_html
-)
-# NEU: Import des State Managers
-from src.state_manager import export_session_state, load_session_state
+@st.cache_data(ttl=600, show_spinner="Lade Spieler-Metadaten...")
+def get_player_metadata_cached(player_id):
+    try:
+        url = f"https://api-s.dbbl.scb.world/season-players/{player_id}"
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            data = resp.json()
+            raw_img = data.get("imageUrl", "")
+            opt_img = optimize_image_base64(raw_img) if raw_img else ""
+            return {
+                "img": opt_img,
+                "height": data.get("height", 0),
+                "pos": data.get("position", "-"),
+            }
+    except Exception:
+        pass
+    return {"img": "", "height": 0, "pos": "-"}
 
-st.set_page_config(page_title=f"DBBL Scouting {VERSION}", layout="wide", page_icon="🏀")
-
-# --- SESSION STATE INITIALISIERUNG ---
-# (Dieser Block bleibt genau wie er war) ... 
-for key, default in [
-    ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
-    ("roster_df", None), ("team_stats", None), ("game_meta", {}),
-    ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
-    ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])),
-    ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
-    ("facts_about", pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}]))
-]:
-    if key not in st.session_state: st.session_state[key] = default
-
-
-# --- NEU: SIDEBAR FÜR SPEICHERN / LADEN ---
-with st.sidebar:
-    st.header("💾 Spielstand")
+@st.cache_data(ttl=600)
+def fetch_team_data(team_id, season_id):
+    api_url = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
+    api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
     
-    # 1. LADEN
-    uploaded_state = st.file_uploader("Alten Stand laden (JSON)", type=["json"])
-    if uploaded_state:
-        if st.button("Daten wiederherstellen"):
-            success, msg = load_session_state(uploaded_state)
-            if success:
-                st.success(msg)
-                st.rerun()
-            else:
-                st.error(msg)
-    
-    st.divider()
-    
-    # 2. SPEICHERN
-    # Nur anzeigen, wenn wir schon Daten haben
-    if st.session_state.roster_df is not None:
-        json_data = export_session_state()
-        file_name = f"Savegame_{datetime.date.today()}.json"
-        st.download_button(
-            label="💾 Aktuellen Stand sichern",
-            data=json_data,
-            file_name=file_name,
-            mime="application/json"
-        )
+    try:
+        resp = requests.get(api_url, headers=API_HEADERS)
+        resp_t = requests.get(api_team, headers=API_HEADERS)
+        
+        if resp.status_code != 200 or resp_t.status_code != 200:
+            return None, None
 
-# --- ANSICHT: BEARBEITUNG ---
-if not st.session_state.print_mode:
-    # ... (ab hier dein ganz normaler Code wie vorher) ...
-    st.title(f"🏀 DBBL Scouting Pro {VERSION}")
-    # ...
+        raw_data = resp.json()
+        team_data_list = resp_t.json()
+
+        # 1. Team Stats Process
+        ts = {}
+        if team_data_list and isinstance(team_data_list, list):
+            td = team_data_list[0]
+            ts = {
+                "ppg": td.get("pointsPerGame", 0), "2m": td.get("twoPointShotsMadePerGame", 0), "2a": td.get("twoPointShotsAttemptedPerGame", 0), "2pct": td.get("twoPointShotsSuccessPercent", 0),
+                "3m": td.get("threePointShotsMadePerGame", 0), "3a": td.get("threePointShotsAttemptedPerGame", 0), "3pct": td.get("threePointShotsSuccessPercent", 0),
+                "ftm": td.get("freeThrowsMadePerGame", 0), "fta": td.get("freeThrowsAttemptedPerGame", 0), "ftpct": td.get("freeThrowsSuccessPercent", 0),
+                "dr": td.get("defensiveReboundsPerGame", 0), "or": td.get("offensiveReboundsPerGame", 0), "tot": td.get("totalReboundsPerGame", 0),
+                "as": td.get("assistsPerGame", 0), "to": td.get("turnoversPerGame", 0), "st": td.get("stealsPerGame", 0), "pf": td.get("foulsCommittedPerGame", 0)
+            }
+
+        # 2. Player Stats Process
+        df = None
+        raw = raw_data if isinstance(raw_data, list) else raw_data.get("data", [])
+        if raw:
+            df = pd.json_normalize(raw)
+            df.columns = [str(c).lower() for c in df.columns]
+            
+            # Mapping
+            col_map = {
+                "firstname": ["person.firstname", "firstname"], "lastname": ["person.lastname", "lastname"],
+                "shirtnumber": ["jerseynumber", "shirtnumber", "no"], "id": ["id", "person.id", "personid"],
+                "gp": ["matches", "gamesplayed", "games"], "ppg": ["pointspergame"], "tot": ["totalreboundspergame"],
+                "min_sec": ["secondsplayedpergame", "minutespergame", "avgminutes"], "sec_total": ["secondsplayed"],
+                "2m": ["twopointshotsmadepergame"], "2a": ["twopointshotsattemptedpergame"], "2pct": ["twopointshotsuccesspercent"],
+                "3m": ["threepointshotsmadepergame"], "3a": ["threepointshotsattemptedpergame"], "3pct": ["threepointshotsuccesspercent"],
+                "ftm": ["freethrowsmadepergame"], "fta": ["freethrowsattemptedpergame"], "ftpct": ["freethrowssuccesspercent"],
+                "dr": ["defensivereboundspergame"], "or": ["offensivereboundspergame"], "as": ["assistspergame"],
+                "to": ["turnoverspergame"], "st": ["stealspergame"], "pf": ["foulscommittedpergame"], "bs": ["blockspergame"]
+            }
+            
+            final_cols = {}
+            for t, p_list in col_map.items():
+                for p in p_list:
+                    m = [c for c in df.columns if p in c]
+                    if m: final_cols[t] = sorted(m, key=len)[0]; break
+            
+            fn = df[final_cols["firstname"]].fillna("") if "firstname" in final_cols else ""
+            ln = df[final_cols["lastname"]].fillna("") if "lastname" in final_cols else ""
+            df["NAME_FULL"] = (fn + " " + ln).str.strip()
+            df["NR"] = df[final_cols["shirtnumber"]].fillna("-").astype(str).str.replace(".0", "", regex=False) if "shirtnumber" in final_cols else "-"
+            df["PLAYER_ID"] = df[final_cols["id"]].astype(str) if "id" in final_cols else ""
+            
+            def get_v(k): return pd.to_numeric(df[final_cols[k]], errors="coerce").fillna(0) if k in final_cols else pd.Series([0.0]*len(df))
+            def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
+            
+            df["GP"] = get_v("gp").replace(0,1)
+            min_raw = get_v("min_sec")
+            sec_total = get_v("sec_total")
+            df["MIN_FINAL"] = min_raw
+            mask_zero = df["MIN_FINAL"] <= 0
+            df.loc[mask_zero, "MIN_FINAL"] = sec_total[mask_zero] / df.loc[mask_zero, "GP"]
+            df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
+            
+            df["PPG"] = get_v("ppg"); df["TOT"] = get_v("tot")
+            df["2M"] = get_v("2m"); df["2A"] = get_v("2a"); df["2PCT"] = get_v("2pct").apply(pct)
+            df["3M"] = get_v("3m"); df["3A"] = get_v("3a"); df["3PCT"] = get_v("3pct").apply(pct)
+            df["FTM"] = get_v("ftm"); df["FTA"] = get_v("fta"); df["FTPCT"] = get_v("ftpct").apply(pct)
+            df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
+            df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
+            df["select"] = False
+
+        return df, ts
+
+    except Exception as e:
+        return None, None
