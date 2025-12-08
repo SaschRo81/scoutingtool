@@ -143,15 +143,26 @@ def generate_team_stats_html(ts):
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
     html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
+    
     def make_section(title, df):
         if df.empty: return ""
-        sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px;'>{title}</h3>"
-        sh += "<table style='width:100%; border-collapse:collapse; font-size:12px; margin-bottom:20px;'>"
+        # Überschrift größer (26px)
+        sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-size: 26px;'>{title}</h3>"
+        sh += "<table style='width:100%; border-collapse:collapse; margin-bottom:20px;'>"
+        
+        # Inhaltsschriftgröße groß (22px), passend für Zoom 0.55
+        font_size = "22px"
+
         for _, r in df.iterrows():
-            c1 = r.get(df.columns[0], ""); c2 = r.get(df.columns[1], "")
-            sh += f"<tr><td style='width:30%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top;'>{c1}</td><td style='border:1px solid #ccc; padding:6px; vertical-align:top;'>{c2}</td></tr>"
+            c1 = r.get(df.columns[0], "")
+            c2 = r.get(df.columns[1], "")
+            sh += "<tr>"
+            sh += f"<td style='width:30%; border:1px solid #ccc; padding:8px; font-weight:bold; vertical-align:top; font-size:{font_size};'>{c1}</td>"
+            sh += f"<td style='border:1px solid #ccc; padding:8px; vertical-align:top; font-size:{font_size};'>{c2}</td>"
+            sh += "</tr>"
         sh += "</table>"
         return sh
+
     html += make_section("Key Facts Offense", offense_df)
     html += make_section("Key Facts Defense", defense_df)
     html += make_section("ALL ABOUT US", about_df)
