@@ -102,6 +102,7 @@ CSS_STYLES = """
         border: 1px solid #ccc; 
         padding: 3px 2px; /* <--- HIER DREHEN: Die erste Zahl ist oben/unten, die zweite links/rechts. 
                                   Wenn die Tabelle rechts abgeschnitten wird, mach die zweite Zahl kleiner (z.B. 1px). */
+        font-size: 12px;                          
     }
 
     .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
