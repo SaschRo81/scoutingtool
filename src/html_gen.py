@@ -4,17 +4,19 @@ from src.utils import clean_pos
 def generate_header_html(meta):
     return f"""
 <div class="report-header">
-    <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
-    <div class="report-title">Scouting Report | {meta['date']} - {meta['time']} Uhr</div>
+    <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro</div>
+    <!-- H1 für Scouting Report -->
+    <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
+    
     <div class="matchup-container">
         <div class="team-logo-box">
             <img src="{meta['home_logo']}" class="team-logo-img">
-            <div style="font-weight: bold; margin-top: 5px;">{meta['home_name']}</div>
+            <div class="team-name-text">{meta['home_name']}</div>
         </div>
         <div class="vs-text">VS</div>
         <div class="team-logo-box">
             <img src="{meta['guest_logo']}" class="team-logo-img">
-            <div style="font-weight: bold; margin-top: 5px;">{meta['guest_name']}</div>
+            <div class="team-name-text">{meta['guest_name']}</div>
         </div>
     </div>
 </div>
