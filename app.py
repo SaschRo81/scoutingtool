@@ -88,17 +88,44 @@ if not st.session_state.print_mode:
             else:
                 st.error("Fehler beim Laden der Daten.")
 
+   # ... (Code davor bleibt gleich) ...
+
     # 3. SELECT & EDIT
     if st.session_state.roster_df is not None:
         st.subheader("3. Auswahl & Notizen")
-        edited = st.data_editor(st.session_state.roster_df[["select", "NR", "NAME_FULL", "PPG", "TOT"]], 
-                               column_config={"select": st.column_config.CheckboxColumn(default=False)},
-                               disabled=["NR", "NAME_FULL", "PPG", "TOT"], hide_index=True)
+        
+        # Konfiguration der Spalten für bessere Lesbarkeit
+        col_config = {
+            "select": st.column_config.CheckboxColumn(
+                "Auswahl",
+                default=False,
+                width="small" 
+            ),
+            "NR": st.column_config.TextColumn("#", width="small"),
+            "NAME_FULL": st.column_config.TextColumn("Name"),
+            "GP": st.column_config.NumberColumn("Spiele", format="%d"), # Spiele (GP)
+            "PPG": st.column_config.NumberColumn("PPG", format="%.1f"),
+            "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"), # Wurfquote
+            "TOT": st.column_config.NumberColumn("REB", format="%.1f", help="Total Rebounds") # TOT als REB angezeigt
+        }
+
+        # HIER GEÄNDERT: Neue Spalten GP und FG% hinzugefügt
+        # use_container_width=True macht die Tabelle breiter und leichter zu bedienen
+        edited = st.data_editor(
+            st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], 
+            column_config=col_config,
+            disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], 
+            hide_index=True,
+            use_container_width=True 
+        )
+        
         selected_indices = edited[edited["select"]].index
 
         if len(selected_indices) > 0:
             st.divider()
             with st.form("scouting_form"):
+    
+    # ... (Rest des Codes bleibt gleich) ...
                 selection = st.session_state.roster_df.loc[selected_indices]
                 form_results = []
                 
