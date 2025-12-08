@@ -6,6 +6,9 @@ from io import BytesIO
 from PIL import Image
 from src.config import API_HEADERS
 
+# Ein graues 1x1 Pixel Bild als Base64 String (damit wir keine URL brauchen)
+GRAY_BOX_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+
 def get_logo_url(team_id: int, season_id: str) -> str:
     return f"https://api-s.dbbl.scb.world/images/teams/logo/{season_id}/{team_id}"
 
@@ -30,22 +33,25 @@ def clean_pos(pos):
 @st.cache_data(show_spinner=False)
 def optimize_image_base64(url):
     if not url or "placeholder" in url:
-        return url
+        return GRAY_BOX_B64
     try:
-        response = requests.get(url, headers=API_HEADERS, timeout=3)
+        response = requests.get(url, headers=API_HEADERS, timeout=2)
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content))
-            base_height = 500
+            # Resize Logik
+            base_height = 300 # Kleiner gemacht für Performance
             w_percent = base_height / float(img.size[1])
             w_size = int(float(img.size[0]) * float(w_percent))
             if img.size[1] > base_height:
                 img = img.resize((w_size, base_height), Image.Resampling.LANCZOS)
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
+            
             buffer = BytesIO()
-            img.save(buffer, format="JPEG", quality=95)
+            img.save(buffer, format="JPEG", quality=80) # Quali leicht runter für Speed
             img_str = base64.b64encode(buffer.getvalue()).decode()
             return f"data:image/jpeg;base64,{img_str}"
     except Exception:
         pass
-    return "https://via.placeholder.com/150?text=Err"
+    # Wenn alles fehlschlägt: Graues Bild statt URL
+    return GRAY_BOX_B64
