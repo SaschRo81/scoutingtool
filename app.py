@@ -149,9 +149,27 @@ if not st.session_state.print_mode:
                 if HAS_PDFKIT:
                     try:
                         full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
-                        opts = {"page-size": "A4", "orientation": "Landscape", "margin-top": "5mm", "margin-right": "5mm", 
-                                "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "no-outline": None, 
-                                "zoom": "0.7", "disable-smart-shrinking": None}
+                        options = {
+                            "page-size": "A4", 
+                            "orientation": "Landscape",
+                            
+                            # RÄNDER ANPASSEN (Weniger Rand = Mehr Platz für die Tabelle)
+                            "margin-top": "5mm", 
+                            "margin-right": "5mm", # <--- Mach das kleiner (z.B. 3mm), wenn rechts was fehlt
+                            "margin-bottom": "5mm", 
+                            "margin-left": "5mm", 
+                            
+                            "encoding": "UTF-8", 
+                            "no-outline": None, 
+                            
+                            # DER WICHTIGSTE REGLER: ZOOM
+                            # 1.0 = Originalgröße (Schrift riesig, passt oft nicht drauf)
+                            # 0.6 = Alles sehr klein, passt locker drauf
+                            # 0.75 - 0.85 = Meistens der "Sweet Spot"
+                            "zoom": "0.8",  # <--- HIER DREHEN: Wenn Tabelle abgeschnitten: kleiner (0.7). Wenn Schrift zu klein: größer (0.9).
+                            
+                            "disable-smart-shrinking": None
+                        }
                         st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
                     except Exception as e:
                         st.error(f"PDF Error: {e}")
