@@ -175,14 +175,13 @@ if not st.session_state.print_mode:
                             "margin-left": "5mm", 
                             "encoding": "UTF-8", 
                             
-                            # "no-outline": None,            <-- LÖSCHEN (verursacht Fehler)
-                            # "disable-smart-shrinking": None, <-- LÖSCHEN (verursacht Fehler)
+                            # HIER ÄNDERN:
+                            # 0.46 sorgt dafür, dass die Tabelle inkl. Bild gerade so drauf passt
+                            "zoom": "0.46",  
                             
-                            "zoom": "0.5",  # Dein Zoom-Wert
-                            
-                            # Optional: Manchmal hilft das bei Netzwerk-Problemen (falls Bilder doch noch URLs sind)
-                            "enable-local-file-access": "",
-                            "load-error-handling": "ignore"
+                            "load-error-handling": "ignore",
+                            "load-media-error-handling": "ignore",
+                            "javascript-delay": "1000",
                         }
                         
                         st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=options)
