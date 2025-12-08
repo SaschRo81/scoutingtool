@@ -153,7 +153,10 @@ def generate_team_stats_html(ts):
 """
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
-    html = "<div style='margin-top: 30px; page-break-inside: avoid;'>"
+    # HIER GEÄNDERT: "page-break-before: always" erzwingt eine neue Seite
+    html = "<div style='page-break-before: always;'>"
+    
+    # ... der Rest der Funktion bleibt gleich ...
     
     def make_section(title, df):
         if df.empty: return ""
