@@ -92,8 +92,8 @@ CSS_STYLES = """
     
     /* HIER GEÄNDERT: Bild-Box schmaler machen (Platz sparen!) */
     .player-img-box { 
-        width: 60px;       /* War vorher breiter */
-        min-width: 60px; 
+        width: 50px;       /* War vorher breiter */
+        min-width: 50px; 
         border-right: 1px solid #ccc; 
     }
     .player-img { width: 100%; height: 125px; object-fit: cover; }
