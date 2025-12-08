@@ -88,8 +88,22 @@ CSS_STYLES = """
     .player-img-box { width: 80px; min-width: 80px; border-right: 1px solid #ccc; }
     .player-img { width: 100%; height: 125px; object-fit: cover; }
     
-    .stats-table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; color: black; }
-    .stats-table th, .stats-table td { border: 1px solid #ccc; padding: 2px 1px; }
+    /* HIER ÄNDERN FÜR TABELLEN-SCHRIFTGRÖSSE */
+    .stats-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        font-size: 14px;  /* <--- HIER DREHEN: Vorher war 11px. Probier 13px oder 14px. */
+        text-align: center; 
+        color: black; 
+    }
+
+    /* HIER ÄNDERN FÜR ABSTÄNDE IN DEN ZELLEN (Damit die Tabelle nicht zu breit wird) */
+    .stats-table th, .stats-table td { 
+        border: 1px solid #ccc; 
+        padding: 3px 2px; /* <--- HIER DREHEN: Die erste Zahl ist oben/unten, die zweite links/rechts. 
+                                  Wenn die Tabelle rechts abgeschnitten wird, mach die zweite Zahl kleiner (z.B. 1px). */
+    }
+
     .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
     .font-bold { font-weight: bold; }
     
