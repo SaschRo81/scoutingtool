@@ -93,31 +93,40 @@ def generate_card_html(row, metadata, notes, color_code):
         <span style="font-size:12px;">{height_str} m | Pos: {pos_str}</span>
     </div>
     <div class="card-body">
-        <div class="player-img-box">
-            <img src="{img_url}" class="player-img" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
-        </div>
-        <table class="stats-table">
-            <tr class="bg-gray">
-                <th rowspan="2">Min</th><th rowspan="2">PPG</th>
-                <th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th>
-                <th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th>
+        <!-- NEUES LAYOUT: TABELLE STATT FLEXBOX -->
+        <table class="layout-table">
+            <tr>
+                <!-- Linke Spalte: Bild -->
+                <td class="layout-img-cell">
+                    <img src="{img_url}" class="player-img" onerror="this.src='https://via.placeholder.com/120x150?text=No+Img'">
+                </td>
+                <!-- Rechte Spalte: Stats Tabelle -->
+                <td class="layout-stats-cell">
+                    <table class="stats-table">
+                        <tr class="bg-gray">
+                            <th rowspan="2">Min</th><th rowspan="2">PPG</th>
+                            <th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th>
+                            <th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th>
+                        </tr>
+                        <tr class="bg-gray">
+                            <th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th>
+                            <th>D</th><th>O</th><th>TOT</th>
+                        </tr>
+                        <tr class="font-bold">
+                            <td>{row['MIN_DISPLAY']}</td><td>{row['PPG']}</td>
+                            <td>{row['2M']}</td><td>{row['2A']}</td><td>{row['2PCT']}</td>
+                            <td>{row['3M']}</td><td>{row['3A']}</td><td>{row['3PCT']}</td>
+                            <td>{row['FTM']}</td><td>{row['FTA']}</td><td>{row['FTPCT']}</td>
+                            <td>{row['DR']}</td><td>{row['OR']}</td><td>{row['TOT']}</td>
+                            <td>{row['AS']}</td><td>{row['TO']}</td><td>{row['ST']}</td><td>{row['PF']}</td>
+                        </tr>
+                        <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l1','')}</td><td colspan="10" class="note-right">{notes.get('r1','')}</td></tr>
+                        <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l2','')}</td><td colspan="10" class="note-right">{notes.get('r2','')}</td></tr>
+                        <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l3','')}</td><td colspan="10" class="note-right">{notes.get('r3','')}</td></tr>
+                        <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l4','')}</td><td colspan="10" class="note-right">{notes.get('r4','')}</td></tr>
+                    </table>
+                </td>
             </tr>
-            <tr class="bg-gray">
-                <th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th>
-                <th>D</th><th>O</th><th>TOT</th>
-            </tr>
-            <tr class="font-bold">
-                <td>{row['MIN_DISPLAY']}</td><td>{row['PPG']}</td>
-                <td>{row['2M']}</td><td>{row['2A']}</td><td>{row['2PCT']}</td>
-                <td>{row['3M']}</td><td>{row['3A']}</td><td>{row['3PCT']}</td>
-                <td>{row['FTM']}</td><td>{row['FTA']}</td><td>{row['FTPCT']}</td>
-                <td>{row['DR']}</td><td>{row['OR']}</td><td>{row['TOT']}</td>
-                <td>{row['AS']}</td><td>{row['TO']}</td><td>{row['ST']}</td><td>{row['PF']}</td>
-            </tr>
-            <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l1','')}</td><td colspan="10" class="note-right">{notes.get('r1','')}</td></tr>
-            <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l2','')}</td><td colspan="10" class="note-right">{notes.get('r2','')}</td></tr>
-            <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l3','')}</td><td colspan="10" class="note-right">{notes.get('r3','')}</td></tr>
-            <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l4','')}</td><td colspan="10" class="note-right">{notes.get('r4','')}</td></tr>
         </table>
     </div>
 </div>
