@@ -172,7 +172,7 @@ if not st.session_state.print_mode:
                         }
                         st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
                     except Exception as e:
-                        st.error(f"PDF Error: {e}")
+                        st.error(f"PDF Error: {e}")  # <--- HIER HINSCHAUEN
                 
                 st.session_state.print_mode = True
                 st.rerun()
