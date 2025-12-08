@@ -92,15 +92,22 @@ CSS_STYLES = """
     .stats-table { 
         width: 100%; 
         border-collapse: collapse; 
-        font-size: 13px;       /* <--- HIER ÄNDERN: Probier 20px oder 22px */
+        font-size: 13px;       /* Schrift bleibt groß */
         text-align: center; 
         color: black; 
     }
     
-    /* Damit die Tabelle nicht zu breit wird bei großer Schrift, mach das Padding klein */
+    /* ÄNDERUNG: Padding extrem verringern */
     .stats-table th, .stats-table td { 
         border: 1px solid #ccc; 
-        padding: 2px 1px;      /* <--- HIER: 1. Zahl (oben/unten), 2. Zahl (links/rechts) */
+        padding: 2px 0px;      /* <--- Vorher 2px 1px. Jetzt 0px an den Seiten für max. Platz */
+    }
+    
+    /* ÄNDERUNG: Bild-Box schmaler machen (von 80px auf 65px), gibt der Tabelle mehr Raum */
+    .player-img-box { 
+        width: 65px; 
+        min-width: 65px; 
+        border-right: 1px solid #ccc; 
     }
 
     .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
