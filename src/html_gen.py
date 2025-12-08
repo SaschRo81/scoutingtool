@@ -27,42 +27,71 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     if shooters.empty: shooters = df.sort_values(by="3PCT", ascending=False).head(3)
     fts = df[df["FTA"] >= 1.0].sort_values(by="FTPCT", ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by="FTPCT", ascending=True).head(3)
+    
     assisters = df.sort_values(by="AS", ascending=False).head(3)
     stealers = df.sort_values(by="ST", ascending=False).head(3)
     turnovers = df.sort_values(by="TO", ascending=False).head(3)
     blocks = df.sort_values(by="BS", ascending=False).head(3)
     fouls = df.sort_values(by="PF", ascending=False).head(3)
 
-    def build_box(d, headers, keys, bolds, color, icon, title):
+    # Schriftgröße für den PDF Zoom (0.55) anpassen -> 20px entspricht ca 11-12pt
+    FONT_SIZE = "20px"
+
+    def build_box(d, headers, keys, bolds, color, title):
         h = f"<div class='stat-box'>"
-        h += f"<div class='stat-title' style='border-top: 3px solid {color}; color: {color};'>{icon} {title}</div>"
-        h += f"<table class='top3-table'><tr>"
-        for head in headers: h += f"<th>{head}</th>"
+        # Titel ohne Emoji, dafür größer und fett
+        h += f"<div class='stat-title' style='border-top: 4px solid {color}; color: {color}; font-size: 22px; padding: 5px;'>{title}</div>"
+        
+        # Tabelle mit fester Schriftgröße für PDF
+        h += f"<table class='top3-table' style='width:100%; font-size: {FONT_SIZE}; border-collapse: collapse;'>"
+        h += "<tr>"
+        for head in headers: 
+            h += f"<th style='padding:4px; background-color:#f9f9f9; border-bottom:1px solid #ccc;'>{head}</th>"
         h += "</tr>"
+        
         for _, r in d.iterrows():
             h += "<tr>"
             for i, k in enumerate(keys):
                 val = r[k]
-                style = "font-weight:bold;" if i in bolds else ""
-                if k == "NAME_FULL": val = val.split(" ")[-1]
-                elif isinstance(val, float): val = f"{val:.1f}"
+                style = f"padding:4px; border-bottom:1px solid #eee; font-size: {FONT_SIZE};"
+                
+                if i in bolds: 
+                    style += " font-weight:bold;"
+                
+                if k == "NAME_FULL": 
+                    val = val.split(" ")[-1] # Nur Nachname
+                elif isinstance(val, float): 
+                    val = f"{val:.1f}"
+                
                 h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
         h += "</table></div>"
         return h
 
+    # HIER WURDEN DIE SPALTEN (M/A, D/O) HINZUGEFÜGT:
+
+    # Zeile 1
     html = "<div class='top3-container'>"
-    html += build_box(scorers, ["#", "Name", "PPG"], ["NR", "NAME_FULL", "PPG"], [2], "#e35b00", "🔥", "Top Scorer")
-    html += build_box(rebounders, ["#", "Name", "TOT"], ["NR", "NAME_FULL", "TOT"], [2], "#0055ff", "🗑️", "Rebounds")
-    html += build_box(shooters, ["#", "Name", "3%"], ["NR", "NAME_FULL", "3PCT"], [2], "#28a745", "🎯", "3-Points")
-    html += "</div><div class='top3-container'>"
-    html += build_box(fts, ["#", "Name", "FT%"], ["NR", "NAME_FULL", "FTPCT"], [2], "#dc3545", "⚠️", "Weak FT")
-    html += build_box(assisters, ["#", "Name", "AS"], ["NR", "NAME_FULL", "AS"], [2], "#ffc107", "🅰️", "Assists")
-    html += build_box(turnovers, ["#", "Name", "TO"], ["NR", "NAME_FULL", "TO"], [2], "#fd7e14", "🔄", "Turnovers")
-    html += "</div><div class='top3-container'>"
-    html += build_box(stealers, ["#", "Name", "ST"], ["NR", "NAME_FULL", "ST"], [2], "#6f42c1", "✋", "Steals")
-    html += build_box(blocks, ["#", "Name", "BS"], ["NR", "NAME_FULL", "BS"], [2], "#343a40", "🧱", "Blocks")
-    html += build_box(fouls, ["#", "Name", "PF"], ["NR", "NAME_FULL", "PF"], [2], "#20c997", "🛑", "Fouls")
+    html += build_box(scorers, ["#", "Name", "PPG"], ["NR", "NAME_FULL", "PPG"], [2], "#e35b00", "Top Scorer")
+    # Rebounds jetzt mit D / O / TOT
+    html += build_box(rebounders, ["#", "Name", "D", "O", "TOT"], ["NR", "NAME_FULL", "DR", "OR", "TOT"], [4], "#0055ff", "Rebounds")
+    # 3er jetzt mit M / A / %
+    html += build_box(shooters, ["#", "Name", "M", "A", "%"], ["NR", "NAME_FULL", "3M", "3A", "3PCT"], [4], "#28a745", "3-Points")
+    html += "</div>"
+    
+    # Zeile 2
+    html += "<div class='top3-container'>"
+    # Freiwürfe jetzt mit M / A / %
+    html += build_box(fts, ["#", "Name", "M", "A", "%"], ["NR", "NAME_FULL", "FTM", "FTA", "FTPCT"], [4], "#dc3545", "Weak FT")
+    html += build_box(assisters, ["#", "Name", "AS"], ["NR", "NAME_FULL", "AS"], [2], "#ffc107", "Assists")
+    html += build_box(turnovers, ["#", "Name", "TO"], ["NR", "NAME_FULL", "TO"], [2], "#fd7e14", "Turnovers")
+    html += "</div>"
+    
+    # Zeile 3
+    html += "<div class='top3-container'>"
+    html += build_box(stealers, ["#", "Name", "ST"], ["NR", "NAME_FULL", "ST"], [2], "#6f42c1", "Steals")
+    html += build_box(blocks, ["#", "Name", "BS"], ["NR", "NAME_FULL", "BS"], [2], "#343a40", "Blocks")
+    html += build_box(fouls, ["#", "Name", "PF"], ["NR", "NAME_FULL", "PF"], [2], "#20c997", "Fouls")
     html += "</div>"
     return html
 
@@ -146,11 +175,9 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
     
     def make_section(title, df):
         if df.empty: return ""
-        # Überschrift größer (26px)
         sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-size: 26px;'>{title}</h3>"
         sh += "<table style='width:100%; border-collapse:collapse; margin-bottom:20px;'>"
         
-        # Inhaltsschriftgröße groß (22px), passend für Zoom 0.55
         font_size = "22px"
 
         for _, r in df.iterrows():
