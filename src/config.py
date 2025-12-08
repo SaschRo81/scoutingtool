@@ -56,10 +56,13 @@ TEAMS_DB = {
 }
 
 # Zentrales CSS
+# ... oberer Teil bleibt gleich ...
+
 CSS_STYLES = """
 <style>
     body { font-family: 'Arial', sans-serif; font-size: 12px; }
     
+    /* ... Header Styles bleiben gleich ... */
     .report-header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
     .report-title { font-size: 26px; font-weight: bold; margin: 0; color: #000; }
     .matchup-container { display: flex; align-items: center; justify-content: center; gap: 40px; margin-top: 10px; }
@@ -67,13 +70,14 @@ CSS_STYLES = """
     .team-logo-img { height: 60px; max-width: 150px; object-fit: contain; }
     .vs-text { font-size: 24px; font-weight: bold; color: #333; }
 
+    /* ... Top 3 Styles bleiben gleich ... */
     .top3-container { display: flex; flex-direction: row; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; }
     .stat-box { flex: 1; border: 1px solid #ccc; }
-    .stat-title { padding: 4px; font-weight: bold; font-size: 13px; border-bottom: 1px solid #eee; }
-    .top3-table { width: 100%; font-size: 12x; border-collapse: collapse; }
+    .top3-table { width: 100%; font-size: 11px; border-collapse: collapse; }
     .top3-table th { background-color: #f9f9f9; text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
     .top3-table td { text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
 
+    /* SPIELER KARTE */
     .player-card { 
         border: 1px solid #ccc; margin-bottom: 15px; 
         background-color: white; page-break-inside: avoid; 
@@ -85,29 +89,28 @@ CSS_STYLES = """
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     .card-body { display: flex; flex-direction: row; }
-    .player-img-box { width: 80px; min-width: 80px; border-right: 1px solid #ccc; }
+    
+    /* HIER GEÄNDERT: Bild-Box schmaler machen (Platz sparen!) */
+    .player-img-box { 
+        width: 60px;       /* War vorher breiter */
+        min-width: 60px; 
+        border-right: 1px solid #ccc; 
+    }
     .player-img { width: 100%; height: 125px; object-fit: cover; }
     
-    /* HIER ÄNDERN FÜR TABELLEN-SCHRIFTGRÖSSE */
+    /* HIER GEÄNDERT: Schriftgröße minimal kleiner (18px), damit alles passt */
     .stats-table { 
         width: 100%; 
         border-collapse: collapse; 
-        font-size: 13px;       /* Schrift bleibt groß */
+        font-size: 18px;    /* War 20px. 18px bei Zoom 0.46 ist immer noch sehr gut lesbar (ca 11pt) */
         text-align: center; 
         color: black; 
     }
     
-    /* ÄNDERUNG: Padding extrem verringern */
+    /* Padding minimieren */
     .stats-table th, .stats-table td { 
         border: 1px solid #ccc; 
-        padding: 2px 0px;      /* <--- Vorher 2px 1px. Jetzt 0px an den Seiten für max. Platz */
-    }
-    
-    /* ÄNDERUNG: Bild-Box schmaler machen (von 80px auf 65px), gibt der Tabelle mehr Raum */
-    .player-img-box { 
-        width: 65px; 
-        min-width: 65px; 
-        border-right: 1px solid #ccc; 
+        padding: 2px 0px;   /* 0px seitlich für maximalen Platz */
     }
 
     .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
@@ -117,10 +120,10 @@ CSS_STYLES = """
     .note-left { font-weight: normal; }
     .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; }
 
-    .team-stats-container { margin-top: 30px; page-break-inside: avoid; font-size: 12px; }
+    .team-stats-container { margin-top: 30px; page-break-inside: avoid; }
     
     @media print {
-        body { -webkit-print-color-adjust: exact; zoom: 0.7; }
+        body { -webkit-print-color-adjust: exact; zoom: 0.46; } /* Auch hier Zoom anpassen */
         .no-print { display: none; }
     }
 </style>
