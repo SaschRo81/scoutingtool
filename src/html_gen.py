@@ -85,15 +85,15 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     legend_html = f"""
     <div style="display: flex; gap: 30px; margin-top: 5px; margin-bottom: 20px; font-size: 18px; color: #333;">
         <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div>
+            <div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px;"></div>
             <strong>Shooter</strong>
         </div>
         <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>
+            <div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px;"></div>
             Normal
         </div>
         <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>
+            <div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border:"></div>
             Non-Shooter
         </div>
     </div>
