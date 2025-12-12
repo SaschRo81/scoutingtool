@@ -17,7 +17,7 @@ from src.api import fetch_team_data, get_player_metadata_cached
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
     generate_team_stats_html, generate_custom_sections_html,
-    generate_comparison_html  # <--- NEU DAZU
+    generate_comparison_html
 )
 from src.state_manager import export_session_state, load_session_state
 
@@ -45,7 +45,6 @@ with st.sidebar:
     
     st.divider()
     if st.session_state.roster_df is not None:
-        # Dateiname für das Savegame auch schön formatieren
         save_name = f"Save_{datetime.date.today()}.json"
         st.download_button("💾 Speichern", export_session_state(), save_name, "application/json")
 
@@ -82,27 +81,15 @@ if not st.session_state.print_mode:
     tid = guest_id if target == "Gastteam (Gegner)" else home_id
     
     c_d, c_t = st.columns(2)
-    d_inp = c_d.date_input("Datum", datetime.date.today())
-    t_inp = c_t.time_input("Tip-Off", datetime.time(16,0))
+    # HIER IST DER FIX: Eindeutige Keys ("key=...") verhindern DuplicateElementId
+    d_inp = c_d.date_input("Datum", datetime.date.today(), key="main_date_picker")
+    t_inp = c_t.time_input("Tip-Off", datetime.time(16,0), key="main_time_picker")
 
-    # 2. DATEN LADEN
-    # ... (Code davor bleibt gleich) ...
-
-    c_d, c_t = st.columns(2)
-    d_inp = c_d.date_input("Datum", datetime.date.today())
-    t_inp = c_t.time_input("Tip-Off", datetime.time(16,0))
-
-    # --- NEU: VERGLEICH ---
-    # Wir importieren die neue Funktion hier (oder oben bei den Imports hinzufügen)
-    from src.html_gen import generate_comparison_html
-    
-    st.write("") # Abstand
-    
-    # Expander für den Vergleich, damit es nicht immer offen ist
+    # --- TEAMVERGLEICH (NEU) ---
+    st.write("")
     with st.expander("📊 Head-to-Head Teamvergleich anzeigen"):
         if st.button("Vergleich laden"):
             with st.spinner("Lade Statistik für beide Teams..."):
-                # Wir holen nur die Team-Stats (ts), den Kader (df) ignorieren wir hier
                 _, ts_home = fetch_team_data(home_id, SEASON_ID)
                 _, ts_guest = fetch_team_data(guest_id, SEASON_ID)
                 
@@ -112,10 +99,26 @@ if not st.session_state.print_mode:
                 else:
                     st.error("Konnte Daten für den Vergleich nicht laden.")
 
-    # 2. KADER LADEN (Scouting Ziel)
+    # 2. KADER LADEN
     st.divider()
-    
     data_ready = st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid
+    
+    if st.button(f"2. Kader von {target} laden", type="primary") or data_ready:
+        if not data_ready:
+            with st.spinner(f"Lade Daten für Team {tid}..."):
+                df, ts = fetch_team_data(tid, SEASON_ID)
+                if df is not None:
+                    st.session_state.roster_df = df
+                    st.session_state.team_stats = ts
+                    st.session_state.current_tid = tid 
+                else:
+                    st.error(f"Fehler API: Konnte Daten für Team {tid} nicht laden.")
+        
+        st.session_state.game_meta = {
+            "home_name": home_name, "home_logo": st.session_state.logo_h,
+            "guest_name": guest_name, "guest_logo": st.session_state.logo_g,
+            "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H:%M")
+        }
 
     # 3. EDITIEREN
     if st.session_state.roster_df is not None:
@@ -179,14 +182,10 @@ if not st.session_state.print_mode:
                         st.session_state.saved_colors[item["pid"]] = item["color"]
                         for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
                     
-                    # --- HIER WIRD DER DATEINAME GENERIERT ---
                     t_name = (guest_name if target == "Gastteam (Gegner)" else home_name).replace(" ", "_")
                     date_str = d_inp.strftime("%d.%m.%Y")
-                    # Zeit mit Bindestrich statt Doppelpunkt für gültigen Dateinamen
                     time_str = t_inp.strftime("%H-%M") 
-                    
                     st.session_state.report_filename = f"Scouting_Report_{t_name}_{date_str}_{time_str}.pdf"
-                    # -----------------------------------------
                     
                     html = generate_header_html(st.session_state.game_meta)
                     html += generate_top3_html(st.session_state.roster_df)
