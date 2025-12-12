@@ -1,9 +1,11 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+from datetime import datetime
+import pytz
 
 def safe_int(val):
-    """Wandelt Werte sicher in Zahlen um, auch wenn sie leer oder Text sind."""
+    """Wandelt Werte sicher in Zahlen um."""
     if val is None: return 0
     if isinstance(val, int): return val
     if isinstance(val, float): return int(val)
@@ -14,7 +16,7 @@ def safe_int(val):
     return 0
 
 def get_team_name(team_data, default_name="Team"):
-    """Sucht den Teamnamen in den verschiedenen Ebenen der API-Antwort."""
+    """Sucht den Teamnamen."""
     name = team_data.get("gameStat", {}).get("seasonTeam", {}).get("name")
     if name: return name
     name = team_data.get("seasonTeam", {}).get("name")
@@ -23,8 +25,19 @@ def get_team_name(team_data, default_name="Team"):
     if name: return name
     return default_name
 
+def format_date_time(iso_string):
+    """Formatiert ISO-Datum zu lesbarem String (Berlin Zeit)."""
+    if not iso_string: return "-"
+    try:
+        dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+        berlin = pytz.timezone("Europe/Berlin")
+        dt_berlin = dt.astimezone(berlin)
+        return dt_berlin.strftime("%d.%m.%Y | %H:%M Uhr")
+    except:
+        return iso_string
+
 def render_game_header(box):
-    """Zeigt den Header mit Teamnamen, Ergebnis, Schiris und Zuschauern."""
+    """Header mit allen Meta-Infos."""
     h_data = box.get("homeTeam", {})
     g_data = box.get("guestTeam", {})
     
@@ -34,28 +47,52 @@ def render_game_header(box):
     h_coach = h_data.get("headCoachName", "-")
     g_coach = g_data.get("headCoachName", "-")
     
+    # Scores
     score_h = safe_int(h_data.get("gameStat", {}).get("points"))
     score_g = safe_int(g_data.get("gameStat", {}).get("points"))
     
-    # --- SCHIEDSRICHTER SUCHEN ---
+    # --- META DATEN SUCHEN ---
+    
+    # 1. Datum/Zeit
+    # Versuche scheduledTime an verschiedenen Orten zu finden
+    time_str = format_date_time(box.get("scheduledTime"))
+    if time_str == "-":
+         time_str = format_date_time(h_data.get("gameStat", {}).get("scheduledTime"))
+
+    # 2. Spielort (Venue)
+    venue = box.get("venue")
+    venue_str = "-"
+    if venue and isinstance(venue, dict):
+        venue_str = venue.get("name", "-")
+        city = venue.get("address", {}).get("city", "") if isinstance(venue.get("address"), dict) else ""
+        if city: venue_str += f", {city}"
+    
+    # 3. Schiedsrichter
+    # Im Schema sind referee1, referee2, referee3 Objekte. Wir versuchen Namen zu finden.
     refs = []
     for i in range(1, 4):
         r = box.get(f"referee{i}")
         if r and isinstance(r, dict):
-            # Name zusammenbauen
-             name = f"{r.get('firstName', '')} {r.get('lastName', '')}".strip()
-             if name: refs.append(name)
+            # Versuche verschiedene Namensfelder (oft firstName/lastName auch wenn nicht im DTO)
+            fn = r.get("firstName", "")
+            ln = r.get("lastName", "")
+            # Fallback: Manchmal steht der Name direkt im Objekt unter 'name' oder ähnlichem
+            if not fn and not ln:
+                 fn = r.get("name", "")
+            
+            full_name = f"{ln} {fn}".strip()
+            if full_name: refs.append(full_name)
     
     ref_str = ", ".join(refs) if refs else "-"
-    # -----------------------------
 
-    # ZUSCHAUER & ORT
-    # Zuschauer oft direkt im Root oder im gameStat
+    # 4. Zuschauer
     att = box.get("attendance")
     if not att: att = h_data.get("gameStat", {}).get("attendance", "-")
     
-    # Ort (Venue) ist oft in der 'facility' im Schedule, hier im Boxscore evtl. nicht immer da
-    # Wir lassen es erstmal weg, wenn nicht da.
+    # --- LAYOUT ---
+    
+    # Datum & Ort ganz oben
+    st.markdown(f"<div style='text-align: center; color: #666; margin-bottom: 10px;'>{time_str} | {venue_str}</div>", unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns([2, 1, 2])
     with c1:
@@ -63,6 +100,7 @@ def render_game_header(box):
         st.caption(f"HC: {h_coach}")
     with c2:
         st.markdown(f"<h1 style='text-align: center;'>{score_h} : {score_g}</h1>", unsafe_allow_html=True)
+        # Q1-Q4 fehlen leider im API Schema, daher nur FINAL
         st.markdown("<p style='text-align: center; color: gray;'>FINAL</p>", unsafe_allow_html=True)
     with c3:
         st.markdown(f"## {g_name}")
@@ -70,17 +108,16 @@ def render_game_header(box):
     
     st.write("---")
     
-    # Meta-Zeile mit Schiris
+    # Meta Zeile
     st.markdown(f"""
-    <div style='display: flex; justify-content: space-between; color: #555; font-size: 14px;'>
-        <span><b>Zuschauer:</b> {att}</span>
-        <span><b>Schiedsrichter:</b> {ref_str}</span>
-        <span><b>Status:</b> {box.get('status', 'OFFICIAL')}</span>
+    <div style='display: flex; justify-content: space-between; color: #333; font-size: 14px; background-color: #f9f9f9; padding: 10px; border-radius: 5px;'>
+        <span>👥 <b>Zuschauer:</b> {att}</span>
+        <span>⚖️ <b>Schiedsrichter:</b> {ref_str}</span>
+        <span>ID: {box.get('gameId', box.get('id', '-'))}</span>
     </div>
     """, unsafe_allow_html=True)
 
 def render_boxscore_table_pro(player_stats, team_name):
-    """Erstellt die Boxscore-Tabelle mit dynamischer Höhe (kein Scrollbalken)."""
     if not player_stats: return
 
     data = []
@@ -144,7 +181,6 @@ def render_boxscore_table_pro(player_stats, team_name):
             "PF": pf, "EFF": eff, "+/-": pm
         })
 
-    # TOTALS
     tot_fg_pct = int(t_fgm/t_fga*100) if t_fga else 0
     tot_3p_pct = int(t_3pm/t_3pa*100) if t_3pa else 0
     tot_ft_pct = int(t_ftm/t_fta*100) if t_fta else 0
@@ -166,19 +202,16 @@ def render_boxscore_table_pro(player_stats, team_name):
 
     st.markdown(f"#### {team_name}")
     
-    # HIER DER FIX FÜR SCROLLBALKEN: Dynamische Höhe
-    # 35px pro Zeile + 38px Header-Buffer (ca.)
+    # Scrollbalken entfernen durch dynamische Höhe
     calc_height = (len(df) + 1) * 35 + 3
-    
     st.dataframe(
         df.style.apply(highlight_totals, axis=1), 
         hide_index=True, 
         use_container_width=True, 
-        height=calc_height # Setzt die Höhe exakt passend zur Anzahl der Zeilen
+        height=calc_height
     )
 
 def render_charts_and_stats(box):
-    """Zeigt die Balkendiagramme und die Tabelle (Rebounds getrennt)."""
     
     h_data = box.get("homeTeam", {})
     g_data = box.get("guestTeam", {})
@@ -230,13 +263,11 @@ def render_charts_and_stats(box):
     text = base.mark_text(dy=-10, color='black').encode(text='Label')
     chart = (bar + text).properties(height=350)
 
-    # --- 2. TABELLE (REBOUNDS GETRENNT) ---
+    # --- 2. TABELLE ---
     metrics = [
-        # HIER GEÄNDERT: Rebounds aufgeteilt
         ("Offensive Rebounds", safe_int(h.get('offensiveRebounds')), safe_int(g.get('offensiveRebounds'))),
         ("Defensive Rebounds", safe_int(h.get('defensiveRebounds')), safe_int(g.get('defensiveRebounds'))),
         ("Total Rebounds", safe_int(h.get('totalRebounds')), safe_int(g.get('totalRebounds'))),
-        # -----------------------------------
         ("Assists", safe_int(h.get("assists")), safe_int(g.get("assists"))),
         ("Fouls", safe_int(h.get("foulsCommitted")), safe_int(g.get("foulsCommitted"))),
         ("Turnovers", safe_int(h.get("turnovers")), safe_int(g.get("turnovers"))),
