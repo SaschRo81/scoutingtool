@@ -128,7 +128,7 @@ def render_game_header(box):
     if time_str == "-":
         time_str = format_date_time(h_data.get("gameStat", {}).get("scheduledTime"))
 
-    # 2. Ort (Venue)
+    # 2. Ort (Venue) - VERBESSERTE LOGIK
     venue_str = "-"
     venue = box.get("venue")
     if not venue:
@@ -141,9 +141,32 @@ def render_game_header(box):
             if not venue: venue = venues[0]
 
     if venue and isinstance(venue, dict):
-        venue_str = venue.get("name", "-")
-        city = venue.get("address", {}).get("city", "")
-        if city and city not in venue_str: venue_str += f", {city}"
+        # Name der Halle
+        venue_name = venue.get("name", "-")
+        venue_str = venue_name
+        
+        # Adresse verarbeiten (kann String oder Dict sein)
+        address = venue.get("address")
+        city = ""
+        
+        if isinstance(address, dict):
+            # Wenn Adresse ein Objekt ist
+            city = address.get("city", "")
+        elif isinstance(address, str) and address:
+            # Wenn Adresse ein String ist: "Strasse 1, 12345 Stadt"
+            # Versuche Stadt nach PLZ zu finden
+            parts = address.split(" ")
+            # Einfache Heuristik: Letztes Wort ist oft die Stadt
+            if len(parts) > 1:
+                # Prüfen ob vorletztes Teil eine PLZ ist (Zahl)
+                if parts[-2].isdigit() and len(parts[-2]) == 5:
+                    city = parts[-1]
+                elif "," in address:
+                    city = address.split(",")[-1].strip()
+
+        # Stadt nur anhängen, wenn sie nicht schon im Namen steht (z.B. "Theresianum Mainz")
+        if city and city.lower() not in venue_name.lower():
+             venue_str += f", {city}"
 
     # 3. Schiedsrichter
     refs = []
@@ -185,7 +208,7 @@ def render_game_header(box):
     """, unsafe_allow_html=True)
 
 def render_boxscore_table_pro(player_stats, team_name):
-    """Boxscore Tabelle."""
+    """Boxscore Tabelle ohne Scrollbalken."""
     if not player_stats: return
 
     data = []
@@ -203,6 +226,7 @@ def render_boxscore_table_pro(player_stats, team_name):
             t_min += sec
             min_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
             pts = safe_int(p.get("points")); t_pts += pts
+            
             m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted"))
             p2 = safe_int(p.get("twoPointShotSuccessPercent"))
             m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted"))
@@ -211,6 +235,7 @@ def render_boxscore_table_pro(player_stats, team_name):
             pfg = safe_int(p.get("fieldGoalsSuccessPercent")); t_fgm += mfg; t_fga += afg
             mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted"))
             pft = safe_int(p.get("freeThrowsSuccessPercent")); t_ftm += mft; t_fta += aft
+            
             oreb = safe_int(p.get("offensiveRebounds")); t_or += oreb
             dreb = safe_int(p.get("defensiveRebounds")); t_dr += dreb
             treb = safe_int(p.get("totalRebounds")); t_tr += treb
@@ -273,7 +298,6 @@ def render_game_top_performers(box):
         sorted_p = sorted(active, key=lambda x: safe_int(x.get(key)), reverse=True)
         return sorted_p[:3]
 
-    # HIER GEÄNDERT: Schriftgröße auf 16px gesetzt
     def mk_box(players, title, color, val_key="points"):
         html = f"<div style='flex:1; border:1px solid #ccc; margin:5px;'>"
         html += f"<div style='background:{color}; color:white; padding:5px; font-weight:bold; text-align:center;'>{title}</div>"
@@ -282,7 +306,6 @@ def render_game_top_performers(box):
              info = p.get("seasonPlayer", {})
              name = f"{info.get('lastName', '')}"
              val = safe_int(p.get(val_key))
-             # padding erhöht und font-size 16px
              html += f"<tr><td style='padding:6px; font-size:16px;'>{name}</td><td style='padding:6px; text-align:right; font-weight:bold; font-size:16px;'>{val}</td></tr>"
         html += "</table></div>"
         return html
