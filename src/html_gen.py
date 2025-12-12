@@ -206,3 +206,94 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
     html += make_section("ALL ABOUT US", about_df)
     html += "</div>"
     return html
+# ... (Code davor bleibt) ...
+
+def generate_comparison_html(h_stats, g_stats, h_name, g_name):
+    """Erstellt eine HTML-Vergleichstabelle für zwei Teams."""
+    if not h_stats or not g_stats:
+        return "Keine Daten für Vergleich verfügbar."
+
+    # Hilfsfunktion für Prozente
+    def get_pct(stats, cat):
+        # Falls API 0 liefert, selbst rechnen
+        if stats.get(f'{cat}pct', 0) > 0: return stats[f'{cat}pct']
+        m = stats.get(f'{cat}m', 0)
+        a = stats.get(f'{cat}a', 0)
+        return (m / a * 100) if a > 0 else 0.0
+
+    # Daten vorbereiten (Label, Home-Key, Guest-Key, Format, 'Lower is better'?)
+    # Format: (Anzeige-Name, Key im Dict, ist_prozent, niedriger_ist_besser)
+    metrics = [
+        ("Points Per Game", "ppg", False, False),
+        ("Field Goal %", "FG%", True, False), # Müssen wir berechnen
+        ("3-Point %", "3pct", True, False),
+        ("Free Throw %", "ftpct", True, False),
+        ("Rebounds (Total)", "tot", False, False),
+        ("Offensive Rebs", "or", False, False),
+        ("Assists", "as", False, False),
+        ("Turnovers", "to", False, True), # Hier ist niedriger besser!
+        ("Steals", "st", False, False),
+        ("Blocks", "bs", False, False), # API liefert oft kein BS im Team-Objekt, wir prüfen das
+        ("Fouls", "pf", False, True)      # Niedriger ist besser
+    ]
+
+    # FG% Berechnung on the fly hinzufügen, falls nicht im Dict
+    for stats in [h_stats, g_stats]:
+        fg_m = stats.get('2m', 0) + stats.get('3m', 0)
+        fg_a = stats.get('2a', 0) + stats.get('3a', 0)
+        stats['FG%'] = (fg_m / fg_a * 100) if fg_a > 0 else 0.0
+        # Prozente für 3er und FT auch sicherstellen
+        stats['3pct'] = get_pct(stats, '3')
+        stats['ftpct'] = get_pct(stats, 'ft')
+        # Blocks fallback (falls nicht in API)
+        if 'bs' not in stats: stats['bs'] = 0.0
+
+    # HTML Bauen
+    html = f"""
+    <div style="margin-top: 20px; margin-bottom: 20px; font-family: Arial, sans-serif;">
+        <h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px;">Head-to-Head Vergleich (Saison-Schnitt)</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 16px;">
+            <thead>
+                <tr style="background-color: #f2f2f2; border-bottom: 2px solid #ccc;">
+                    <th style="padding: 10px; text-align: right; width: 35%;">{h_name}</th>
+                    <th style="padding: 10px; text-align: center; width: 30%;">Statistik</th>
+                    <th style="padding: 10px; text-align: left; width: 35%;">{g_name}</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+
+    for label, key, is_pct, lower_better in metrics:
+        val_h = h_stats.get(key, 0.0)
+        val_g = g_stats.get(key, 0.0)
+        
+        # Formatierung
+        fmt_h = f"{val_h:.1f}" + ("%" if is_pct else "")
+        fmt_g = f"{val_g:.1f}" + ("%" if is_pct else "")
+
+        # Gewinner ermitteln für Fettdruck
+        bold_h = ""
+        bold_g = ""
+        
+        if val_h != val_g:
+            if lower_better:
+                if val_h < val_g: bold_h = "font-weight: bold; color: #5c9c30;"
+                else: bold_g = "font-weight: bold; color: #5c9c30;"
+            else:
+                if val_h > val_g: bold_h = "font-weight: bold; color: #5c9c30;"
+                else: bold_g = "font-weight: bold; color: #5c9c30;"
+
+        html += f"""
+            <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 8px; text-align: right; {bold_h}">{fmt_h}</td>
+                <td style="padding: 8px; text-align: center; color: #666; font-size: 14px;">{label}</td>
+                <td style="padding: 8px; text-align: left; {bold_g}">{fmt_g}</td>
+            </tr>
+        """
+
+    html += """
+            </tbody>
+        </table>
+    </div>
+    """
+    return html
