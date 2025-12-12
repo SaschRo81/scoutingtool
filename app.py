@@ -21,6 +21,8 @@ from src.html_gen import (
     generate_comparison_html
 )
 from src.state_manager import export_session_state, load_session_state
+# NEU: Import der neuen UI-Datei
+from src.analysis_ui import render_game_header, render_boxscore_table_pro, render_charts_and_stats
 
 st.set_page_config(page_title=f"DBBL Scouting Suite {VERSION}", layout="wide", page_icon="🏀")
 
@@ -30,216 +32,17 @@ for key, default in [
     ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
     ("roster_df", None), ("team_stats", None), ("game_meta", {}),
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
-    ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])),
+    ("facts_offense", pd.DataFrame([
+        {"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"},
+        {"Fokus": "Spacing", "Beschreibung": "swing or skip the ball to get it inside"},
+        {"Fokus": "Rules", "Beschreibung": "Stick to our offense rules"},
+        {"Fokus": "Automatics", "Beschreibung": "use cuts and shifts to get movement on court"},
+    ])),
     ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
     ("facts_about", pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}])),
     ("selected_game_id", None)
 ]:
     if key not in st.session_state: st.session_state[key] = default
-
-# --- HELFER: BOXSCORE ANZEIGE ---
-
-def render_game_header(box):
-    """Zeigt Trainer, Schiris, Ort, Zuschauer und Quarter-Scores."""
-    
-    h_data = box.get("homeTeam", {})
-    g_data = box.get("guestTeam", {})
-    h_name = h_data.get("seasonTeam", {}).get("name", "Heim")
-    g_name = g_data.get("seasonTeam", {}).get("name", "Gast")
-    
-    h_coach = h_data.get("headCoachName", "-")
-    g_coach = g_data.get("headCoachName", "-")
-    
-    attendance = box.get("attendance", "-")
-    
-    # Header Layout
-    c1, c2, c3 = st.columns([2, 1, 2])
-    with c1:
-        st.markdown(f"### {h_name}")
-        st.caption(f"HC: {h_coach}")
-    with c2:
-        st.markdown("<h2 style='text-align: center;'>VS</h2>", unsafe_allow_html=True)
-    with c3:
-        st.markdown(f"### {g_name}")
-        st.caption(f"HC: {g_coach}")
-        
-    st.write("---")
-    st.markdown(f"**Zuschauer:** {attendance} | **Status:** {box.get('status', '-')}")
-
-def render_boxscore_table_pro(player_stats, team_name):
-    """Erstellt eine professionelle Boxscore-Tabelle."""
-    if not player_stats: return
-
-    # --- HIER IST DER FIX: Hilfsfunktion für sichere Zahlen ---
-    def safe_int(val):
-        """Wandelt Wert in Int um, macht 0 wenn leer oder None."""
-        if val is None or val == "":
-            return 0
-        try:
-            return int(val)
-        except:
-            return 0
-    # ----------------------------------------------------------
-
-    data = []
-    
-    # Summen-Variablen
-    t_min=0; t_pts=0; t_fgm=0; t_fga=0; t_3pm=0; t_3pa=0; t_ftm=0; t_fta=0
-    t_or=0; t_dr=0; t_tr=0; t_as=0; t_st=0; t_to=0; t_bs=0; t_pf=0; t_eff=0; t_pm=0
-
-    for p in player_stats:
-        info = p.get("seasonPlayer", {})
-        name = f"{info.get('lastName', '')}, {info.get('firstName', '')}"
-        nr = info.get("shirtNumber", "-")
-        starter = "*" if p.get("isStartingFive") else ""
-        
-        # Werte sicher laden (mit safe_int)
-        sec = safe_int(p.get("secondsPlayed"))
-        t_min += sec
-        min_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
-        
-        pts = safe_int(p.get("points")); t_pts += pts
-        
-        m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted"))
-        p2 = safe_int(p.get("twoPointShotSuccessPercent"))
-        
-        m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted"))
-        p3 = safe_int(p.get("threePointShotSuccessPercent")); t_3pm += m3; t_3pa += a3
-        
-        mfg = safe_int(p.get("fieldGoalsMade")); afg = safe_int(p.get("fieldGoalsAttempted"))
-        pfg = safe_int(p.get("fieldGoalsSuccessPercent")); t_fgm += mfg; t_fga += afg
-        
-        mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted"))
-        pft = safe_int(p.get("freeThrowsSuccessPercent")); t_ftm += mft; t_fta += aft
-        
-        oreb = safe_int(p.get("offensiveRebounds")); t_or += oreb
-        dreb = safe_int(p.get("defensiveRebounds")); t_dr += dreb
-        treb = safe_int(p.get("totalRebounds")); t_tr += treb
-        
-        ast = safe_int(p.get("assists")); t_as += ast
-        stl = safe_int(p.get("steals")); t_st += stl
-        tov = safe_int(p.get("turnovers")); t_to += tov
-        blk = safe_int(p.get("blocks")); t_bs += blk
-        pf = safe_int(p.get("foulsCommitted")); t_pf += pf
-        eff = safe_int(p.get("efficiency")); t_eff += eff
-        
-        # HIER WAR DER FEHLER (plusMinus kann "" sein)
-        pm = safe_int(p.get("plusMinus")); t_pm += pm
-
-        # Strings bauen
-        s_2p = f"{m2}/{a2} ({p2}%)" if a2 else ""
-        s_3p = f"{m3}/{a3} ({p3}%)" if a3 else ""
-        s_fg = f"{mfg}/{afg} ({pfg}%)"
-        s_ft = f"{mft}/{aft} ({pft}%)" if aft else ""
-
-        data.append({
-            "No.": f"{starter}{nr}",
-            "Name": name,
-            "Min": min_str,
-            "PTS": pts,
-            "2P": s_2p,
-            "3P": s_3p,
-            "FG": s_fg,
-            "FT": s_ft,
-            "OR": oreb, "DR": dreb, "TR": treb,
-            "AS": ast, "ST": stl, "TO": tov, "BS": blk,
-            "PF": pf, "EFF": eff, "+/-": pm
-        })
-
-    # Summen Zeile berechnen
-    tot_fg_pct = int(t_fgm/t_fga*100) if t_fga else 0
-    tot_3p_pct = int(t_3pm/t_3pa*100) if t_3pa else 0
-    tot_ft_pct = int(t_ftm/t_fta*100) if t_fta else 0
-    
-    totals = {
-        "No.": "", "Name": "TOTALS", "Min": "200:00", "PTS": t_pts,
-        "2P": "", 
-        "3P": f"{t_3pm}/{t_3pa} ({tot_3p_pct}%)",
-        "FG": f"{t_fgm}/{t_fga} ({tot_fg_pct}%)",
-        "FT": f"{t_ftm}/{t_fta} ({tot_ft_pct}%)",
-        "OR": t_or, "DR": t_dr, "TR": t_tr,
-        "AS": t_as, "ST": t_st, "TO": t_to, "BS": t_bs,
-        "PF": t_pf, "EFF": t_eff, "+/-": t_pm
-    }
-    data.append(totals)
-
-    df = pd.DataFrame(data)
-    st.markdown(f"#### {team_name}")
-    st.dataframe(df, hide_index=True, use_container_width=True)
-
-def render_comparison_charts(box):
-    """Erstellt Charts und Tabelle für Team-Stats."""
-    
-    h = box.get("homeTeam", {}).get("gameStat", {})
-    g = box.get("guestTeam", {}).get("gameStat", {})
-    
-    h_name = box.get("homeTeam", {}).get("seasonTeam", {}).get("tlc", "HEIM")
-    g_name = box.get("guestTeam", {}).get("seasonTeam", {}).get("tlc", "GAST")
-
-    # Hilfsfunktion für sicheren Zugriff (falls Werte fehlen/leer sind)
-    def safe_get(dic, key):
-        val = dic.get(key)
-        if val is None or val == "": return 0
-        return int(val)
-
-    metrics = [
-        ("Rebounds (OR/DR/TR)", 
-         f"{safe_get(h,'offensiveRebounds')}/{safe_get(h,'defensiveRebounds')}/{safe_get(h,'totalRebounds')}",
-         f"{safe_get(g,'offensiveRebounds')}/{safe_get(g,'defensiveRebounds')}/{safe_get(g,'totalRebounds')}"),
-        ("Assists", safe_get(h,"assists"), safe_get(g,"assists")),
-        ("Turnovers", safe_get(h,"turnovers"), safe_get(g,"turnovers")),
-        ("Steals", safe_get(h,"steals"), safe_get(g,"steals")),
-        ("Blocks", safe_get(h,"blocks"), safe_get(g,"blocks")),
-        ("Fouls", safe_get(h,"foulsCommitted"), safe_get(g,"foulsCommitted")),
-        ("Efficiency", safe_get(h,"efficiency"), safe_get(g,"efficiency")),
-        ("Points in Paint", h.get("pointsInPaint", "-"), g.get("pointsInPaint", "-")), 
-        ("2nd Chance Pts", h.get("secondChancePoints", "-"), g.get("secondChancePoints", "-")),
-        ("Fastbreak Pts", h.get("fastBreakPoints", "-"), g.get("fastBreakPoints", "-"))
-    ]
-    
-    chart_data = pd.DataFrame({
-        'Kategorie': ['FG%', '2P%', '3P%', 'FT%'] * 2,
-        'Team': [h_name]*4 + [g_name]*4,
-        'Wert': [
-            safe_get(h,'fieldGoalsSuccessPercent'), safe_get(h,'twoPointShotSuccessPercent'), 
-            safe_get(h,'threePointShotSuccessPercent'), safe_get(h,'freeThrowsSuccessPercent'),
-            safe_get(g,'fieldGoalsSuccessPercent'), safe_get(g,'twoPointShotSuccessPercent'), 
-            safe_get(g,'threePointShotSuccessPercent'), safe_get(g,'freeThrowsSuccessPercent')
-        ]
-    })
-
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        st.markdown("#### Wurfquoten")
-        chart = alt.Chart(chart_data).mark_bar().encode(
-            x=alt.X('Kategorie', sort=None),
-            y='Wert',
-            color='Team',
-            xOffset='Team'
-        ).properties(height=300)
-        st.altair_chart(chart, use_container_width=True)
-
-    with c2:
-        st.markdown("#### Team Statistik")
-        html = f"""
-        <table style="width:100%; border-collapse: collapse; font-size: 14px;">
-            <tr style="background-color:#333; color:white;">
-                <th style="padding:8px; text-align:center;">{h_name}</th>
-                <th style="padding:8px; text-align:center;">Kategorie</th>
-                <th style="padding:8px; text-align:center;">{g_name}</th>
-            </tr>
-        """
-        for label, vh, vg in metrics:
-            html += f"""
-            <tr style="border-bottom:1px solid #eee;">
-                <td style="padding:6px; text-align:center;">{vh}</td>
-                <td style="padding:6px; text-align:center; font-weight:bold; color:#555;">{label}</td>
-                <td style="padding:6px; text-align:center;">{vg}</td>
-            </tr>
-            """
-        html += "</table>"
-        st.markdown(html, unsafe_allow_html=True)
-
 
 # --- NAVIGATIONS-HELFER ---
 def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
@@ -292,7 +95,7 @@ def render_comparison_page():
                 st.error("Daten nicht verfügbar.")
 
 # ==========================================
-# SEITE 3: SPIELNACHBEREITUNG
+# SEITE 3: SPIELNACHBEREITUNG (NEU via src/analysis_ui.py)
 # ==========================================
 def render_analysis_page():
     st.button("🏠 Zurück zum Start", on_click=go_home)
@@ -323,9 +126,11 @@ def render_analysis_page():
                 with st.spinner("Lade Boxscore..."):
                     box = fetch_game_boxscore(selected_id)
                     if box:
+                        # Aufruf der ausgelagerten Funktionen
                         render_game_header(box)
                         st.write("")
 
+                        # Namen sicher holen für Tabellen-Header
                         h_name = box.get("homeTeam", {}).get("seasonTeam", {}).get("name", "Heim")
                         g_name = box.get("guestTeam", {}).get("seasonTeam", {}).get("name", "Gast")
                         
@@ -334,8 +139,7 @@ def render_analysis_page():
                         render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name)
                         
                         st.divider()
-                        render_comparison_charts(box)
-                        
+                        render_charts_and_stats(box)
                     else:
                         st.error("Konnte Boxscore nicht laden.")
         else:
@@ -345,6 +149,9 @@ def render_analysis_page():
 # SEITE 4: SCOUTING REPORT
 # ==========================================
 def render_scouting_page():
+    # Variable 'target' muss VOR ihrer Verwendung definiert werden!
+    target = None 
+    
     if not st.session_state.print_mode:
         c_home, c_head = st.columns([1, 5])
         with c_home: st.button("🏠 Home", on_click=go_home)
@@ -480,7 +287,7 @@ def render_scouting_page():
                         try:
                             full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
                             opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
-                                    "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.44",
+                                    "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
                                     "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
                             st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
                             st.session_state.print_mode = True
