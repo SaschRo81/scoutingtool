@@ -48,7 +48,7 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
     cur_h = 0; cur_g = 0
     
     # Run Berechnung Variablen
-    current_run_team = None # 'home' oder 'guest'
+    current_run_team = None 
     current_run_points = 0
     
     hid_str = str(home_id)
@@ -128,16 +128,12 @@ def render_game_header(box):
     if time_str == "-":
         time_str = format_date_time(h_data.get("gameStat", {}).get("scheduledTime"))
 
-    # 2. Ort (Venue) - Erweiterte Suche
+    # 2. Ort (Venue)
     venue_str = "-"
-    # A. Direkt im Box-Objekt
     venue = box.get("venue")
-    
-    # B. Wenn nicht, im Heim-Team (seasonVenues ist eine Liste)
     if not venue:
         venues = h_data.get("seasonTeam", {}).get("seasonVenues", [])
         if venues and isinstance(venues, list) and len(venues) > 0:
-            # Wir suchen die Haupthalle (isMain)
             for v in venues:
                 if v.get("isMain"):
                     venue = v
@@ -189,7 +185,7 @@ def render_game_header(box):
     """, unsafe_allow_html=True)
 
 def render_boxscore_table_pro(player_stats, team_name):
-    """Boxscore Tabelle ohne Scrollbalken."""
+    """Boxscore Tabelle."""
     if not player_stats: return
 
     data = []
@@ -207,7 +203,6 @@ def render_boxscore_table_pro(player_stats, team_name):
             t_min += sec
             min_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
             pts = safe_int(p.get("points")); t_pts += pts
-            
             m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted"))
             p2 = safe_int(p.get("twoPointShotSuccessPercent"))
             m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted"))
@@ -216,7 +211,6 @@ def render_boxscore_table_pro(player_stats, team_name):
             pfg = safe_int(p.get("fieldGoalsSuccessPercent")); t_fgm += mfg; t_fga += afg
             mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted"))
             pft = safe_int(p.get("freeThrowsSuccessPercent")); t_ftm += mft; t_fta += aft
-            
             oreb = safe_int(p.get("offensiveRebounds")); t_or += oreb
             dreb = safe_int(p.get("defensiveRebounds")); t_dr += dreb
             treb = safe_int(p.get("totalRebounds")); t_tr += treb
@@ -265,7 +259,7 @@ def render_boxscore_table_pro(player_stats, team_name):
     calc_height = (len(df) + 1) * 35 + 3
     st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
 
-# --- NEU: TOP 3 PERFORMER ANZEIGE ---
+# --- TOP PERFORMER ANZEIGE (SCHRIFTGRÖSSE 16PX) ---
 def render_game_top_performers(box):
     """Zeigt die Top 3 Scorer beider Teams an."""
     
@@ -274,42 +268,34 @@ def render_game_top_performers(box):
     h_name = get_team_name(h_data, "Heim")
     g_name = get_team_name(g_data, "Gast")
 
-    # Helper zum extrahieren
     def get_top3(stats_list, key="points"):
-        # Liste bereinigen (DNP filtern)
         active = [p for p in stats_list if safe_int(p.get("secondsPlayed")) > 0]
-        # Sortieren
         sorted_p = sorted(active, key=lambda x: safe_int(x.get(key)), reverse=True)
         return sorted_p[:3]
 
-    # HTML Helper
-    def mk_box(players, title, color, val_key="points", label="PTS"):
+    # HIER GEÄNDERT: Schriftgröße auf 16px gesetzt
+    def mk_box(players, title, color, val_key="points"):
         html = f"<div style='flex:1; border:1px solid #ccc; margin:5px;'>"
         html += f"<div style='background:{color}; color:white; padding:5px; font-weight:bold; text-align:center;'>{title}</div>"
-        html += "<table style='width:100%; font-size:12px; border-collapse:collapse;'>"
+        html += "<table style='width:100%; border-collapse:collapse;'>"
         for p in players:
              info = p.get("seasonPlayer", {})
              name = f"{info.get('lastName', '')}"
              val = safe_int(p.get(val_key))
-             html += f"<tr><td style='padding:4px;'>{name}</td><td style='padding:4px; text-align:right; font-weight:bold;'>{val}</td></tr>"
+             # padding erhöht und font-size 16px
+             html += f"<tr><td style='padding:6px; font-size:16px;'>{name}</td><td style='padding:6px; text-align:right; font-weight:bold; font-size:16px;'>{val}</td></tr>"
         html += "</table></div>"
         return html
 
-    # Top Scorer
     h_pts = get_top3(h_data.get("playerStats", []), "points")
     g_pts = get_top3(g_data.get("playerStats", []), "points")
-    
-    # Top Rebounder
     h_reb = get_top3(h_data.get("playerStats", []), "totalRebounds")
     g_reb = get_top3(g_data.get("playerStats", []), "totalRebounds")
-    
-    # Top Assists
     h_ast = get_top3(h_data.get("playerStats", []), "assists")
     g_ast = get_top3(g_data.get("playerStats", []), "assists")
 
     st.markdown("#### Top Performer")
     
-    # Grid Layout per HTML
     html = f"""
     <div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">
         {mk_box(h_pts, f"Points ({h_name})", "#e35b00", "points")}
@@ -340,7 +326,6 @@ def render_charts_and_stats(box):
     gid = str(g_data.get("seasonTeam", {}).get("seasonTeamId", "0"))
     calc_stats = calculate_advanced_stats_from_actions(actions, hid, gid)
     
-    # API Values Fallback
     h_paint = calc_stats["h_paint"] if calc_stats["h_paint"] > 0 else "-"
     g_paint = calc_stats["g_paint"] if calc_stats["g_paint"] > 0 else "-"
     h_fb = calc_stats["h_fb"] if calc_stats["h_fb"] > 0 else "-"
