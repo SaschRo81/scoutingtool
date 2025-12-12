@@ -220,11 +220,12 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         ("3-Point %", "3pct", True, False),
         ("Free Throw %", "ftpct", True, False),
         ("Rebounds (Total)", "tot", False, False),
+        ("Defensive Rebs", "dr", False, False), # HIER NEU: Defensive Rebs
         ("Offensive Rebs", "or", False, False),
         ("Assists", "as", False, False),
         ("Turnovers", "to", False, True), # Niedriger ist besser
         ("Steals", "st", False, False),
-        ("Blocks", "bs", False, False),
+        ("Blocks", "bs", False, False),   # Wird jetzt befüllt durch api.py
         ("Fouls", "pf", False, True)      # Niedriger ist besser
     ]
 
@@ -236,7 +237,6 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         stats['ftpct'] = get_pct(stats, 'ft')
         if 'bs' not in stats: stats['bs'] = 0.0
 
-    # WICHTIG: Keine Einrückung im HTML-String, damit Streamlit es nicht als Code blockiert
     html = f"""<div style="margin: 20px 0; font-family: sans-serif;">
 <h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 0;">Head-to-Head (Saison-Schnitt)</h3>
 <table style="width: 100%; border-collapse: collapse; font-size: 16px;">
