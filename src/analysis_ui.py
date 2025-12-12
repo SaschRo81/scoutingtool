@@ -59,27 +59,28 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
          
          pts_h = new_h - cur_h
          pts_g = new_g - cur_g
-         pts_total = pts_h + pts_g
          
-         if pts_total > 0:
-             # --- RUN LOGIK ---
-             if pts_h > 0:
-                 if current_run_team == "home":
-                     current_run_points += pts_h
-                 else:
-                     current_run_team = "home"
-                     current_run_points = pts_h
-                 if current_run_points > stats["h_run"]: stats["h_run"] = current_run_points
-                 
-             elif pts_g > 0:
-                 if current_run_team == "guest":
-                     current_run_points += pts_g
-                 else:
-                     current_run_team = "guest"
-                     current_run_points = pts_g
-                 if current_run_points > stats["g_run"]: stats["g_run"] = current_run_points
+         # --- RUN LOGIK ---
+         # Ein Run bricht nur ab, wenn der GEGNER punktet.
+         if pts_h > 0:
+             if current_run_team == "home":
+                 current_run_points += pts_h
+             else:
+                 current_run_team = "home"
+                 current_run_points = pts_h
+             if current_run_points > stats["h_run"]: stats["h_run"] = current_run_points
+             
+         elif pts_g > 0:
+             if current_run_team == "guest":
+                 current_run_points += pts_g
+             else:
+                 current_run_team = "guest"
+                 current_run_points = pts_g
+             if current_run_points > stats["g_run"]: stats["g_run"] = current_run_points
 
-             # --- ADVANCED STATS ---
+         # --- ADVANCED STATS ---
+         pts_total = pts_h + pts_g
+         if pts_total > 0:
              act_tid = str(act.get("seasonTeamId", ""))
              is_home_action = (act_tid == hid_str) if act_tid else (pts_h > 0)
 
@@ -91,11 +92,9 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
              if "fastbreak" in q_str or "fastbreak" in type_str:
                  if is_home_action: stats["h_fb"] += pts_total
                  else: stats["g_fb"] += pts_total
-                 
              if "paint" in q_str or "inside" in q_str or "layup" in type_str:
                  if is_home_action: stats["h_paint"] += pts_total
                  else: stats["g_paint"] += pts_total
-                 
              if "second" in q_str or "2nd" in q_str:
                  if is_home_action: stats["h_2nd"] += pts_total
                  else: stats["g_2nd"] += pts_total
@@ -120,51 +119,41 @@ def render_game_header(box):
     h_coach = h_data.get("headCoachName", "-")
     g_coach = g_data.get("headCoachName", "-")
     
-    score_h = safe_int(h_data.get("gameStat", {}).get("points"))
-    score_g = safe_int(g_data.get("gameStat", {}).get("points"))
+    # Ergebnis aus dem Result-Objekt (bevorzugt) oder GameStat
+    res = box.get("result", {})
+    score_h = res.get("homeTeamFinalScore", safe_int(h_data.get("gameStat", {}).get("points")))
+    score_g = res.get("guestTeamFinalScore", safe_int(g_data.get("gameStat", {}).get("points")))
+    
+    # --- META DATEN ---
     
     # 1. Zeit
     time_str = format_date_time(box.get("scheduledTime"))
-    if time_str == "-":
-        time_str = format_date_time(h_data.get("gameStat", {}).get("scheduledTime"))
 
-    # 2. Ort (Venue) - VERBESSERTE LOGIK
+    # 2. Ort (Venue) - FIX FÜR STRING ADRESSE
     venue_str = "-"
     venue = box.get("venue")
-    if not venue:
-        venues = h_data.get("seasonTeam", {}).get("seasonVenues", [])
-        if venues and isinstance(venues, list) and len(venues) > 0:
-            for v in venues:
-                if v.get("isMain"):
-                    venue = v
-                    break
-            if not venue: venue = venues[0]
-
+    
     if venue and isinstance(venue, dict):
-        # Name der Halle
         venue_name = venue.get("name", "-")
         venue_str = venue_name
         
-        # Adresse verarbeiten (kann String oder Dict sein)
+        # Adresse analysieren
         address = venue.get("address")
         city = ""
         
-        if isinstance(address, dict):
-            # Wenn Adresse ein Objekt ist
-            city = address.get("city", "")
-        elif isinstance(address, str) and address:
-            # Wenn Adresse ein String ist: "Strasse 1, 12345 Stadt"
-            # Versuche Stadt nach PLZ zu finden
-            parts = address.split(" ")
-            # Einfache Heuristik: Letztes Wort ist oft die Stadt
-            if len(parts) > 1:
-                # Prüfen ob vorletztes Teil eine PLZ ist (Zahl)
-                if parts[-2].isdigit() and len(parts[-2]) == 5:
-                    city = parts[-1]
-                elif "," in address:
-                    city = address.split(",")[-1].strip()
-
-        # Stadt nur anhängen, wenn sie nicht schon im Namen steht (z.B. "Theresianum Mainz")
+        if isinstance(address, str) and address:
+            # Format: "Strasse 123, 12345 Stadt"
+            if "," in address:
+                # Alles nach dem letzten Komma nehmen
+                last_part = address.split(",")[-1].strip()
+                # Versuchen PLZ zu entfernen (erste Zahlengruppe)
+                parts = last_part.split(" ")
+                if len(parts) > 1 and parts[0].isdigit():
+                    city = " ".join(parts[1:])
+                else:
+                    city = last_part
+        
+        # Wenn wir eine Stadt haben und sie nicht schon im Namen steht -> anhängen
         if city and city.lower() not in venue_name.lower():
              venue_str += f", {city}"
 
@@ -179,8 +168,9 @@ def render_game_header(box):
             if full: refs.append(full)
     ref_str = ", ".join(refs) if refs else "-"
 
-    # 4. Zuschauer
-    att = box.get("attendance")
+    # 4. Zuschauer (Spectators im Result Objekt!)
+    att = res.get("spectators") # Aus deinem JSON
+    if not att: att = box.get("attendance")
     if not att: att = h_data.get("gameStat", {}).get("attendance", "-")
     
     # --- LAYOUT ---
@@ -192,7 +182,22 @@ def render_game_header(box):
         st.caption(f"HC: {h_coach}")
     with c2:
         st.markdown(f"<h1 style='text-align: center;'>{score_h} : {score_g}</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: gray;'>FINAL</p>", unsafe_allow_html=True)
+        
+        # QUARTER SCORES (Tabelle)
+        if res:
+            q_data = {
+                "Q1": [res.get("homeTeamQ1Score",0), res.get("guestTeamQ1Score",0)],
+                "Q2": [res.get("homeTeamQ2Score",0), res.get("guestTeamQ2Score",0)],
+                "Q3": [res.get("homeTeamQ3Score",0), res.get("guestTeamQ3Score",0)],
+                "Q4": [res.get("homeTeamQ4Score",0), res.get("guestTeamQ4Score",0)]
+            }
+            # Optional OT
+            if res.get("homeTeamOT1Score", 0) > 0 or res.get("guestTeamOT1Score", 0) > 0:
+                 q_data["OT"] = [res.get("homeTeamOT1Score",0), res.get("guestTeamOT1Score",0)]
+            
+            q_df = pd.DataFrame(q_data, index=["Heim", "Gast"])
+            st.table(q_df)
+        
     with c3:
         st.markdown(f"## {g_name}")
         st.caption(f"HC: {g_coach}")
@@ -284,10 +289,8 @@ def render_boxscore_table_pro(player_stats, team_name):
     calc_height = (len(df) + 1) * 35 + 3
     st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
 
-# --- TOP PERFORMER ANZEIGE (SCHRIFTGRÖSSE 16PX) ---
+# --- TOP PERFORMER ANZEIGE ---
 def render_game_top_performers(box):
-    """Zeigt die Top 3 Scorer beider Teams an."""
-    
     h_data = box.get("homeTeam", {})
     g_data = box.get("guestTeam", {})
     h_name = get_team_name(h_data, "Heim")
@@ -318,7 +321,6 @@ def render_game_top_performers(box):
     g_ast = get_top3(g_data.get("playerStats", []), "assists")
 
     st.markdown("#### Top Performer")
-    
     html = f"""
     <div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">
         {mk_box(h_pts, f"Points ({h_name})", "#e35b00", "points")}
