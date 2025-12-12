@@ -80,21 +80,21 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     c_red = "#d9534f"
 
     legend_html = f"""
-    <div style="display: flex; gap: 30px; margin-top: 5px; margin-bottom: 20px; font-size: 18px; color: #333;">
-        <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div>
-            <strong>Shooter</strong>
-        </div>
-        <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>
-            Normal
-        </div>
-        <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>
-            Non-Shooter
-        </div>
+<div style="display: flex; gap: 30px; margin-top: 5px; margin-bottom: 20px; font-size: 18px; color: #333;">
+    <div style="display: flex; align-items: center;">
+        <div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div>
+        <strong>Shooter</strong>
     </div>
-    """
+    <div style="display: flex; align-items: center;">
+        <div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>
+        Normal
+    </div>
+    <div style="display: flex; align-items: center;">
+        <div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>
+        Non-Shooter
+    </div>
+</div>
+"""
     return html + legend_html
 
 def generate_card_html(row, metadata, notes, color_code):
@@ -184,7 +184,9 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
         if df.empty: return ""
         sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-size: 26px;'>{title}</h3>"
         sh += "<table style='width:100%; border-collapse:collapse; margin-bottom:20px;'>"
+        
         font_size = "22px"
+
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], "")
             c2 = r.get(df.columns[1], "")
@@ -204,7 +206,7 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
 def generate_comparison_html(h_stats, g_stats, h_name, g_name):
     """Erstellt eine HTML-Vergleichstabelle für zwei Teams."""
     if not h_stats or not g_stats:
-        return "<div style='color:red;'>Keine Daten für Vergleich verfügbar.</div>"
+        return "Keine Daten für Vergleich verfügbar."
 
     def get_pct(stats, cat):
         if stats.get(f'{cat}pct', 0) > 0: return stats[f'{cat}pct']
@@ -226,7 +228,6 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         ("Fouls", "pf", False, True)      # Niedriger ist besser
     ]
 
-    # Daten vorbereiten
     for stats in [h_stats, g_stats]:
         fg_m = stats.get('2m', 0) + stats.get('3m', 0)
         fg_a = stats.get('2a', 0) + stats.get('3a', 0)
@@ -235,17 +236,15 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         stats['ftpct'] = get_pct(stats, 'ft')
         if 'bs' not in stats: stats['bs'] = 0.0
 
-    # WICHTIG: HTML in EINER langen Zeichenkette ohne unnötige Einrückungen bauen
-    html = f"""
-    <div style="margin: 20px 0; font-family: sans-serif;">
-        <h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 0;">Head-to-Head (Saison-Schnitt)</h3>
-        <table style="width: 100%; border-collapse: collapse; font-size: 16px;">
-            <tr style="background-color: #333; color: white;">
-                <th style="padding: 12px; text-align: right; width: 35%;">{h_name}</th>
-                <th style="padding: 12px; text-align: center; width: 30%; background-color: #555;">Statistik</th>
-                <th style="padding: 12px; text-align: left; width: 35%;">{g_name}</th>
-            </tr>
-    """
+    # WICHTIG: Keine Einrückung im HTML-String, damit Streamlit es nicht als Code blockiert
+    html = f"""<div style="margin: 20px 0; font-family: sans-serif;">
+<h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 0;">Head-to-Head (Saison-Schnitt)</h3>
+<table style="width: 100%; border-collapse: collapse; font-size: 16px;">
+<tr style="background-color: #333; color: white;">
+<th style="padding: 12px; text-align: right; width: 35%;">{h_name}</th>
+<th style="padding: 12px; text-align: center; width: 30%; background-color: #555;">Statistik</th>
+<th style="padding: 12px; text-align: left; width: 35%;">{g_name}</th>
+</tr>"""
 
     for label, key, is_pct, lower_better in metrics:
         val_h = h_stats.get(key, 0.0)
@@ -257,22 +256,18 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         style_h = "padding: 8px; text-align: right; border-bottom: 1px solid #eee;"
         style_g = "padding: 8px; text-align: left; border-bottom: 1px solid #eee;"
         
-        # Gewinner hervorheben
         if val_h != val_g:
             is_h_better = (val_h < val_g) if lower_better else (val_h > val_g)
-            
             if is_h_better:
-                style_h += " font-weight: bold; color: #2e7d32;" # Dunkelgrün
+                style_h += " font-weight: bold; color: #2e7d32;"
             else:
                 style_g += " font-weight: bold; color: #2e7d32;"
 
-        html += f"""
-            <tr>
-                <td style="{style_h}">{fmt_h}</td>
-                <td style="padding: 8px; text-align: center; color: #666; font-size: 14px; border-bottom: 1px solid #eee;">{label}</td>
-                <td style="{style_g}">{fmt_g}</td>
-            </tr>
-        """
+        html += f"""<tr>
+<td style="{style_h}">{fmt_h}</td>
+<td style="padding: 8px; text-align: center; color: #666; font-size: 14px; border-bottom: 1px solid #eee;">{label}</td>
+<td style="{style_g}">{fmt_g}</td>
+</tr>"""
 
     html += "</table></div>"
     return html
