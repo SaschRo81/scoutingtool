@@ -3,46 +3,43 @@ import pandas as pd
 import altair as alt
 
 def safe_int(val):
-    """Hilfsfunktion: Wandelt Wert in Int um, 0 wenn leer."""
-    if val is None or val == "": return 0
-    try: return int(val)
-    except: return 0
+    """Wandelt Werte sicher in Zahlen um, auch wenn sie leer oder Text sind."""
+    if val is None: return 0
+    if isinstance(val, int): return val
+    if isinstance(val, float): return int(val)
+    if isinstance(val, str):
+        if val.strip() == "": return 0
+        try: return int(float(val))
+        except: return 0
+    return 0
 
 def get_team_name(team_data, default_name="Team"):
-    """Sucht den Teamnamen in verschiedenen Ebenen des JSON."""
-    # 1. Versuch: Tief verschachtelt in gameStat (Häufig bei Boxscores)
+    """Sucht den Teamnamen in den verschiedenen Ebenen der API-Antwort."""
+    # Ebene 1: gameStat -> seasonTeam
     name = team_data.get("gameStat", {}).get("seasonTeam", {}).get("name")
     if name: return name
-    
-    # 2. Versuch: In seasonTeam (Manchmal hier)
+    # Ebene 2: seasonTeam direkt
     name = team_data.get("seasonTeam", {}).get("name")
     if name: return name
-    
-    # 3. Versuch: Direkt am Objekt
+    # Ebene 3: Direkt am Objekt
     name = team_data.get("name")
     if name: return name
-    
     return default_name
 
 def render_game_header(box):
-    """Zeigt den Header mit echten Teamnamen und Scores."""
+    """Zeigt den Header mit Teamnamen und Ergebnis."""
     h_data = box.get("homeTeam", {})
     g_data = box.get("guestTeam", {})
     
-    # Namen sicher holen
     h_name = get_team_name(h_data, "Heim")
     g_name = get_team_name(g_data, "Gast")
     
-    # Coaches
     h_coach = h_data.get("headCoachName", "-")
     g_coach = g_data.get("headCoachName", "-")
     
-    # Ergebnis
-    h_stats = h_data.get("gameStat", {})
-    g_stats = g_data.get("gameStat", {})
-    
-    score_h = h_stats.get("points", 0)
-    score_g = g_stats.get("points", 0)
+    # Scores
+    score_h = safe_int(h_data.get("gameStat", {}).get("points"))
+    score_g = safe_int(g_data.get("gameStat", {}).get("points"))
     
     c1, c2, c3 = st.columns([2, 1, 2])
     with c1:
@@ -56,21 +53,21 @@ def render_game_header(box):
         st.caption(f"HC: {g_coach}")
     
     st.write("---")
-    # Versuchen, Zuschauer zu finden
+    
+    # Zuschauer suchen
     att = box.get("attendance")
     if not att:
-        # Manchmal versteckt in gameStat
-        att = h_stats.get("attendance", "-")
+        att = h_data.get("gameStat", {}).get("attendance", "-")
         
     st.caption(f"Zuschauer: {att} | Status: {box.get('status', 'OFFICIAL')}")
 
 def render_boxscore_table_pro(player_stats, team_name):
-    """Boxscore Tabelle."""
+    """Erstellt die Boxscore-Tabelle."""
     if not player_stats: return
 
     data = []
     
-    # Summen
+    # Summen-Variablen initialisieren
     t_min=0; t_pts=0; t_fgm=0; t_fga=0; t_3pm=0; t_3pa=0; t_ftm=0; t_fta=0
     t_or=0; t_dr=0; t_tr=0; t_as=0; t_st=0; t_to=0; t_bs=0; t_pf=0; t_eff=0; t_pm=0
 
@@ -80,16 +77,14 @@ def render_boxscore_table_pro(player_stats, team_name):
         nr = info.get("shirtNumber", "-")
         starter = "*" if p.get("isStartingFive") else ""
         
-        # Zeit
+        # Spielzeit
         sec = safe_int(p.get("secondsPlayed"))
+        
         if sec > 0:
             t_min += sec
             min_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
-        else:
-            min_str = "DNP" # Did Not Play
-
-        # Stats nur wenn gespielt
-        if sec > 0:
+            
+            # Werte laden
             pts = safe_int(p.get("points")); t_pts += pts
             
             m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted"))
@@ -114,71 +109,70 @@ def render_boxscore_table_pro(player_stats, team_name):
             blk = safe_int(p.get("blocks")); t_bs += blk
             pf = safe_int(p.get("foulsCommitted")); t_pf += pf
             eff = safe_int(p.get("efficiency")); t_eff += eff
-            
-            # Fix für PlusMinus (kann String sein)
-            pm_val = p.get("plusMinus", 0)
-            if pm_val == "": pm_val = 0
-            pm = int(pm_val)
-            t_pm += pm
+            pm = safe_int(p.get("plusMinus")); t_pm += pm
 
-            # Strings
+            # Strings für Tabelle
             s_2p = f"{m2}/{a2} ({p2}%)" if a2 else ""
             s_3p = f"{m3}/{a3} ({p3}%)" if a3 else ""
             s_fg = f"{mfg}/{afg} ({pfg}%)"
             s_ft = f"{mft}/{aft} ({pft}%)" if aft else ""
         else:
-            pts=0; s_2p=""; s_3p=""; s_fg=""; s_ft=""; oreb=0; dreb=0; treb=0
-            ast=0; stl=0; tov=0; blk=0; pf=0; eff=0; pm=0
+            min_str = "DNP"
+            pts=0; s_2p=""; s_3p=""; s_fg=""; s_ft=""
+            oreb=0; dreb=0; treb=0; ast=0; stl=0; tov=0; blk=0; pf=0; eff=0; pm=0
 
         data.append({
             "No.": f"{starter}{nr}", "Name": name, "Min": min_str, "PTS": pts,
             "2P": s_2p, "3P": s_3p, "FG": s_fg, "FT": s_ft,
-            "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "ST": stl, "TO": tov, "BS": blk,
+            "OR": oreb, "DR": dreb, "TR": treb,
+            "AS": ast, "ST": stl, "TO": tov, "BS": blk,
             "PF": pf, "EFF": eff, "+/-": pm
         })
 
-    # TOTALS
+    # TOTALS Zeile
     tot_fg_pct = int(t_fgm/t_fga*100) if t_fga else 0
     tot_3p_pct = int(t_3pm/t_3pa*100) if t_3pa else 0
     tot_ft_pct = int(t_ftm/t_fta*100) if t_fta else 0
     
     totals = {
         "No.": "", "Name": "TOTALS", "Min": "200:00", "PTS": t_pts,
-        "2P": "", "3P": f"{t_3pm}/{t_3pa} ({tot_3p_pct}%)",
-        "FG": f"{t_fgm}/{t_fga} ({tot_fg_pct}%)", "FT": f"{t_ftm}/{t_fta} ({tot_ft_pct}%)",
-        "OR": t_or, "DR": t_dr, "TR": t_tr, "AS": t_as, "ST": t_st, "TO": t_to, "BS": t_bs,
+        "2P": "", # 2P Summe nicht separat berechnet, daher leer
+        "3P": f"{t_3pm}/{t_3pa} ({tot_3p_pct}%)",
+        "FG": f"{t_fgm}/{t_fga} ({tot_fg_pct}%)",
+        "FT": f"{t_ftm}/{t_fta} ({tot_ft_pct}%)",
+        "OR": t_or, "DR": t_dr, "TR": t_tr,
+        "AS": t_as, "ST": t_st, "TO": t_to, "BS": t_bs,
         "PF": t_pf, "EFF": t_eff, "+/-": t_pm
     }
     data.append(totals)
 
     df = pd.DataFrame(data)
     
+    # Styling
     def highlight_totals(row):
-        return ['font-weight: bold; background-color: #e6e6e6' if row['Name'] == 'TOTALS' else '' for _ in row]
+        return ['font-weight: bold; background-color: #f0f0f0' if row['Name'] == 'TOTALS' else '' for _ in row]
 
     st.markdown(f"#### {team_name}")
     st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True)
 
 def render_charts_and_stats(box):
-    """Zeigt die Balkendiagramme und die Tabelle."""
+    """Erstellt Charts und Vergleichstabelle."""
     
     h_data = box.get("homeTeam", {})
     g_data = box.get("guestTeam", {})
-    
     h = h_data.get("gameStat", {})
     g = g_data.get("gameStat", {})
     
-    # Namen sicher holen
     h_name = get_team_name(h_data, "Heim")
     g_name = get_team_name(g_data, "Gast")
 
-    # --- 1. CHART DATEN ---
+    # Daten für Chart
     def mk_label(pct, made, att):
         return f"{pct}% ({made}/{att})"
 
     categories = ["Field Goals", "2 Points", "3 Points", "Free Throws"]
     
-    # Heim
+    # Datenreihen bauen
     h_vals = [
         {"Team": h_name, "Cat": "Field Goals", "Pct": safe_int(h.get('fieldGoalsSuccessPercent')), 
          "Label": mk_label(safe_int(h.get('fieldGoalsSuccessPercent')), safe_int(h.get('fieldGoalsMade')), safe_int(h.get('fieldGoalsAttempted')))},
@@ -190,7 +184,6 @@ def render_charts_and_stats(box):
          "Label": mk_label(safe_int(h.get('freeThrowsSuccessPercent')), safe_int(h.get('freeThrowsMade')), safe_int(h.get('freeThrowsAttempted')))},
     ]
     
-    # Gast
     g_vals = [
         {"Team": g_name, "Cat": "Field Goals", "Pct": safe_int(g.get('fieldGoalsSuccessPercent')), 
          "Label": mk_label(safe_int(g.get('fieldGoalsSuccessPercent')), safe_int(g.get('fieldGoalsMade')), safe_int(g.get('fieldGoalsAttempted')))},
@@ -204,22 +197,20 @@ def render_charts_and_stats(box):
     
     source = pd.DataFrame(h_vals + g_vals)
 
+    # Altair Chart
     base = alt.Chart(source).encode(
         x=alt.X('Cat', sort=categories, title=None, axis=alt.Axis(labelAngle=0, labelFontWeight='bold')),
         xOffset='Team',
         y=alt.Y('Pct', title=None, axis=None)
     )
-
     bar = base.mark_bar().encode(
         color=alt.Color('Team', legend=alt.Legend(title=None, orient='top')),
         tooltip=['Team', 'Cat', 'Label']
     )
-
     text = base.mark_text(dy=-10, color='black').encode(text='Label')
-
     chart = (bar + text).properties(height=350)
 
-    # --- 2. TABELLE ---
+    # Tabelle
     metrics = [
         ("Rebounds OR/DR/TR", 
          f"{safe_int(h.get('offensiveRebounds'))}/{safe_int(h.get('defensiveRebounds'))}/{safe_int(h.get('totalRebounds'))}",
@@ -236,22 +227,25 @@ def render_charts_and_stats(box):
         ("Biggest Run", h.get("biggestScoringRun", "-"), g.get("biggestScoringRun", "-"))
     ]
 
-    st.altair_chart(chart, use_container_width=True)
-    st.write("")
-    
-    html_table = f"""<table style="width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px;">
-<tr style="background-color:#003366; color:white;">
-<th style="padding:8px; text-align:center; width:40%;">{h_name}</th>
-<th style="padding:8px; text-align:center; width:20%;">VS</th>
-<th style="padding:8px; text-align:center; width:40%;">{g_name}</th>
+    # Layout
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.markdown("#### Wurfquoten")
+        st.altair_chart(chart, use_container_width=True)
+    with c2:
+        st.markdown("#### Team Statistik")
+        # HTML Tabelle ohne Einrückungen
+        html = f"""<table style="width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px;">
+<tr style="background-color:#333; color:white;">
+<th style="padding:8px; text-align:center;">{h_name}</th>
+<th style="padding:8px; text-align:center;">Kategorie</th>
+<th style="padding:8px; text-align:center;">{g_name}</th>
 </tr>"""
-
-    for label, vh, vg in metrics:
-        html_table += f"""<tr style="border-bottom:1px solid #eee;">
+        for label, vh, vg in metrics:
+            html += f"""<tr style="border-bottom:1px solid #eee;">
 <td style="padding:6px; text-align:center;">{vh}</td>
-<td style="padding:6px; text-align:center; font-weight:bold; color:#555; white-space:nowrap;">{label}</td>
+<td style="padding:6px; text-align:center; font-weight:bold; color:#555;">{label}</td>
 <td style="padding:6px; text-align:center;">{vg}</td>
 </tr>"""
-    
-    html_table += "</table>"
-    st.markdown(html_table, unsafe_allow_html=True)
+        html += "</table>"
+        st.markdown(html, unsafe_allow_html=True)
