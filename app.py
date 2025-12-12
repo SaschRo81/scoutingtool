@@ -13,7 +13,6 @@ except ImportError:
 # Module aus SRC
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url, optimize_image_base64
-# HIER NEU: fetch_schedule und fetch_game_boxscore importieren
 from src.api import fetch_team_data, get_player_metadata_cached, fetch_schedule, fetch_game_boxscore
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
@@ -24,7 +23,7 @@ from src.state_manager import export_session_state, load_session_state
 
 st.set_page_config(page_title=f"DBBL Scouting Suite {VERSION}", layout="wide", page_icon="🏀")
 
-# --- SESSION STATE INITIALISIERUNG ---
+# --- SESSION STATE ---
 for key, default in [
     ("current_page", "home"),
     ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
@@ -33,9 +32,63 @@ for key, default in [
     ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])),
     ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
     ("facts_about", pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}])),
-    ("selected_game_id", None) # Für die Analyse
+    ("selected_game_id", None)
 ]:
     if key not in st.session_state: st.session_state[key] = default
+
+# --- HELFER: BOXSCORE ANZEIGEN ---
+def render_boxscore_table(player_stats_list, team_name):
+    """Wandelt die JSON-Spielerliste in eine schöne Tabelle um."""
+    if not player_stats_list:
+        st.warning(f"Keine Spieler-Daten für {team_name}.")
+        return
+
+    data = []
+    for p in player_stats_list:
+        # Zeit formatieren (Sekunden -> MM:SS)
+        sec = p.get("secondsPlayed", 0)
+        if sec is None: sec = 0
+        min_str = f"{int(sec // 60):02d}:{int(sec % 60):02d}"
+        
+        # Name holen
+        p_info = p.get("seasonPlayer", {})
+        name = f"{p_info.get('firstName', '')} {p_info.get('lastName', '')}".strip()
+        nr = p_info.get("shirtNumber", "-")
+
+        # Quoten formatieren: "4/9 (44%)"
+        def fmt_quota(made, att):
+            pct = 0
+            if att > 0: pct = int((made / att) * 100)
+            return f"{made}/{att} ({pct}%)"
+
+        fg_str = fmt_quota(p.get("fieldGoalsMade", 0), p.get("fieldGoalsAttempted", 0))
+        p3_str = fmt_quota(p.get("threePointShotsMade", 0), p.get("threePointShotsAttempted", 0))
+        ft_str = fmt_quota(p.get("freeThrowsMade", 0), p.get("freeThrowsAttempted", 0))
+
+        data.append({
+            "#": nr,
+            "Name": name,
+            "MIN": min_str,
+            "PTS": p.get("points", 0),
+            "FG": fg_str,
+            "3PT": p3_str,
+            "FT": ft_str,
+            "OR": p.get("offensiveRebounds", 0),
+            "DR": p.get("defensiveRebounds", 0),
+            "TR": p.get("totalRebounds", 0),
+            "AS": p.get("assists", 0),
+            "TO": p.get("turnovers", 0),
+            "ST": p.get("steals", 0),
+            "BS": p.get("blocks", 0),
+            "PF": p.get("foulsCommitted", 0),
+            "EFF": p.get("efficiency", 0),
+            "+/-": p.get("plusMinus", 0)
+        })
+    
+    df = pd.DataFrame(data)
+    st.markdown(f"### {team_name}")
+    st.dataframe(df, hide_index=True, use_container_width=True)
+
 
 # --- NAVIGATIONS-HELFER ---
 def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
@@ -50,7 +103,6 @@ def render_home():
     st.markdown("<h1 style='text-align: center;'>🏀 DBBL Scouting Suite by Sascha Rosanke</h1>", unsafe_allow_html=True)
     st.markdown(f"<p style='text-align: center; color: gray;'>Version {VERSION}</p>", unsafe_allow_html=True)
     st.write(""); st.write("")
-    
     c1, c2, c3 = st.columns([3, 2, 3])
     with c2:
         st.markdown("<style>div.stButton > button:first-child { width: 100%; height: 3em; font-size: 18px; margin-bottom: 10px; }</style>", unsafe_allow_html=True)
@@ -64,7 +116,6 @@ def render_home():
 def render_comparison_page():
     st.button("🏠 Zurück zum Start", on_click=go_home)
     st.title("📊 Head-to-Head Vergleich")
-    
     c1, c2, c3 = st.columns([1, 2, 2])
     with c1: 
         staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="comp_staffel")
@@ -78,7 +129,6 @@ def render_comparison_page():
         guest_name = st.selectbox("Gast:", list(team_options.keys()), 1, key="comp_guest")
         guest_id = team_options[guest_name]
         st.image(optimize_image_base64(get_logo_url(guest_id, SEASON_ID)), width=60)
-
     st.divider()
     if st.button("Vergleich starten", type="primary"):
         with st.spinner("Lade Daten..."):
@@ -91,15 +141,12 @@ def render_comparison_page():
                 st.error("Daten nicht verfügbar.")
 
 # ==========================================
-# SEITE 3: SPIELNACHBEREITUNG (NEU!)
+# SEITE 3: SPIELNACHBEREITUNG
 # ==========================================
 def render_analysis_page():
     st.button("🏠 Zurück zum Start", on_click=go_home)
     st.title("🎥 Spielnachbereitung")
     
-    st.write("Wähle ein Team, um dessen Spielplan zu laden:")
-    
-    # 1. Team Auswahl
     c1, c2 = st.columns([1, 2])
     with c1:
         staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
@@ -109,39 +156,34 @@ def render_analysis_page():
         my_team_name = st.selectbox("Dein Team:", list(team_options.keys()), key="ana_team")
         my_team_id = team_options[my_team_name]
 
-    # 2. Spielplan laden
     if my_team_id:
         games = fetch_schedule(my_team_id, SEASON_ID)
-        
         if games:
-            # Dropdown für Spiele bauen
-            # Format: "Datum | Heim vs Gast | Ergebnis"
             game_opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in games}
-            
             selected_label = st.selectbox("Wähle ein Spiel:", list(game_opts.keys()), key="ana_game_select")
             selected_id = game_opts[selected_label]
             
             if st.button("Analyse laden", type="primary"):
                 st.session_state.selected_game_id = selected_id
                 
-            # 3. Boxscore anzeigen (wenn geladen)
             if st.session_state.selected_game_id == selected_id:
                 st.divider()
                 st.subheader(f"Spiel: {selected_label}")
-                
                 with st.spinner("Lade Boxscore..."):
-                    boxscore_data = fetch_game_boxscore(selected_id)
-                    
-                    if boxscore_data:
-                        # Hier zeigen wir erstmal die Rohdaten (JSON) an, um zu prüfen, ob es klappt.
-                        # Später bauen wir hier eine schöne Tabelle.
-                        st.success("Boxscore erfolgreich geladen!")
-                        
-                        # Tabs für Übersichtlichkeit
-                        tab1, tab2 = st.tabs(["📊 Statistik (Rohdaten)", "📝 Spielbericht (Platzhalter)"])
+                    box = fetch_game_boxscore(selected_id)
+                    if box:
+                        tab1, tab2 = st.tabs(["📊 Boxscore", "📝 Spielbericht (Platzhalter)"])
                         
                         with tab1:
-                            st.json(boxscore_data) # Zeigt die komplette Struktur an
+                            # Heimteam Tabelle
+                            home_data = box.get("homeTeam", {})
+                            render_boxscore_table(home_data.get("playerStats", []), home_data.get("seasonTeam", {}).get("name", "Heim"))
+                            
+                            st.write("---")
+                            
+                            # Gastteam Tabelle
+                            guest_data = box.get("guestTeam", {})
+                            render_boxscore_table(guest_data.get("playerStats", []), guest_data.get("seasonTeam", {}).get("name", "Gast"))
                             
                         with tab2:
                             st.info("Hier entsteht der automatische Spielbericht.")
@@ -289,7 +331,7 @@ def render_scouting_page():
                         try:
                             full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
                             opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
-                                    "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.44",
+                                    "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
                                     "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
                             st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
                             st.session_state.print_mode = True
