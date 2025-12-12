@@ -16,7 +16,8 @@ from src.utils import get_logo_url, optimize_image_base64
 from src.api import fetch_team_data, get_player_metadata_cached
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
-    generate_team_stats_html, generate_custom_sections_html
+    generate_team_stats_html, generate_custom_sections_html,
+    generate_comparison_html  # <--- NEU DAZU
 )
 from src.state_manager import export_session_state, load_session_state
 
@@ -85,27 +86,36 @@ if not st.session_state.print_mode:
     t_inp = c_t.time_input("Tip-Off", datetime.time(16,0))
 
     # 2. DATEN LADEN
+    # ... (Code davor bleibt gleich) ...
+
+    c_d, c_t = st.columns(2)
+    d_inp = c_d.date_input("Datum", datetime.date.today())
+    t_inp = c_t.time_input("Tip-Off", datetime.time(16,0))
+
+    # --- NEU: VERGLEICH ---
+    # Wir importieren die neue Funktion hier (oder oben bei den Imports hinzufügen)
+    from src.html_gen import generate_comparison_html
+    
+    st.write("") # Abstand
+    
+    # Expander für den Vergleich, damit es nicht immer offen ist
+    with st.expander("📊 Head-to-Head Teamvergleich anzeigen"):
+        if st.button("Vergleich laden"):
+            with st.spinner("Lade Statistik für beide Teams..."):
+                # Wir holen nur die Team-Stats (ts), den Kader (df) ignorieren wir hier
+                _, ts_home = fetch_team_data(home_id, SEASON_ID)
+                _, ts_guest = fetch_team_data(guest_id, SEASON_ID)
+                
+                if ts_home and ts_guest:
+                    comp_html = generate_comparison_html(ts_home, ts_guest, home_name, guest_name)
+                    st.markdown(comp_html, unsafe_allow_html=True)
+                else:
+                    st.error("Konnte Daten für den Vergleich nicht laden.")
+
+    # 2. KADER LADEN (Scouting Ziel)
     st.divider()
     
     data_ready = st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid
-    
-    if st.button(f"2. Kader von {target} laden", type="primary") or data_ready:
-        
-        if not data_ready:
-            with st.spinner(f"Lade Daten für Team {tid}..."):
-                df, ts = fetch_team_data(tid, SEASON_ID)
-                if df is not None:
-                    st.session_state.roster_df = df
-                    st.session_state.team_stats = ts
-                    st.session_state.current_tid = tid 
-                else:
-                    st.error(f"Fehler API: Konnte Daten für Team {tid} nicht laden.")
-        
-        st.session_state.game_meta = {
-            "home_name": home_name, "home_logo": st.session_state.logo_h,
-            "guest_name": guest_name, "guest_logo": st.session_state.logo_g,
-            "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H:%M")
-        }
 
     # 3. EDITIEREN
     if st.session_state.roster_df is not None:
