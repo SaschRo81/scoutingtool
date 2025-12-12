@@ -15,19 +15,16 @@ def safe_int(val):
 
 def get_team_name(team_data, default_name="Team"):
     """Sucht den Teamnamen in den verschiedenen Ebenen der API-Antwort."""
-    # Ebene 1: gameStat -> seasonTeam
     name = team_data.get("gameStat", {}).get("seasonTeam", {}).get("name")
     if name: return name
-    # Ebene 2: seasonTeam direkt
     name = team_data.get("seasonTeam", {}).get("name")
     if name: return name
-    # Ebene 3: Direkt am Objekt
     name = team_data.get("name")
     if name: return name
     return default_name
 
 def render_game_header(box):
-    """Zeigt den Header mit Teamnamen und Ergebnis."""
+    """Zeigt den Header mit Teamnamen, Ergebnis, Schiris und Zuschauern."""
     h_data = box.get("homeTeam", {})
     g_data = box.get("guestTeam", {})
     
@@ -37,10 +34,29 @@ def render_game_header(box):
     h_coach = h_data.get("headCoachName", "-")
     g_coach = g_data.get("headCoachName", "-")
     
-    # Scores
     score_h = safe_int(h_data.get("gameStat", {}).get("points"))
     score_g = safe_int(g_data.get("gameStat", {}).get("points"))
     
+    # --- SCHIEDSRICHTER SUCHEN ---
+    refs = []
+    for i in range(1, 4):
+        r = box.get(f"referee{i}")
+        if r and isinstance(r, dict):
+            # Name zusammenbauen
+             name = f"{r.get('firstName', '')} {r.get('lastName', '')}".strip()
+             if name: refs.append(name)
+    
+    ref_str = ", ".join(refs) if refs else "-"
+    # -----------------------------
+
+    # ZUSCHAUER & ORT
+    # Zuschauer oft direkt im Root oder im gameStat
+    att = box.get("attendance")
+    if not att: att = h_data.get("gameStat", {}).get("attendance", "-")
+    
+    # Ort (Venue) ist oft in der 'facility' im Schedule, hier im Boxscore evtl. nicht immer da
+    # Wir lassen es erstmal weg, wenn nicht da.
+
     c1, c2, c3 = st.columns([2, 1, 2])
     with c1:
         st.markdown(f"## {h_name}")
@@ -54,20 +70,22 @@ def render_game_header(box):
     
     st.write("---")
     
-    # Zuschauer suchen
-    att = box.get("attendance")
-    if not att:
-        att = h_data.get("gameStat", {}).get("attendance", "-")
-        
-    st.caption(f"Zuschauer: {att} | Status: {box.get('status', 'OFFICIAL')}")
+    # Meta-Zeile mit Schiris
+    st.markdown(f"""
+    <div style='display: flex; justify-content: space-between; color: #555; font-size: 14px;'>
+        <span><b>Zuschauer:</b> {att}</span>
+        <span><b>Schiedsrichter:</b> {ref_str}</span>
+        <span><b>Status:</b> {box.get('status', 'OFFICIAL')}</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 def render_boxscore_table_pro(player_stats, team_name):
-    """Erstellt die Boxscore-Tabelle."""
+    """Erstellt die Boxscore-Tabelle mit dynamischer Höhe (kein Scrollbalken)."""
     if not player_stats: return
 
     data = []
     
-    # Summen-Variablen initialisieren
+    # Summen
     t_min=0; t_pts=0; t_fgm=0; t_fga=0; t_3pm=0; t_3pa=0; t_ftm=0; t_fta=0
     t_or=0; t_dr=0; t_tr=0; t_as=0; t_st=0; t_to=0; t_bs=0; t_pf=0; t_eff=0; t_pm=0
 
@@ -77,14 +95,12 @@ def render_boxscore_table_pro(player_stats, team_name):
         nr = info.get("shirtNumber", "-")
         starter = "*" if p.get("isStartingFive") else ""
         
-        # Spielzeit
         sec = safe_int(p.get("secondsPlayed"))
         
         if sec > 0:
             t_min += sec
             min_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
             
-            # Werte laden
             pts = safe_int(p.get("points")); t_pts += pts
             
             m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted"))
@@ -111,11 +127,10 @@ def render_boxscore_table_pro(player_stats, team_name):
             eff = safe_int(p.get("efficiency")); t_eff += eff
             pm = safe_int(p.get("plusMinus")); t_pm += pm
 
-            # Strings für Tabelle
-            s_2p = f"{m2}/{a2} ({p2}%)" if a2 else ""
-            s_3p = f"{m3}/{a3} ({p3}%)" if a3 else ""
-            s_fg = f"{mfg}/{afg} ({pfg}%)"
-            s_ft = f"{mft}/{aft} ({pft}%)" if aft else ""
+            s_2p = f"{m2}/{a2} ({int(p2)}%)" if a2 else ""
+            s_3p = f"{m3}/{a3} ({int(p3)}%)" if a3 else ""
+            s_fg = f"{mfg}/{afg} ({int(pfg)}%)"
+            s_ft = f"{mft}/{aft} ({int(pft)}%)" if aft else ""
         else:
             min_str = "DNP"
             pts=0; s_2p=""; s_3p=""; s_fg=""; s_ft=""
@@ -129,34 +144,41 @@ def render_boxscore_table_pro(player_stats, team_name):
             "PF": pf, "EFF": eff, "+/-": pm
         })
 
-    # TOTALS Zeile
+    # TOTALS
     tot_fg_pct = int(t_fgm/t_fga*100) if t_fga else 0
     tot_3p_pct = int(t_3pm/t_3pa*100) if t_3pa else 0
     tot_ft_pct = int(t_ftm/t_fta*100) if t_fta else 0
     
     totals = {
         "No.": "", "Name": "TOTALS", "Min": "200:00", "PTS": t_pts,
-        "2P": "", # 2P Summe nicht separat berechnet, daher leer
+        "2P": "",
         "3P": f"{t_3pm}/{t_3pa} ({tot_3p_pct}%)",
-        "FG": f"{t_fgm}/{t_fga} ({tot_fg_pct}%)",
-        "FT": f"{t_ftm}/{t_fta} ({tot_ft_pct}%)",
-        "OR": t_or, "DR": t_dr, "TR": t_tr,
-        "AS": t_as, "ST": t_st, "TO": t_to, "BS": t_bs,
+        "FG": f"{t_fgm}/{t_fga} ({tot_fg_pct}%)", "FT": f"{t_ftm}/{t_fta} ({tot_ft_pct}%)",
+        "OR": t_or, "DR": t_dr, "TR": t_tr, "AS": t_as, "ST": t_st, "TO": t_to, "BS": t_bs,
         "PF": t_pf, "EFF": t_eff, "+/-": t_pm
     }
     data.append(totals)
 
     df = pd.DataFrame(data)
     
-    # Styling
     def highlight_totals(row):
         return ['font-weight: bold; background-color: #f0f0f0' if row['Name'] == 'TOTALS' else '' for _ in row]
 
     st.markdown(f"#### {team_name}")
-    st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True)
+    
+    # HIER DER FIX FÜR SCROLLBALKEN: Dynamische Höhe
+    # 35px pro Zeile + 38px Header-Buffer (ca.)
+    calc_height = (len(df) + 1) * 35 + 3
+    
+    st.dataframe(
+        df.style.apply(highlight_totals, axis=1), 
+        hide_index=True, 
+        use_container_width=True, 
+        height=calc_height # Setzt die Höhe exakt passend zur Anzahl der Zeilen
+    )
 
 def render_charts_and_stats(box):
-    """Erstellt Charts und Vergleichstabelle."""
+    """Zeigt die Balkendiagramme und die Tabelle (Rebounds getrennt)."""
     
     h_data = box.get("homeTeam", {})
     g_data = box.get("guestTeam", {})
@@ -166,13 +188,12 @@ def render_charts_and_stats(box):
     h_name = get_team_name(h_data, "Heim")
     g_name = get_team_name(g_data, "Gast")
 
-    # Daten für Chart
+    # --- 1. CHARTS ---
     def mk_label(pct, made, att):
         return f"{pct}% ({made}/{att})"
 
     categories = ["Field Goals", "2 Points", "3 Points", "Free Throws"]
     
-    # Datenreihen bauen
     h_vals = [
         {"Team": h_name, "Cat": "Field Goals", "Pct": safe_int(h.get('fieldGoalsSuccessPercent')), 
          "Label": mk_label(safe_int(h.get('fieldGoalsSuccessPercent')), safe_int(h.get('fieldGoalsMade')), safe_int(h.get('fieldGoalsAttempted')))},
@@ -197,7 +218,6 @@ def render_charts_and_stats(box):
     
     source = pd.DataFrame(h_vals + g_vals)
 
-    # Altair Chart
     base = alt.Chart(source).encode(
         x=alt.X('Cat', sort=categories, title=None, axis=alt.Axis(labelAngle=0, labelFontWeight='bold')),
         xOffset='Team',
@@ -210,11 +230,13 @@ def render_charts_and_stats(box):
     text = base.mark_text(dy=-10, color='black').encode(text='Label')
     chart = (bar + text).properties(height=350)
 
-    # Tabelle
+    # --- 2. TABELLE (REBOUNDS GETRENNT) ---
     metrics = [
-        ("Rebounds OR/DR/TR", 
-         f"{safe_int(h.get('offensiveRebounds'))}/{safe_int(h.get('defensiveRebounds'))}/{safe_int(h.get('totalRebounds'))}",
-         f"{safe_int(g.get('offensiveRebounds'))}/{safe_int(g.get('defensiveRebounds'))}/{safe_int(g.get('totalRebounds'))}"),
+        # HIER GEÄNDERT: Rebounds aufgeteilt
+        ("Offensive Rebounds", safe_int(h.get('offensiveRebounds')), safe_int(g.get('offensiveRebounds'))),
+        ("Defensive Rebounds", safe_int(h.get('defensiveRebounds')), safe_int(g.get('defensiveRebounds'))),
+        ("Total Rebounds", safe_int(h.get('totalRebounds')), safe_int(g.get('totalRebounds'))),
+        # -----------------------------------
         ("Assists", safe_int(h.get("assists")), safe_int(g.get("assists"))),
         ("Fouls", safe_int(h.get("foulsCommitted")), safe_int(g.get("foulsCommitted"))),
         ("Turnovers", safe_int(h.get("turnovers")), safe_int(g.get("turnovers"))),
@@ -227,19 +249,17 @@ def render_charts_and_stats(box):
         ("Biggest Run", h.get("biggestScoringRun", "-"), g.get("biggestScoringRun", "-"))
     ]
 
-    # Layout
     c1, c2 = st.columns([1, 1])
     with c1:
         st.markdown("#### Wurfquoten")
         st.altair_chart(chart, use_container_width=True)
     with c2:
         st.markdown("#### Team Statistik")
-        # HTML Tabelle ohne Einrückungen
         html = f"""<table style="width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px;">
-<tr style="background-color:#333; color:white;">
-<th style="padding:8px; text-align:center;">{h_name}</th>
-<th style="padding:8px; text-align:center;">Kategorie</th>
-<th style="padding:8px; text-align:center;">{g_name}</th>
+<tr style="background-color:#003366; color:white;">
+<th style="padding:8px; text-align:center; width:30%;">{h_name}</th>
+<th style="padding:8px; text-align:center; width:40%;">Kategorie</th>
+<th style="padding:8px; text-align:center; width:30%;">{g_name}</th>
 </tr>"""
         for label, vh, vg in metrics:
             html += f"""<tr style="border-bottom:1px solid #eee;">
