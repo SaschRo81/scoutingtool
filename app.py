@@ -21,7 +21,6 @@ from src.html_gen import (
     generate_comparison_html
 )
 from src.state_manager import export_session_state, load_session_state
-# WICHTIG: Import aus der neuen Datei
 from src.analysis_ui import render_game_header, render_boxscore_table_pro, render_charts_and_stats, get_team_name
 
 st.set_page_config(page_title=f"DBBL Scouting Suite {VERSION}", layout="wide", page_icon="🏀")
@@ -32,14 +31,38 @@ for key, default in [
     ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
     ("roster_df", None), ("team_stats", None), ("game_meta", {}),
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
+    
+    # --- HIER SIND DIE NEUEN STANDARD-TEXTE ---
     ("facts_offense", pd.DataFrame([
         {"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"},
         {"Fokus": "Spacing", "Beschreibung": "swing or skip the ball to get it inside"},
         {"Fokus": "Rules", "Beschreibung": "Stick to our offense rules"},
         {"Fokus": "Automatics", "Beschreibung": "use cuts and shifts to get movement on court"},
+        {"Fokus": "Share", "Beschreibung": "the ball / always look for an extra pass"},
+        {"Fokus": "Set Offense", "Beschreibung": "look inside a lot"},
+        {"Fokus": "Pick´n Roll", "Beschreibung": "watch out for the half rol against the hetch"},
+        {"Fokus": "Pace", "Beschreibung": "Execution over speed, take care of the ball"},
     ])),
-    ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
-    ("facts_about", pd.DataFrame([{"Fokus": "Energy", "Beschreibung": "100% effort"}])),
+    ("facts_defense", pd.DataFrame([
+        {"Fokus": "Rebound", "Beschreibung": "box out!"},
+        {"Fokus": "Transition", "Beschreibung": "Slow the ball down! Pick up the ball early!"},
+        {"Fokus": "Communication", "Beschreibung": "Talk on positioning, helpside & on screens"},
+        {"Fokus": "Positioning", "Beschreibung": "close the middle on close outs and drives"},
+        {"Fokus": "Pick´n Roll", "Beschreibung": "red (yellow, last 8 sec. from shot clock)"},
+        {"Fokus": "DHO", "Beschreibung": "aggressive switch - same size / gap - small and big"},
+        {"Fokus": "Offball screens", "Beschreibung": "yellow"},
+    ])),
+    ("facts_about", pd.DataFrame([
+        {"Fokus": "Be ready for wild caotic / a lot of 1-1 and shooting", "Beschreibung": ""},
+        {"Fokus": "Stay ready no matter what happens", "Beschreibung": "Don’t be bothered by calls/no calls"},
+        {"Fokus": "No matter what the score is, we always give 100%.", "Beschreibung": ""},
+        {"Fokus": "Together", "Beschreibung": "Fight for & trust in each other!"},
+        {"Fokus": "Take care of the ball", "Beschreibung": "no easy turnovers to prevent easy fastbreaks!"},
+        {"Fokus": "Halfcourt", "Beschreibung": "Take responsibility! Stop them as a team!"},
+        {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"},
+    ])),
+    # ------------------------------------------
+    
     ("selected_game_id", None)
 ]:
     if key not in st.session_state: st.session_state[key] = default
@@ -129,15 +152,12 @@ def render_analysis_page():
                         render_game_header(box)
                         st.write("")
 
-                        # Namen mit der neuen Funktion aus src/analysis_ui.py holen
-                        h_data = box.get("homeTeam", {})
-                        g_data = box.get("guestTeam", {})
-                        h_name = get_team_name(h_data, "Heim")
-                        g_name = get_team_name(g_data, "Gast")
+                        h_name = get_team_name(box.get("homeTeam", {}), "Heim")
+                        g_name = get_team_name(box.get("guestTeam", {}), "Gast")
                         
-                        render_boxscore_table_pro(h_data.get("playerStats", []), h_name)
+                        render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name)
                         st.write("")
-                        render_boxscore_table_pro(g_data.get("playerStats", []), g_name)
+                        render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name)
                         
                         st.divider()
                         render_charts_and_stats(box)
@@ -287,7 +307,7 @@ def render_scouting_page():
                         try:
                             full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
                             opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
-                                    "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
+                                    "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.44",
                                     "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
                             st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
                             st.session_state.print_mode = True
