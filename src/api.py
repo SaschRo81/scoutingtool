@@ -4,9 +4,6 @@ import pandas as pd
 from src.config import API_HEADERS
 from src.utils import optimize_image_base64, format_minutes
 
-# ... (Die alten Funktionen get_player_metadata_cached und fetch_team_data bleiben hier unverändert stehen) ...
-# Damit du nicht scrollen musst, hier der KOMPLETTE Inhalt der Datei inkl. der NEUEN Funktionen unten:
-
 @st.cache_data(ttl=600, show_spinner="Lade Spieler-Metadaten...")
 def get_player_metadata_cached(player_id):
     try:
@@ -27,32 +24,59 @@ def get_player_metadata_cached(player_id):
 
 @st.cache_data(ttl=600)
 def fetch_team_data(team_id, season_id):
-    # (Dieser Code bleibt gleich wie vorher...)
+    """Lädt Kader und Team-Statistiken für die Saison."""
     api_url = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
     api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
+    
     try:
         resp = requests.get(api_url, headers=API_HEADERS)
         resp_t = requests.get(api_team, headers=API_HEADERS)
-        if resp.status_code != 200 or resp_t.status_code != 200: return None, None
         
+        if resp.status_code != 200:
+            return None, None
+        if resp_t.status_code != 200:
+            return None, None
+
         raw_data = resp.json()
         team_data_list = resp_t.json()
+
+        # 1. Team Stats Process
         ts = {}
         if team_data_list and isinstance(team_data_list, list):
             td = team_data_list[0]
+            
+            # BLOCKS FIX: Prüfen auf beide möglichen Namen
             blocks = td.get("blocksPerGame", td.get("blockedShotsPerGame", 0))
+            
             ts = {
-                "ppg": td.get("pointsPerGame", 0), "2m": td.get("twoPointShotsMadePerGame", 0), "2a": td.get("twoPointShotsAttemptedPerGame", 0), "2pct": td.get("twoPointShotsSuccessPercent", 0),
-                "3m": td.get("threePointShotsMadePerGame", 0), "3a": td.get("threePointShotsAttemptedPerGame", 0), "3pct": td.get("threePointShotsSuccessPercent", 0),
-                "ftm": td.get("freeThrowsMadePerGame", 0), "fta": td.get("freeThrowsAttemptedPerGame", 0), "ftpct": td.get("freeThrowsSuccessPercent", 0),
-                "dr": td.get("defensiveReboundsPerGame", 0), "or": td.get("offensiveReboundsPerGame", 0), "tot": td.get("totalReboundsPerGame", 0),
-                "as": td.get("assistsPerGame", 0), "to": td.get("turnoversPerGame", 0), "st": td.get("stealsPerGame", 0), "bs": blocks, "pf": td.get("foulsCommittedPerGame", 0)
+                "ppg": td.get("pointsPerGame", 0), 
+                "2m": td.get("twoPointShotsMadePerGame", 0), 
+                "2a": td.get("twoPointShotsAttemptedPerGame", 0), 
+                "2pct": td.get("twoPointShotsSuccessPercent", 0),
+                "3m": td.get("threePointShotsMadePerGame", 0), 
+                "3a": td.get("threePointShotsAttemptedPerGame", 0), 
+                "3pct": td.get("threePointShotsSuccessPercent", 0),
+                "ftm": td.get("freeThrowsMadePerGame", 0), 
+                "fta": td.get("freeThrowsAttemptedPerGame", 0), 
+                "ftpct": td.get("freeThrowsSuccessPercent", 0),
+                "dr": td.get("defensiveReboundsPerGame", 0), 
+                "or": td.get("offensiveReboundsPerGame", 0), 
+                "tot": td.get("totalReboundsPerGame", 0),
+                "as": td.get("assistsPerGame", 0), 
+                "to": td.get("turnoversPerGame", 0), 
+                "st": td.get("stealsPerGame", 0),
+                "bs": blocks, 
+                "pf": td.get("foulsCommittedPerGame", 0)
             }
+
+        # 2. Player Stats Process
         df = None
         raw = raw_data if isinstance(raw_data, list) else raw_data.get("data", [])
         if raw:
             df = pd.json_normalize(raw)
             df.columns = [str(c).lower() for c in df.columns]
+            
+            # Mapping
             col_map = {
                 "firstname": ["person.firstname", "firstname"], "lastname": ["person.lastname", "lastname"],
                 "shirtnumber": ["jerseynumber", "shirtnumber", "no"], "id": ["id", "person.id", "personid"],
@@ -64,42 +88,54 @@ def fetch_team_data(team_id, season_id):
                 "dr": ["defensivereboundspergame"], "or": ["offensivereboundspergame"], "as": ["assistspergame"],
                 "to": ["turnoverspergame"], "st": ["stealspergame"], "pf": ["foulscommittedpergame"], "bs": ["blockspergame"]
             }
+            
             final_cols = {}
             for t, p_list in col_map.items():
                 for p in p_list:
                     m = [c for c in df.columns if p in c]
                     if m: final_cols[t] = sorted(m, key=len)[0]; break
+            
             fn = df[final_cols["firstname"]].fillna("") if "firstname" in final_cols else ""
             ln = df[final_cols["lastname"]].fillna("") if "lastname" in final_cols else ""
             df["NAME_FULL"] = (fn + " " + ln).str.strip()
             df["NR"] = df[final_cols["shirtnumber"]].fillna("-").astype(str).str.replace(".0", "", regex=False) if "shirtnumber" in final_cols else "-"
             df["PLAYER_ID"] = df[final_cols["id"]].astype(str) if "id" in final_cols else ""
+            
             def get_v(k): return pd.to_numeric(df[final_cols[k]], errors="coerce").fillna(0) if k in final_cols else pd.Series([0.0]*len(df))
             def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
+            
             df["GP"] = get_v("gp").replace(0,1)
-            min_raw = get_v("min_sec"); sec_total = get_v("sec_total")
+            min_raw = get_v("min_sec")
+            sec_total = get_v("sec_total")
             df["MIN_FINAL"] = min_raw
             mask_zero = df["MIN_FINAL"] <= 0
             df.loc[mask_zero, "MIN_FINAL"] = sec_total[mask_zero] / df.loc[mask_zero, "GP"]
             df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
+            
             df["PPG"] = get_v("ppg"); df["TOT"] = get_v("tot")
             df["2M"] = get_v("2m"); df["2A"] = get_v("2a"); df["2PCT"] = get_v("2pct").apply(pct)
             df["3M"] = get_v("3m"); df["3A"] = get_v("3a"); df["3PCT"] = get_v("3pct").apply(pct)
             df["FTM"] = get_v("ftm"); df["FTA"] = get_v("fta"); df["FTPCT"] = get_v("ftpct").apply(pct)
-            total_made = df["2M"] + df["3M"]; total_att = df["2A"] + df["3A"]
+            
+            # FG% Berechnung
+            total_made = df["2M"] + df["3M"]
+            total_att = df["2A"] + df["3A"]
             df["FG%"] = (total_made / total_att * 100).fillna(0).round(1)
+
             df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
             df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
             df["select"] = False
+
         return df, ts
+
     except Exception as e:
+        st.error(f"Fehler: {e}")
         return None, None
 
 # --- NEU: Spielplan laden ---
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
     """Lädt die Spiele eines Teams für die Saison."""
-    # Pagination auf 1000 setzen, um sicher alle Spiele zu bekommen
     url = f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}"
     
     try:
@@ -108,10 +144,8 @@ def fetch_schedule(team_id, season_id):
             data = resp.json()
             items = data.get("items", [])
             
-            # Wir bauen eine saubere Liste für Streamlit
             clean_games = []
             for g in items:
-                # Ergebnis prüfen
                 res = g.get("result")
                 score_str = "-"
                 if res:
@@ -119,7 +153,7 @@ def fetch_schedule(team_id, season_id):
                 
                 clean_games.append({
                     "id": g.get("id"),
-                    "date": g.get("scheduledTime", "")[:16].replace("T", " "), # Datum formatieren
+                    "date": g.get("scheduledTime", "")[:16].replace("T", " "), 
                     "home": g.get("homeTeam", {}).get("name", "Unknown"),
                     "guest": g.get("guestTeam", {}).get("name", "Unknown"),
                     "score": score_str,
