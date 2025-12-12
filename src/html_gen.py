@@ -57,7 +57,6 @@ def generate_top3_html(df: pd.DataFrame) -> str:
         h += "</table></div>"
         return h
 
-    # 2. Statistik-Boxen bauen
     html = "<div class='top3-container'>"
     html += build_box(scorers, ["#", "Name", "PPG", "FG%"], ["NR", "NAME_FULL", "PPG", "FG%"], [2], "#e35b00", "Top Scorer")
     html += build_box(rebounders, ["#", "Name", "D", "O", "TOT"], ["NR", "NAME_FULL", "DR", "OR", "TOT"], [4], "#0055ff", "Rebounds")
@@ -76,7 +75,6 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     html += build_box(fouls, ["#", "Name", "PF"], ["NR", "NAME_FULL", "PF"], [2], "#20c997", "Fouls")
     html += "</div>"
 
-    # 3. Legende
     c_green = "#5c9c30"
     c_gray = "#999999"
     c_red = "#d9534f"
@@ -186,9 +184,7 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
         if df.empty: return ""
         sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-size: 26px;'>{title}</h3>"
         sh += "<table style='width:100%; border-collapse:collapse; margin-bottom:20px;'>"
-        
         font_size = "22px"
-
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], "")
             c2 = r.get(df.columns[1], "")
@@ -210,7 +206,6 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
     if not h_stats or not g_stats:
         return "Keine Daten für Vergleich verfügbar."
 
-    # Hilfsfunktion für Prozente
     def get_pct(stats, cat):
         if stats.get(f'{cat}pct', 0) > 0: return stats[f'{cat}pct']
         m = stats.get(f'{cat}m', 0)
@@ -225,10 +220,10 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         ("Rebounds (Total)", "tot", False, False),
         ("Offensive Rebs", "or", False, False),
         ("Assists", "as", False, False),
-        ("Turnovers", "to", False, True),
+        ("Turnovers", "to", False, True), # Niedriger ist besser
         ("Steals", "st", False, False),
         ("Blocks", "bs", False, False),
-        ("Fouls", "pf", False, True)
+        ("Fouls", "pf", False, True)      # Niedriger ist besser
     ]
 
     for stats in [h_stats, g_stats]:
@@ -239,15 +234,16 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         stats['ftpct'] = get_pct(stats, 'ft')
         if 'bs' not in stats: stats['bs'] = 0.0
 
+    # UPGRADE: Dunkler Header für Teamnamen
     html = f"""
     <div style="margin-top: 20px; margin-bottom: 20px; font-family: Arial, sans-serif;">
         <h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px;">Head-to-Head Vergleich (Saison-Schnitt)</h3>
         <table style="width: 100%; border-collapse: collapse; font-size: 16px;">
             <thead>
-                <tr style="background-color: #f2f2f2; border-bottom: 2px solid #ccc;">
-                    <th style="padding: 10px; text-align: right; width: 35%;">{h_name}</th>
-                    <th style="padding: 10px; text-align: center; width: 30%;">Statistik</th>
-                    <th style="padding: 10px; text-align: left; width: 35%;">{g_name}</th>
+                <tr style="background-color: #333; color: white;">
+                    <th style="padding: 12px; text-align: right; width: 35%; font-size: 18px;">{h_name}</th>
+                    <th style="padding: 12px; text-align: center; width: 30%; background-color: #555;">Statistik</th>
+                    <th style="padding: 12px; text-align: left; width: 35%; font-size: 18px;">{g_name}</th>
                 </tr>
             </thead>
             <tbody>
