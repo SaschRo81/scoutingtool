@@ -46,11 +46,25 @@ def fetch_team_data(team_id, season_id):
         if team_data_list and isinstance(team_data_list, list):
             td = team_data_list[0]
             ts = {
-                "ppg": td.get("pointsPerGame", 0), "2m": td.get("twoPointShotsMadePerGame", 0), "2a": td.get("twoPointShotsAttemptedPerGame", 0), "2pct": td.get("twoPointShotsSuccessPercent", 0),
-                "3m": td.get("threePointShotsMadePerGame", 0), "3a": td.get("threePointShotsAttemptedPerGame", 0), "3pct": td.get("threePointShotsSuccessPercent", 0),
-                "ftm": td.get("freeThrowsMadePerGame", 0), "fta": td.get("freeThrowsAttemptedPerGame", 0), "ftpct": td.get("freeThrowsSuccessPercent", 0),
-                "dr": td.get("defensiveReboundsPerGame", 0), "or": td.get("offensiveReboundsPerGame", 0), "tot": td.get("totalReboundsPerGame", 0),
-                "as": td.get("assistsPerGame", 0), "to": td.get("turnoversPerGame", 0), "st": td.get("stealsPerGame", 0), "pf": td.get("foulsCommittedPerGame", 0)
+                "ppg": td.get("pointsPerGame", 0), 
+                "2m": td.get("twoPointShotsMadePerGame", 0), 
+                "2a": td.get("twoPointShotsAttemptedPerGame", 0), 
+                "2pct": td.get("twoPointShotsSuccessPercent", 0),
+                "3m": td.get("threePointShotsMadePerGame", 0), 
+                "3a": td.get("threePointShotsAttemptedPerGame", 0), 
+                "3pct": td.get("threePointShotsSuccessPercent", 0),
+                "ftm": td.get("freeThrowsMadePerGame", 0), 
+                "fta": td.get("freeThrowsAttemptedPerGame", 0), 
+                "ftpct": td.get("freeThrowsSuccessPercent", 0),
+                "dr": td.get("defensiveReboundsPerGame", 0), 
+                "or": td.get("offensiveReboundsPerGame", 0), 
+                "tot": td.get("totalReboundsPerGame", 0),
+                "as": td.get("assistsPerGame", 0), 
+                "to": td.get("turnoversPerGame", 0), 
+                "st": td.get("stealsPerGame", 0),
+                # HIER NEU: BLOCKS HINZUGEFÜGT
+                "bs": td.get("blockedShotsPerGame", 0), 
+                "pf": td.get("foulsCommittedPerGame", 0)
             }
 
         # 2. Player Stats Process
@@ -101,12 +115,10 @@ def fetch_team_data(team_id, season_id):
             df["3M"] = get_v("3m"); df["3A"] = get_v("3a"); df["3PCT"] = get_v("3pct").apply(pct)
             df["FTM"] = get_v("ftm"); df["FTA"] = get_v("fta"); df["FTPCT"] = get_v("ftpct").apply(pct)
             
-            # --- HIER IST DIE WICHTIGE ÄNDERUNG ---
-            # FG% (Feldwurfquote) berechnen, damit es keinen KeyError gibt
+            # FG% Berechnung
             total_made = df["2M"] + df["3M"]
             total_att = df["2A"] + df["3A"]
             df["FG%"] = (total_made / total_att * 100).fillna(0).round(1)
-            # -------------------------------------
 
             df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
             df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
