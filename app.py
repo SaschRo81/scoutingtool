@@ -81,31 +81,39 @@ if not st.session_state.print_mode:
     tid = guest_id if target == "Gastteam (Gegner)" else home_id
     
     c_d, c_t = st.columns(2)
-    # HIER IST DER FIX: Eindeutige Keys ("key=...") verhindern DuplicateElementId
     d_inp = c_d.date_input("Datum", datetime.date.today(), key="main_date_picker")
     t_inp = c_t.time_input("Tip-Off", datetime.time(16,0), key="main_time_picker")
 
-    # --- TEAMVERGLEICH (NEU) ---
+    # --- TEAMVERGLEICH (VERBESSERT) ---
     st.write("")
     with st.expander("📊 Head-to-Head Teamvergleich anzeigen"):
         if st.button("Vergleich laden"):
-            with st.spinner("Lade Statistik für beide Teams..."):
+            with st.spinner(f"Lade Statistik für {home_name} und {guest_name} (Saison {SEASON_ID})..."):
+                # Daten laden
                 _, ts_home = fetch_team_data(home_id, SEASON_ID)
                 _, ts_guest = fetch_team_data(guest_id, SEASON_ID)
                 
-                if ts_home and ts_guest:
+                # Diagnose anzeigen, falls etwas fehlt
+                error_found = False
+                if not ts_home:
+                    st.error(f"❌ Keine Statistik für Heimteam gefunden (ID: {home_id}). Saison-ID korrekt?")
+                    error_found = True
+                if not ts_guest:
+                    st.error(f"❌ Keine Statistik für Gastteam gefunden (ID: {guest_id}). Saison-ID korrekt?")
+                    error_found = True
+                
+                # Wenn beides da ist, anzeigen
+                if not error_found:
                     comp_html = generate_comparison_html(ts_home, ts_guest, home_name, guest_name)
                     st.markdown(comp_html, unsafe_allow_html=True)
-                else:
-                    st.error("Konnte Daten für den Vergleich nicht laden.")
 
-    # 2. KADER LADEN
+    # 2. DATEN LADEN
     st.divider()
     data_ready = st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid
     
     if st.button(f"2. Kader von {target} laden", type="primary") or data_ready:
         if not data_ready:
-            with st.spinner(f"Lade Daten für Team {tid}..."):
+            with st.spinner(f"Lade Daten für Team {tid} (Saison {SEASON_ID})..."):
                 df, ts = fetch_team_data(tid, SEASON_ID)
                 if df is not None:
                     st.session_state.roster_df = df
@@ -117,7 +125,7 @@ if not st.session_state.print_mode:
         st.session_state.game_meta = {
             "home_name": home_name, "home_logo": st.session_state.logo_h,
             "guest_name": guest_name, "guest_logo": st.session_state.logo_g,
-            "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H:%M")
+            "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M")
         }
 
     # 3. EDITIEREN
