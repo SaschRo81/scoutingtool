@@ -4,7 +4,7 @@ from src.utils import clean_pos
 def generate_header_html(meta):
     return f"""
 <div class="report-header">
-    <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
+    <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro</div>
     <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
     <div class="matchup-container">
         <div class="team-logo-box">
@@ -21,13 +21,13 @@ def generate_header_html(meta):
 """
 
 def generate_top3_html(df: pd.DataFrame) -> str:
-    # 1. Daten sortieren
     scorers = df.sort_values(by="PPG", ascending=False).head(3)
     rebounders = df.sort_values(by="TOT", ascending=False).head(3)
     shooters = df[df["3M"] >= 0.5].sort_values(by="3PCT", ascending=False).head(3)
     if shooters.empty: shooters = df.sort_values(by="3PCT", ascending=False).head(3)
     fts = df[df["FTA"] >= 1.0].sort_values(by="FTPCT", ascending=True).head(3)
     if fts.empty: fts = df.sort_values(by="FTPCT", ascending=True).head(3)
+    
     assisters = df.sort_values(by="AS", ascending=False).head(3)
     stealers = df.sort_values(by="ST", ascending=False).head(3)
     turnovers = df.sort_values(by="TO", ascending=False).head(3)
@@ -76,8 +76,7 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     html += build_box(fouls, ["#", "Name", "PF"], ["NR", "NAME_FULL", "PF"], [2], "#20c997", "Fouls")
     html += "</div>"
 
-    # 3. HIER NEU: Die Legende einfügen
-    # Farben müssen exakt mit src/config.py bzw. app.py übereinstimmen
+    # 3. Legende
     c_green = "#5c9c30"
     c_gray = "#999999"
     c_red = "#d9534f"
@@ -85,20 +84,19 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     legend_html = f"""
     <div style="display: flex; gap: 30px; margin-top: 5px; margin-bottom: 20px; font-size: 18px; color: #333;">
         <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px;"></div>
+            <div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div>
             <strong>Shooter</strong>
         </div>
         <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px;"></div>
+            <div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>
             Normal
         </div>
         <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border:"></div>
+            <div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>
             Non-Shooter
         </div>
     </div>
     """
-    
     return html + legend_html
 
 def generate_card_html(row, metadata, notes, color_code):
@@ -206,7 +204,6 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
     html += make_section("ALL ABOUT US", about_df)
     html += "</div>"
     return html
-# ... (Code davor bleibt) ...
 
 def generate_comparison_html(h_stats, g_stats, h_name, g_name):
     """Erstellt eine HTML-Vergleichstabelle für zwei Teams."""
@@ -215,40 +212,33 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
 
     # Hilfsfunktion für Prozente
     def get_pct(stats, cat):
-        # Falls API 0 liefert, selbst rechnen
         if stats.get(f'{cat}pct', 0) > 0: return stats[f'{cat}pct']
         m = stats.get(f'{cat}m', 0)
         a = stats.get(f'{cat}a', 0)
         return (m / a * 100) if a > 0 else 0.0
 
-    # Daten vorbereiten (Label, Home-Key, Guest-Key, Format, 'Lower is better'?)
-    # Format: (Anzeige-Name, Key im Dict, ist_prozent, niedriger_ist_besser)
     metrics = [
         ("Points Per Game", "ppg", False, False),
-        ("Field Goal %", "FG%", True, False), # Müssen wir berechnen
+        ("Field Goal %", "FG%", True, False), 
         ("3-Point %", "3pct", True, False),
         ("Free Throw %", "ftpct", True, False),
         ("Rebounds (Total)", "tot", False, False),
         ("Offensive Rebs", "or", False, False),
         ("Assists", "as", False, False),
-        ("Turnovers", "to", False, True), # Hier ist niedriger besser!
+        ("Turnovers", "to", False, True),
         ("Steals", "st", False, False),
-        ("Blocks", "bs", False, False), # API liefert oft kein BS im Team-Objekt, wir prüfen das
-        ("Fouls", "pf", False, True)      # Niedriger ist besser
+        ("Blocks", "bs", False, False),
+        ("Fouls", "pf", False, True)
     ]
 
-    # FG% Berechnung on the fly hinzufügen, falls nicht im Dict
     for stats in [h_stats, g_stats]:
         fg_m = stats.get('2m', 0) + stats.get('3m', 0)
         fg_a = stats.get('2a', 0) + stats.get('3a', 0)
         stats['FG%'] = (fg_m / fg_a * 100) if fg_a > 0 else 0.0
-        # Prozente für 3er und FT auch sicherstellen
         stats['3pct'] = get_pct(stats, '3')
         stats['ftpct'] = get_pct(stats, 'ft')
-        # Blocks fallback (falls nicht in API)
         if 'bs' not in stats: stats['bs'] = 0.0
 
-    # HTML Bauen
     html = f"""
     <div style="margin-top: 20px; margin-bottom: 20px; font-family: Arial, sans-serif;">
         <h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px;">Head-to-Head Vergleich (Saison-Schnitt)</h3>
@@ -267,11 +257,9 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         val_h = h_stats.get(key, 0.0)
         val_g = g_stats.get(key, 0.0)
         
-        # Formatierung
         fmt_h = f"{val_h:.1f}" + ("%" if is_pct else "")
         fmt_g = f"{val_g:.1f}" + ("%" if is_pct else "")
 
-        # Gewinner ermitteln für Fettdruck
         bold_h = ""
         bold_g = ""
         
