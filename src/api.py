@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime
-import pytz # Wichtig für Zeitzonen
+import pytz
 from src.config import API_HEADERS
 from src.utils import optimize_image_base64, format_minutes
 
@@ -110,7 +110,7 @@ def fetch_team_data(team_id, season_id):
 
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
-    """Lädt den Spielplan und korrigiert die Zeitzone."""
+    """Lädt die Spiele eines Teams für die Saison."""
     url = f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}"
     
     try:
@@ -118,12 +118,8 @@ def fetch_schedule(team_id, season_id):
         if resp.status_code == 200:
             data = resp.json()
             items = data.get("items", [])
-            clean_games = []
             
-            # Zeitzonen Setup
-            utc = pytz.utc
-            berlin = pytz.timezone("Europe/Berlin")
-
+            clean_games = []
             for g in items:
                 res = g.get("result")
                 score_str = "-"
@@ -135,16 +131,13 @@ def fetch_schedule(team_id, season_id):
                 date_display = raw_date
                 if raw_date:
                     try:
-                        # String zu Datum (UTC)
                         dt_utc = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
-                        # Umrechnen nach Berlin
+                        berlin = pytz.timezone("Europe/Berlin")
                         dt_berlin = dt_utc.astimezone(berlin)
-                        # Formatieren
                         date_display = dt_berlin.strftime("%Y-%m-%d %H:%M")
                     except:
-                        pass # Fallback auf Originalstring
+                        pass
 
-                # Teams sicher laden
                 home_val = g.get("homeTeam")
                 guest_val = g.get("guestTeam")
                 home_name = home_val.get("name", "Unknown") if isinstance(home_val, dict) else "Unknown"
@@ -166,9 +159,24 @@ def fetch_schedule(team_id, season_id):
         st.error(f"Fehler beim Laden des Spielplans: {e}")
     return []
 
+# --- NEU: ZWEI FUNKTIONEN FÜR SPIELDATEN ---
+
 @st.cache_data(ttl=600)
 def fetch_game_boxscore(game_id):
+    """Lädt die Statistiken (Boxscore)."""
     url = f"https://api-s.dbbl.scb.world/games/{game_id}/stats"
+    try:
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+@st.cache_data(ttl=600)
+def fetch_game_details(game_id):
+    """Lädt die Metadaten (Schiris, Halle, Quarter-Scores)."""
+    url = f"https://api-s.dbbl.scb.world/games/{game_id}"
     try:
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
