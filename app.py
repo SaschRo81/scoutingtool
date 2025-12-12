@@ -21,11 +21,12 @@ from src.html_gen import (
 )
 from src.state_manager import export_session_state, load_session_state
 
-st.set_page_config(page_title=f"DBBL Suite {VERSION}", layout="wide", page_icon="🏀")
+# HIER GEÄNDERT: Neuer Titel in der Browser-Leiste
+st.set_page_config(page_title=f"DBBL Scouting Suite {VERSION}", layout="wide", page_icon="🏀")
 
 # --- SESSION STATE INITIALISIERUNG ---
 for key, default in [
-    ("current_page", "home"), # Hier speichern wir, auf welcher Seite wir sind
+    ("current_page", "home"),
     ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
     ("roster_df", None), ("team_stats", None), ("game_meta", {}),
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
@@ -53,23 +54,23 @@ def go_analysis():
 # SEITE 1: HOME (STARTSEITE)
 # ==========================================
 def render_home():
-    st.markdown("<h1 style='text-align: center;'>🏀 DBBL Coaching Suite</h1>", unsafe_allow_html=True)
+    # HIER GEÄNDERT: Neuer Titel und "by Sascha Rosanke"
+    st.markdown("<h1 style='text-align: center;'>🏀 DBBL Scouting Suite by Sascha Rosanke</h1>", unsafe_allow_html=True)
     st.markdown(f"<p style='text-align: center; color: gray;'>Version {VERSION}</p>", unsafe_allow_html=True)
     
     st.write("")
     st.write("")
     
-    # 3 Spalten für die Buttons, damit sie zentriert sind
-    c1, c2, c3 = st.columns([1, 2, 1])
+    # HIER GEÄNDERT: Spaltenverhältnis [3, 2, 3] damit die Buttons in der Mitte schmal und zentriert sind
+    c1, c2, c3 = st.columns([3, 2, 3])
     
     with c2:
-        # Styling für große Buttons
         st.markdown("""
         <style>
         div.stButton > button:first-child {
             width: 100%;
             height: 3em;
-            font-size: 20px;
+            font-size: 18px;
             margin-bottom: 10px;
         }
         </style>
@@ -88,13 +89,12 @@ def render_home():
             st.rerun()
 
 # ==========================================
-# SEITE 2: TEAMVERGLEICH (HEAD-TO-HEAD)
+# SEITE 2: TEAMVERGLEICH
 # ==========================================
 def render_comparison_page():
     st.button("🏠 Zurück zum Start", on_click=go_home)
     st.title("📊 Head-to-Head Vergleich")
     
-    # Auswahl der Teams (Kompakt)
     c1, c2, c3 = st.columns([1, 2, 2])
     with c1: 
         staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="comp_staffel")
@@ -125,7 +125,7 @@ def render_comparison_page():
                 st.error("Daten nicht verfügbar.")
 
 # ==========================================
-# SEITE 3: SPIELNACHBEREITUNG (PLATZHALTER)
+# SEITE 3: SPIELNACHBEREITUNG
 # ==========================================
 def render_analysis_page():
     st.button("🏠 Zurück zum Start", on_click=go_home)
@@ -142,17 +142,15 @@ def render_analysis_page():
 # SEITE 4: SCOUTING REPORT (DAS ORIGINAL)
 # ==========================================
 def render_scouting_page():
-    # Nur anzeigen wenn nicht im Print-Mode (Vorschau)
     if not st.session_state.print_mode:
         
-        # Header mit Home-Button
         c_home, c_head = st.columns([1, 5])
         with c_home:
             st.button("🏠 Home", on_click=go_home)
         with c_head:
             st.title(f"📝 Scouting")
 
-        # --- SIDEBAR (Nur im Scouting Mode relevant) ---
+        # --- SIDEBAR ---
         with st.sidebar:
             st.header("💾 Spielstand")
             uploaded_state = st.file_uploader("Laden (JSON)", type=["json"])
@@ -217,7 +215,7 @@ def render_scouting_page():
             st.session_state.game_meta = {
                 "home_name": home_name, "home_logo": st.session_state.logo_h,
                 "guest_name": guest_name, "guest_logo": st.session_state.logo_g,
-                "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H:%M")
+                "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M")
             }
 
         # 3. EDITIEREN
