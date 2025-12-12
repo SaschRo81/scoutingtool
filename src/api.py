@@ -45,6 +45,10 @@ def fetch_team_data(team_id, season_id):
         ts = {}
         if team_data_list and isinstance(team_data_list, list):
             td = team_data_list[0]
+            
+            # HIER GEÄNDERT: Wir suchen nach BEIDEN möglichen Namen für Blocks
+            blocks = td.get("blocksPerGame", td.get("blockedShotsPerGame", 0))
+            
             ts = {
                 "ppg": td.get("pointsPerGame", 0), 
                 "2m": td.get("twoPointShotsMadePerGame", 0), 
@@ -62,8 +66,7 @@ def fetch_team_data(team_id, season_id):
                 "as": td.get("assistsPerGame", 0), 
                 "to": td.get("turnoversPerGame", 0), 
                 "st": td.get("stealsPerGame", 0),
-                # HIER NEU: BLOCKS HINZUGEFÜGT
-                "bs": td.get("blockedShotsPerGame", 0), 
+                "bs": blocks, 
                 "pf": td.get("foulsCommittedPerGame", 0)
             }
 
