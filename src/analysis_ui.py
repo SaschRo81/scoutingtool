@@ -5,7 +5,6 @@ from datetime import datetime
 import pytz
 
 def safe_int(val):
-    """Wandelt Werte sicher in Zahlen um."""
     if val is None: return 0
     if isinstance(val, int): return val
     if isinstance(val, float): return int(val)
@@ -16,7 +15,6 @@ def safe_int(val):
     return 0
 
 def get_team_name(team_data, default_name="Team"):
-    """Sucht den Teamnamen."""
     name = team_data.get("gameStat", {}).get("seasonTeam", {}).get("name")
     if name: return name
     name = team_data.get("seasonTeam", {}).get("name")
@@ -26,7 +24,6 @@ def get_team_name(team_data, default_name="Team"):
     return default_name
 
 def format_date_time(iso_string):
-    """Formatiert ISO-Datum."""
     if not iso_string: return "-"
     try:
         dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
@@ -37,53 +34,35 @@ def format_date_time(iso_string):
         return iso_string
 
 def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
-    """Berechnet Lead, Run und Stats aus dem Play-by-Play."""
     stats = {
         "h_lead": 0, "g_lead": 0, "h_run": 0, "g_run": 0,
         "h_paint": 0, "g_paint": 0, "h_2nd": 0, "g_2nd": 0, "h_fb": 0, "g_fb": 0
     }
-
     if not actions: return stats
 
     cur_h = 0; cur_g = 0
-    
-    # Run Berechnung Variablen
-    current_run_team = None 
-    current_run_points = 0
-    
+    run_team = None; run_score = 0
     hid_str = str(home_id)
 
     for act in actions:
          new_h = safe_int(act.get("homeTeamPoints"))
          new_g = safe_int(act.get("guestTeamPoints"))
-         
          pts_h = new_h - cur_h
          pts_g = new_g - cur_g
          
-         # --- RUN LOGIK ---
-         # Ein Run bricht nur ab, wenn der GEGNER punktet.
          if pts_h > 0:
-             if current_run_team == "home":
-                 current_run_points += pts_h
-             else:
-                 current_run_team = "home"
-                 current_run_points = pts_h
-             if current_run_points > stats["h_run"]: stats["h_run"] = current_run_points
-             
+             if run_team == "home": run_score += pts_h
+             else: run_team = "home"; run_score = pts_h
+             if run_score > stats["h_run"]: stats["h_run"] = run_score
          elif pts_g > 0:
-             if current_run_team == "guest":
-                 current_run_points += pts_g
-             else:
-                 current_run_team = "guest"
-                 current_run_points = pts_g
-             if current_run_points > stats["g_run"]: stats["g_run"] = current_run_points
+             if run_team == "guest": run_score += pts_g
+             else: run_team = "guest"; run_score = pts_g
+             if run_score > stats["g_run"]: stats["g_run"] = run_score
 
-         # --- ADVANCED STATS ---
          pts_total = pts_h + pts_g
          if pts_total > 0:
              act_tid = str(act.get("seasonTeamId", ""))
              is_home_action = (act_tid == hid_str) if act_tid else (pts_h > 0)
-
              qualifiers = act.get("qualifiers", [])
              if isinstance(qualifiers, str): qualifiers = [qualifiers]
              q_str = " ".join([str(x).lower() for x in qualifiers])
@@ -99,79 +78,61 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
                  if is_home_action: stats["h_2nd"] += pts_total
                  else: stats["g_2nd"] += pts_total
 
-         # Lead Update
          diff = new_h - new_g
          if diff > 0 and diff > stats["h_lead"]: stats["h_lead"] = diff
          if diff < 0 and abs(diff) > stats["g_lead"]: stats["g_lead"] = abs(diff)
-         
          cur_h = new_h; cur_g = new_g
 
     return stats
 
-def render_game_header(box):
-    """Header mit allen Meta-Infos."""
-    h_data = box.get("homeTeam", {})
-    g_data = box.get("guestTeam", {})
+def render_game_header(details):
+    """Zeigt den Header basierend auf den DETAILS (nicht Boxscore)."""
+    h_data = details.get("homeTeam", {})
+    g_data = details.get("guestTeam", {})
+    h_name = h_data.get("name", "Heim")
+    g_name = g_data.get("name", "Gast")
     
-    h_name = get_team_name(h_data, "Heim")
-    g_name = get_team_name(g_data, "Gast")
+    # Da headCoachName im Details-DTO oft fehlt, nehmen wir es raus oder lassen es leer
+    # (Coaches stehen meist im Boxscore, nicht in Details, aber wir nutzen hier Details)
     
-    h_coach = h_data.get("headCoachName", "-")
-    g_coach = g_data.get("headCoachName", "-")
-    
-    # Ergebnis aus dem Result-Objekt (bevorzugt) oder GameStat
-    res = box.get("result", {})
-    score_h = res.get("homeTeamFinalScore", safe_int(h_data.get("gameStat", {}).get("points")))
-    score_g = res.get("guestTeamFinalScore", safe_int(g_data.get("gameStat", {}).get("points")))
-    
-    # --- META DATEN ---
+    # Ergebnis & Viertel
+    res = details.get("result", {})
+    score_h = res.get("homeTeamFinalScore", 0)
+    score_g = res.get("guestTeamFinalScore", 0)
     
     # 1. Zeit
-    time_str = format_date_time(box.get("scheduledTime"))
+    time_str = format_date_time(details.get("scheduledTime"))
 
-    # 2. Ort (Venue) - FIX FÜR STRING ADRESSE
-    venue_str = "-"
-    venue = box.get("venue")
-    
-    if venue and isinstance(venue, dict):
-        venue_name = venue.get("name", "-")
-        venue_str = venue_name
-        
-        # Adresse analysieren
-        address = venue.get("address")
-        city = ""
-        
-        if isinstance(address, str) and address:
-            # Format: "Strasse 123, 12345 Stadt"
-            if "," in address:
-                # Alles nach dem letzten Komma nehmen
-                last_part = address.split(",")[-1].strip()
-                # Versuchen PLZ zu entfernen (erste Zahlengruppe)
-                parts = last_part.split(" ")
-                if len(parts) > 1 and parts[0].isdigit():
-                    city = " ".join(parts[1:])
-                else:
-                    city = last_part
-        
-        # Wenn wir eine Stadt haben und sie nicht schon im Namen steht -> anhängen
-        if city and city.lower() not in venue_name.lower():
-             venue_str += f", {city}"
+    # 2. Ort
+    venue = details.get("venue", {})
+    venue_str = venue.get("name", "-")
+    address = venue.get("address", "")
+    if address:
+        # Einfacher Split um Stadt zu finden
+        parts = address.split(",")
+        if len(parts) > 1:
+            venue_str += f", {parts[-1].strip()}"
+        else:
+             venue_str += f", {address}"
 
-    # 3. Schiedsrichter
+    # 3. Schiedsrichter (Namen extrahieren)
     refs = []
     for i in range(1, 4):
-        r = box.get(f"referee{i}")
+        r = details.get(f"referee{i}")
         if r and isinstance(r, dict):
-            fn = r.get("firstName", ""); ln = r.get("lastName", "")
-            if not fn and not ln: fn = r.get("name", "")
-            full = f"{ln} {fn}".strip()
-            if full: refs.append(full)
+             # Oft nur refId, aber wenn Name da ist:
+             fn = r.get("firstName", "")
+             ln = r.get("lastName", "")
+             # Wenn keine Namen da sind, zeigen wir nur "Ref ID: ..." an (besser als nichts)
+             if fn or ln:
+                 refs.append(f"{ln} {fn}".strip())
+             elif r.get("refId"):
+                 refs.append(f"Ref#{r.get('refId')}")
+
     ref_str = ", ".join(refs) if refs else "-"
 
-    # 4. Zuschauer (Spectators im Result Objekt!)
-    att = res.get("spectators") # Aus deinem JSON
-    if not att: att = box.get("attendance")
-    if not att: att = h_data.get("gameStat", {}).get("attendance", "-")
+    # 4. Zuschauer
+    att = res.get("spectators", "-")
     
     # --- LAYOUT ---
     st.markdown(f"<div style='text-align: center; color: #666; margin-bottom: 10px; font-size: 1.1em;'>📍 {venue_str} | 🕒 {time_str}</div>", unsafe_allow_html=True)
@@ -179,28 +140,29 @@ def render_game_header(box):
     c1, c2, c3 = st.columns([2, 1, 2])
     with c1:
         st.markdown(f"## {h_name}")
-        st.caption(f"HC: {h_coach}")
     with c2:
         st.markdown(f"<h1 style='text-align: center;'>{score_h} : {score_g}</h1>", unsafe_allow_html=True)
+        # QUARTER TABLE
+        q_data = {
+            "Q1": [res.get("homeTeamQ1Score",0), res.get("guestTeamQ1Score",0)],
+            "Q2": [res.get("homeTeamQ2Score",0), res.get("guestTeamQ2Score",0)],
+            "Q3": [res.get("homeTeamQ3Score",0), res.get("guestTeamQ3Score",0)],
+            "Q4": [res.get("homeTeamQ4Score",0), res.get("guestTeamQ4Score",0)]
+        }
+        # OT
+        if res.get("homeTeamOT1Score", 0) > 0 or res.get("guestTeamOT1Score", 0) > 0:
+             q_data["OT"] = [res.get("homeTeamOT1Score",0), res.get("guestTeamOT1Score",0)]
         
-        # QUARTER SCORES (Tabelle)
-        if res:
-            q_data = {
-                "Q1": [res.get("homeTeamQ1Score",0), res.get("guestTeamQ1Score",0)],
-                "Q2": [res.get("homeTeamQ2Score",0), res.get("guestTeamQ2Score",0)],
-                "Q3": [res.get("homeTeamQ3Score",0), res.get("guestTeamQ3Score",0)],
-                "Q4": [res.get("homeTeamQ4Score",0), res.get("guestTeamQ4Score",0)]
-            }
-            # Optional OT
-            if res.get("homeTeamOT1Score", 0) > 0 or res.get("guestTeamOT1Score", 0) > 0:
-                 q_data["OT"] = [res.get("homeTeamOT1Score",0), res.get("guestTeamOT1Score",0)]
-            
-            q_df = pd.DataFrame(q_data, index=["Heim", "Gast"])
-            st.table(q_df)
-        
+        # HTML Tabelle für Quarter (kompakt)
+        q_html = "<table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 auto; text-align:center;'>"
+        q_html += "<tr style='border-bottom:1px solid #ddd;'><th></th>" + "".join([f"<th>{k}</th>" for k in q_data.keys()]) + "</tr>"
+        q_html += f"<tr><td style='font-weight:bold;'>{h_name[:3].upper()}</td>" + "".join([f"<td>{v[0]}</td>" for v in q_data.values()]) + "</tr>"
+        q_html += f"<tr><td style='font-weight:bold;'>{g_name[:3].upper()}</td>" + "".join([f"<td>{v[1]}</td>" for v in q_data.values()]) + "</tr>"
+        q_html += "</table>"
+        st.markdown(q_html, unsafe_allow_html=True)
+
     with c3:
         st.markdown(f"## {g_name}")
-        st.caption(f"HC: {g_coach}")
     
     st.write("---")
     
@@ -208,12 +170,11 @@ def render_game_header(box):
     <div style='display: flex; justify-content: space-between; color: #333; font-size: 14px; background-color: #f9f9f9; padding: 10px; border-radius: 5px;'>
         <span>👥 <b>Zuschauer:</b> {att}</span>
         <span>⚖️ <b>Schiedsrichter:</b> {ref_str}</span>
-        <span>🆔 <b>Game ID:</b> {box.get('gameId', box.get('id', '-'))}</span>
+        <span>🆔 <b>Game ID:</b> {details.get('id', '-')}</span>
     </div>
     """, unsafe_allow_html=True)
 
 def render_boxscore_table_pro(player_stats, team_name):
-    """Boxscore Tabelle ohne Scrollbalken."""
     if not player_stats: return
 
     data = []
@@ -289,7 +250,6 @@ def render_boxscore_table_pro(player_stats, team_name):
     calc_height = (len(df) + 1) * 35 + 3
     st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
 
-# --- TOP PERFORMER ANZEIGE ---
 def render_game_top_performers(box):
     h_data = box.get("homeTeam", {})
     g_data = box.get("guestTeam", {})
