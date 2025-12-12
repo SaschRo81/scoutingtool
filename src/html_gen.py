@@ -4,7 +4,8 @@ from src.utils import clean_pos
 def generate_header_html(meta):
     return f"""
 <div class="report-header">
-    <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro</div>
+    <!-- HIER GEÄNDERT: Neuer Titel im PDF -->
+    <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
     <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
     <div class="matchup-container">
         <div class="team-logo-box">
@@ -220,13 +221,13 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         ("3-Point %", "3pct", True, False),
         ("Free Throw %", "ftpct", True, False),
         ("Rebounds (Total)", "tot", False, False),
-        ("Defensive Rebs", "dr", False, False), # HIER NEU: Defensive Rebs
+        ("Defensive Rebs", "dr", False, False), 
         ("Offensive Rebs", "or", False, False),
         ("Assists", "as", False, False),
-        ("Turnovers", "to", False, True), # Niedriger ist besser
+        ("Turnovers", "to", False, True), 
         ("Steals", "st", False, False),
-        ("Blocks", "bs", False, False),   # Wird jetzt befüllt durch api.py
-        ("Fouls", "pf", False, True)      # Niedriger ist besser
+        ("Blocks", "bs", False, False),   
+        ("Fouls", "pf", False, True)      
     ]
 
     for stats in [h_stats, g_stats]:
