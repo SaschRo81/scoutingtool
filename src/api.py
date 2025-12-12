@@ -132,7 +132,7 @@ def fetch_team_data(team_id, season_id):
         st.error(f"Fehler: {e}")
         return None, None
 
-# --- NEU: Spielplan laden ---
+# --- NEU: Spielplan laden (MIT FIX) ---
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
     """Lädt die Spiele eines Teams für die Saison."""
@@ -146,18 +146,34 @@ def fetch_schedule(team_id, season_id):
             
             clean_games = []
             for g in items:
+                # 1. Sicherer Zugriff auf das Ergebnis
                 res = g.get("result")
                 score_str = "-"
-                if res:
+                if res and isinstance(res, dict):
                     score_str = f"{res.get('homeTeamFinalScore', 0)} : {res.get('guestTeamFinalScore', 0)}"
                 
+                # 2. Sicherer Zugriff auf Stage (hier lag der Fehler)
+                stage_val = g.get("stage")
+                stage_name = "-"
+                if isinstance(stage_val, dict):
+                    stage_name = stage_val.get("name", "-")
+                elif isinstance(stage_val, str):
+                    stage_name = stage_val
+                
+                # 3. Sicherer Zugriff auf Teams
+                home_val = g.get("homeTeam")
+                guest_val = g.get("guestTeam")
+                
+                home_name = home_val.get("name", "Unknown") if isinstance(home_val, dict) else "Unknown"
+                guest_name = guest_val.get("name", "Unknown") if isinstance(guest_val, dict) else "Unknown"
+
                 clean_games.append({
                     "id": g.get("id"),
                     "date": g.get("scheduledTime", "")[:16].replace("T", " "), 
-                    "home": g.get("homeTeam", {}).get("name", "Unknown"),
-                    "guest": g.get("guestTeam", {}).get("name", "Unknown"),
+                    "home": home_name,
+                    "guest": guest_name,
                     "score": score_str,
-                    "stage": g.get("stage", {}).get("name", "-")
+                    "stage": stage_name
                 })
             return clean_games
     except Exception as e:
