@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 import pandas as pd
+from datetime import datetime
+import pytz # Wichtig für Zeitzonen
 from src.config import API_HEADERS
 from src.utils import optimize_image_base64, format_minutes
 
@@ -32,51 +34,34 @@ def fetch_team_data(team_id, season_id):
         resp = requests.get(api_url, headers=API_HEADERS)
         resp_t = requests.get(api_team, headers=API_HEADERS)
         
-        if resp.status_code != 200:
-            return None, None
-        if resp_t.status_code != 200:
-            return None, None
+        if resp.status_code != 200: return None, None
+        if resp_t.status_code != 200: return None, None
 
         raw_data = resp.json()
         team_data_list = resp_t.json()
 
-        # 1. Team Stats Process
+        # 1. Team Stats
         ts = {}
         if team_data_list and isinstance(team_data_list, list):
             td = team_data_list[0]
-            
-            # BLOCKS FIX: Prüfen auf beide möglichen Namen
             blocks = td.get("blocksPerGame", td.get("blockedShotsPerGame", 0))
-            
             ts = {
                 "ppg": td.get("pointsPerGame", 0), 
-                "2m": td.get("twoPointShotsMadePerGame", 0), 
-                "2a": td.get("twoPointShotsAttemptedPerGame", 0), 
-                "2pct": td.get("twoPointShotsSuccessPercent", 0),
-                "3m": td.get("threePointShotsMadePerGame", 0), 
-                "3a": td.get("threePointShotsAttemptedPerGame", 0), 
-                "3pct": td.get("threePointShotsSuccessPercent", 0),
-                "ftm": td.get("freeThrowsMadePerGame", 0), 
-                "fta": td.get("freeThrowsAttemptedPerGame", 0), 
-                "ftpct": td.get("freeThrowsSuccessPercent", 0),
-                "dr": td.get("defensiveReboundsPerGame", 0), 
-                "or": td.get("offensiveReboundsPerGame", 0), 
-                "tot": td.get("totalReboundsPerGame", 0),
-                "as": td.get("assistsPerGame", 0), 
-                "to": td.get("turnoversPerGame", 0), 
-                "st": td.get("stealsPerGame", 0),
-                "bs": blocks, 
-                "pf": td.get("foulsCommittedPerGame", 0)
+                "2m": td.get("twoPointShotsMadePerGame", 0), "2a": td.get("twoPointShotsAttemptedPerGame", 0), "2pct": td.get("twoPointShotsSuccessPercent", 0),
+                "3m": td.get("threePointShotsMadePerGame", 0), "3a": td.get("threePointShotsAttemptedPerGame", 0), "3pct": td.get("threePointShotsSuccessPercent", 0),
+                "ftm": td.get("freeThrowsMadePerGame", 0), "fta": td.get("freeThrowsAttemptedPerGame", 0), "ftpct": td.get("freeThrowsSuccessPercent", 0),
+                "dr": td.get("defensiveReboundsPerGame", 0), "or": td.get("offensiveReboundsPerGame", 0), "tot": td.get("totalReboundsPerGame", 0),
+                "as": td.get("assistsPerGame", 0), "to": td.get("turnoversPerGame", 0), "st": td.get("stealsPerGame", 0),
+                "bs": blocks, "pf": td.get("foulsCommittedPerGame", 0)
             }
 
-        # 2. Player Stats Process
+        # 2. Player Stats
         df = None
         raw = raw_data if isinstance(raw_data, list) else raw_data.get("data", [])
         if raw:
             df = pd.json_normalize(raw)
             df.columns = [str(c).lower() for c in df.columns]
             
-            # Mapping
             col_map = {
                 "firstname": ["person.firstname", "firstname"], "lastname": ["person.lastname", "lastname"],
                 "shirtnumber": ["jerseynumber", "shirtnumber", "no"], "id": ["id", "person.id", "personid"],
@@ -105,37 +90,27 @@ def fetch_team_data(team_id, season_id):
             def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
             
             df["GP"] = get_v("gp").replace(0,1)
-            min_raw = get_v("min_sec")
-            sec_total = get_v("sec_total")
+            min_raw = get_v("min_sec"); sec_total = get_v("sec_total")
             df["MIN_FINAL"] = min_raw
             mask_zero = df["MIN_FINAL"] <= 0
             df.loc[mask_zero, "MIN_FINAL"] = sec_total[mask_zero] / df.loc[mask_zero, "GP"]
             df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
-            
             df["PPG"] = get_v("ppg"); df["TOT"] = get_v("tot")
             df["2M"] = get_v("2m"); df["2A"] = get_v("2a"); df["2PCT"] = get_v("2pct").apply(pct)
             df["3M"] = get_v("3m"); df["3A"] = get_v("3a"); df["3PCT"] = get_v("3pct").apply(pct)
             df["FTM"] = get_v("ftm"); df["FTA"] = get_v("fta"); df["FTPCT"] = get_v("ftpct").apply(pct)
-            
-            # FG% Berechnung
-            total_made = df["2M"] + df["3M"]
-            total_att = df["2A"] + df["3A"]
+            total_made = df["2M"] + df["3M"]; total_att = df["2A"] + df["3A"]
             df["FG%"] = (total_made / total_att * 100).fillna(0).round(1)
-
             df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
             df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
             df["select"] = False
-
         return df, ts
-
     except Exception as e:
-        st.error(f"Fehler: {e}")
         return None, None
 
-# --- NEU: Spielplan laden (MIT FIX) ---
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
-    """Lädt die Spiele eines Teams für die Saison."""
+    """Lädt den Spielplan und korrigiert die Zeitzone."""
     url = f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}"
     
     try:
@@ -143,33 +118,44 @@ def fetch_schedule(team_id, season_id):
         if resp.status_code == 200:
             data = resp.json()
             items = data.get("items", [])
-            
             clean_games = []
+            
+            # Zeitzonen Setup
+            utc = pytz.utc
+            berlin = pytz.timezone("Europe/Berlin")
+
             for g in items:
-                # 1. Sicherer Zugriff auf das Ergebnis
                 res = g.get("result")
                 score_str = "-"
                 if res and isinstance(res, dict):
                     score_str = f"{res.get('homeTeamFinalScore', 0)} : {res.get('guestTeamFinalScore', 0)}"
                 
-                # 2. Sicherer Zugriff auf Stage (hier lag der Fehler)
-                stage_val = g.get("stage")
-                stage_name = "-"
-                if isinstance(stage_val, dict):
-                    stage_name = stage_val.get("name", "-")
-                elif isinstance(stage_val, str):
-                    stage_name = stage_val
-                
-                # 3. Sicherer Zugriff auf Teams
+                # DATUM FIXEN
+                raw_date = g.get("scheduledTime", "")
+                date_display = raw_date
+                if raw_date:
+                    try:
+                        # String zu Datum (UTC)
+                        dt_utc = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                        # Umrechnen nach Berlin
+                        dt_berlin = dt_utc.astimezone(berlin)
+                        # Formatieren
+                        date_display = dt_berlin.strftime("%Y-%m-%d %H:%M")
+                    except:
+                        pass # Fallback auf Originalstring
+
+                # Teams sicher laden
                 home_val = g.get("homeTeam")
                 guest_val = g.get("guestTeam")
-                
                 home_name = home_val.get("name", "Unknown") if isinstance(home_val, dict) else "Unknown"
                 guest_name = guest_val.get("name", "Unknown") if isinstance(guest_val, dict) else "Unknown"
+                
+                stage_val = g.get("stage")
+                stage_name = stage_val.get("name", "-") if isinstance(stage_val, dict) else str(stage_val)
 
                 clean_games.append({
                     "id": g.get("id"),
-                    "date": g.get("scheduledTime", "")[:16].replace("T", " "), 
+                    "date": date_display,
                     "home": home_name,
                     "guest": guest_name,
                     "score": score_str,
@@ -180,15 +166,13 @@ def fetch_schedule(team_id, season_id):
         st.error(f"Fehler beim Laden des Spielplans: {e}")
     return []
 
-# --- NEU: Boxscore laden ---
 @st.cache_data(ttl=600)
 def fetch_game_boxscore(game_id):
-    """Lädt die Statistiken für ein einzelnes Spiel."""
     url = f"https://api-s.dbbl.scb.world/games/{game_id}/stats"
     try:
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
             return resp.json()
-    except Exception as e:
-        st.error(f"Fehler beim Laden des Boxscores: {e}")
+    except Exception:
+        pass
     return None
