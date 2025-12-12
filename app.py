@@ -160,6 +160,12 @@ def render_analysis_page():
                         render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name)
                         
                         st.divider()
+                        
+                        # HIER NEU: Top Performer anzeigen
+                        from src.analysis_ui import render_game_top_performers
+                        render_game_top_performers(box)
+                        
+                        st.divider()
                         render_charts_and_stats(box)
                     else:
                         st.error("Konnte Boxscore nicht laden.")
