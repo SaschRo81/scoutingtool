@@ -3,6 +3,7 @@ import pandas as pd
 import altair as alt
 from datetime import datetime
 import pytz
+import openai
 
 def safe_int(val):
     if val is None: return 0
@@ -429,3 +430,21 @@ def generate_game_summary(box):
     text += f"Bei {g_name} hielt **{g_p_name}** mit {g_p_val} Zählern dagegen."
 
     return text
+    def run_openai_generation(api_key, prompt):
+    """Sendet den Prompt an die OpenAI API und gibt den Text zurück."""
+    client = openai.OpenAI(api_key=api_key)
+    
+    try:
+        # Wir nutzen gpt-4o, da es aktuell das beste Preis-Leistungs-Verhältnis hat
+        # und sehr gut Deutsch schreibt.
+        response = client.chat.completions.create(
+            model="gpt-4o", 
+            messages=[
+                {"role": "system", "content": "Du bist ein professioneller Sportjournalist für die DBBL."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7, # Kreativität
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Fehler bei der API-Abfrage: {str(e)}"
