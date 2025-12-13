@@ -22,8 +22,7 @@ def get_player_metadata_cached(player_id):
                 "height": data.get("height", 0),
                 "pos": data.get("position", "-"),
             }
-    except Exception as e:
-        print(f"DEBUG: Fehler in get_player_metadata_cached für Player-ID {player_id}: {e}")
+    except Exception:
         pass
     return {"img": "", "height": 0, "pos": "-"}
 
@@ -33,29 +32,17 @@ def fetch_team_data(team_id, season_id):
     api_url = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
     api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
     
-    print(f"DEBUG: fetch_team_data startet für Team {team_id}, Saison {season_id}")
-    print(f"DEBUG: API URL (Spielerstats): {api_url}")
-    print(f"DEBUG: API URL (Teamstats): {api_team}")
-
     try:
         resp_players = requests.get(api_url, headers=API_HEADERS)
         resp_team_stats = requests.get(api_team, headers=API_HEADERS)
         
-        print(f"DEBUG: Spielerstats API Status: {resp_players.status_code}")
-        print(f"DEBUG: Teamstats API Status: {resp_team_stats.status_code}")
-
         if resp_players.status_code != 200:
-            print(f"DEBUG: Fehler beim Abrufen der Spielerstatistik. Status: {resp_players.status_code}, Antwort: {resp_players.text[:200]}")
             return None, None
         if resp_team_stats.status_code != 200:
-            print(f"DEBUG: Fehler beim Abrufen der Teamstatistik. Status: {resp_team_stats.status_code}, Antwort: {resp_team_stats.text[:200]}")
             return None, None
 
         raw_player_data = resp_players.json()
         raw_team_stats_list = resp_team_stats.json()
-
-        print(f"DEBUG: Raw Spielerdaten Typ: {type(raw_player_data)}, Länge/Keys: {len(raw_player_data) if isinstance(raw_player_data, list) else list(raw_player_data.keys()) if isinstance(raw_player_data, dict) else 'n/a'}")
-        print(f"DEBUG: Raw Teamstats Typ: {type(raw_team_stats_list)}, Länge/Keys: {len(raw_team_stats_list) if isinstance(raw_team_stats_list, list) else list(raw_team_stats_list.keys()) if isinstance(raw_team_stats_list, dict) else 'n/a'}")
 
         # 1. Team Stats
         ts = {}
@@ -71,9 +58,8 @@ def fetch_team_data(team_id, season_id):
                 "as": td.get("assistsPerGame", 0), "to": td.get("turnoversPerGame", 0), "st": td.get("stealsPerGame", 0),
                 "bs": blocks, "pf": td.get("foulsCommittedPerGame", 0)
             }
-            print(f"DEBUG: Teamstats erfolgreich geparst: {ts.get('ppg')} PPG")
         else:
-            print("DEBUG: Keine Teamstatistik-Daten gefunden oder Liste leer.")
+            ts = {} # Leere Statistik, wenn keine Team-Daten
 
         # 2. Player Stats
         df = None
@@ -100,25 +86,20 @@ def fetch_team_data(team_id, season_id):
                     m = [c for c in df.columns if p == c] 
                     if m: final_cols[t] = m[0]; break 
             
-            fn_col = final_cols.get("firstname")
-            ln_col = final_cols.get("lastname")
-            sn_col = final_cols.get("shirtnumber")
-            id_col = final_cols.get("id")
-
-            # KORRIGIERTER BEREICH: Sicherstellen, dass immer Series-Objekte verwendet werden
-            firstname_series = df[fn_col].fillna("") if fn_col and fn_col in df.columns else pd.Series([""] * len(df), index=df.index)
-            lastname_series = df[ln_col].fillna("") if ln_col and ln_col in df.columns else pd.Series([""] * len(df), index=df.index)
+            # KORRIGIERT: Sicherstellen, dass immer Series-Objekte für String-Operationen verwendet werden
+            firstname_series = df[final_cols["firstname"]].fillna("") if final_cols.get("firstname") and final_cols["firstname"] in df.columns else pd.Series([""] * len(df), index=df.index)
+            lastname_series = df[final_cols["lastname"]].fillna("") if final_cols.get("lastname") and final_cols["lastname"] in df.columns else pd.Series([""] * len(df), index=df.index)
 
             df["NAME_FULL"] = (firstname_series + " " + lastname_series).str.strip()
 
-            df["NR"] = df[sn_col].fillna("-").astype(str).str.replace(".0", "", regex=False) if sn_col and sn_col in df.columns else pd.Series(["-"] * len(df), index=df.index)
-            df["PLAYER_ID"] = df[id_col].astype(str) if id_col and id_col in df.columns else pd.Series([""] * len(df), index=df.index)
+            df["NR"] = df[final_cols["shirtnumber"]].fillna("-").astype(str).str.replace(".0", "", regex=False) if final_cols.get("shirtnumber") and final_cols["shirtnumber"] in df.columns else pd.Series(["-"] * len(df), index=df.index)
+            df["PLAYER_ID"] = df[final_cols["id"]].astype(str) if final_cols.get("id") and final_cols["id"] in df.columns else pd.Series([""] * len(df), index=df.index)
             
             def get_v(k): 
                 col_name = final_cols.get(k)
                 if col_name and col_name in df.columns:
                     return pd.to_numeric(df[col_name], errors="coerce").fillna(0)
-                return pd.Series([0.0]*len(df), index=df.index) # Wichtig: Gleicher Index für Series-Operationen
+                return pd.Series([0.0]*len(df), index=df.index) 
             
             def pct(v): 
                 return round(v*100, 1) if v <= 1 and v > 0 else round(v, 1) 
@@ -128,11 +109,8 @@ def fetch_team_data(team_id, season_id):
             
             df["MIN_FINAL"] = min_raw
             mask_zero = (df["MIN_FINAL"] <= 0) & (df["GP"] > 0) 
-            # Sicherstellen, dass df.loc eine Series von gleicher Länge zurückgibt
             if not df.loc[mask_zero, "GP"].empty:
                 df.loc[mask_zero, "MIN_FINAL"] = sec_total[mask_zero] / df.loc[mask_zero, "GP"]
-            else: # Fallback, falls keine Spieler die Bedingung erfüllen
-                 df["MIN_FINAL"] = df["MIN_FINAL"].replace(0,0) # Keine Änderung
 
             df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
             
@@ -150,21 +128,17 @@ def fetch_team_data(team_id, season_id):
             df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
             df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
             df["select"] = False
-            print(f"DEBUG: DataFrame für Spielerstats erfolgreich erstellt. Reihen: {len(df)}")
         else:
-            print("DEBUG: Keine Spielerstatistik-Daten gefunden oder Liste leer.")
+            df = pd.DataFrame() # Leerer DataFrame, wenn keine Spielerdaten gefunden
 
         return df, ts
     except requests.exceptions.Timeout:
-        print(f"DEBUG: API-Anfrage Timeout für Team {team_id}, Saison {season_id}")
         st.error(f"Die Anfrage an die DBBL-API hat einen Timeout verursacht. Bitte versuchen Sie es später erneut.")
         return None, None
     except requests.exceptions.RequestException as e:
-        print(f"DEBUG: Netzwerkfehler für Team {team_id}, Saison {season_id}: {e}")
         st.error(f"Ein Netzwerkfehler ist aufgetreten: {e}. Bitte prüfen Sie Ihre Internetverbindung oder versuchen Sie es später erneut.")
         return None, None
     except Exception as e:
-        print(f"DEBUG: Unerwarteter Fehler in fetch_team_data für Team {team_id}, Saison {season_id}: {e}")
         import traceback
         traceback.print_exc() 
         st.error(f"Ein unerwarteter Fehler ist aufgetreten: {e}. Bitte kontaktieren Sie den Entwickler.")
@@ -174,16 +148,12 @@ def fetch_team_data(team_id, season_id):
 def fetch_schedule(team_id, season_id):
     """Lädt die Spiele eines Teams für die Saison."""
     url = f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}"
-    print(f"DEBUG: fetch_schedule startet für Team {team_id}, Saison {season_id} von {url}")
-
+    
     try:
         resp = requests.get(url, headers=API_HEADERS)
-        print(f"DEBUG: fetch_schedule API Status: {resp.status_code}")
-
         if resp.status_code == 200:
             data = resp.json()
             items = data.get("items", [])
-            print(f"DEBUG: {len(items)} Spiele für Team {team_id} gefunden.")
             
             clean_games = []
             for g in items:
@@ -200,8 +170,7 @@ def fetch_schedule(team_id, season_id):
                         berlin = pytz.timezone("Europe/Berlin")
                         dt_berlin = dt_utc.astimezone(berlin)
                         date_display = dt_berlin.strftime("%Y-%m-%d %H:%M")
-                    except Exception as date_e:
-                        print(f"DEBUG: Fehler beim Datumsformat für Spiel {g.get('id')}: {date_e}")
+                    except Exception:
                         pass # Nutze rohes Datum, wenn Formatierung fehlschlägt
 
                 home_val = g.get("homeTeam")
@@ -224,10 +193,8 @@ def fetch_schedule(team_id, season_id):
                 })
             return clean_games
     except requests.exceptions.RequestException as e:
-        print(f"DEBUG: Netzwerkfehler in fetch_schedule für Team {team_id}: {e}")
         st.error(f"Fehler beim Laden des Spielplans: {e}. Bitte versuchen Sie es später erneut.")
     except Exception as e:
-        print(f"DEBUG: Unerwarteter Fehler in fetch_schedule für Team {team_id}: {e}")
         import traceback
         traceback.print_exc()
         st.error(f"Unerwarteter Fehler beim Laden des Spielplans: {e}. Bitte kontaktieren Sie den Entwickler.")
@@ -237,17 +204,14 @@ def fetch_schedule(team_id, season_id):
 def fetch_game_boxscore(game_id):
     """Lädt die Statistiken (Boxscore)."""
     url = f"https://api-s.dbbl.scb.world/games/{game_id}/stats"
-    print(f"DEBUG: fetch_game_boxscore startet für Game {game_id} von {url}")
-
+    
     try:
         resp = requests.get(url, headers=API_HEADERS)
-        print(f"DEBUG: fetch_game_boxscore API Status: {resp.status_code}")
         if resp.status_code == 200:
             return resp.json()
     except requests.exceptions.RequestException as e:
-        print(f"DEBUG: Netzwerkfehler in fetch_game_boxscore für Game {game_id}: {e}")
+        pass
     except Exception as e:
-        print(f"DEBUG: Unerwarteter Fehler in fetch_game_boxscore für Game {game_id}: {e}")
         import traceback
         traceback.print_exc()
     return None
@@ -256,17 +220,14 @@ def fetch_game_boxscore(game_id):
 def fetch_game_details(game_id):
     """Lädt die Metadaten (Schiris, Halle, Quarter-Scores)."""
     url = f"https://api-s.dbbl.scb.world/games/{game_id}"
-    print(f"DEBUG: fetch_game_details startet für Game {game_id} von {url}")
-
+    
     try:
         resp = requests.get(url, headers=API_HEADERS)
-        print(f"DEBUG: fetch_game_details API Status: {resp.status_code}")
         if resp.status_code == 200:
             return resp.json()
     except requests.exceptions.RequestException as e:
-        print(f"DEBUG: Netzwerkfehler in fetch_game_details für Game {game_id}: {e}")
+        pass
     except Exception as e:
-        print(f"DEBUG: Unerwarteter Fehler in fetch_game_details für Game {game_id}: {e}")
         import traceback
         traceback.print_exc()
     return None
@@ -278,8 +239,6 @@ def fetch_team_info_basic(team_id):
     Versucht zuerst den /teams/{team_id} Endpunkt (api-s), und falls dort keine Venue gefunden wird,
     versucht es einen Spielort von einem der letzten Heimspiele zu extrahieren.
     """
-    print(f"DEBUG: fetch_team_info_basic startet für Team {team_id}")
-
     # 1. Versuch: Spielort direkt vom Team-Endpunkt bekommen
     team_url_direct = f"https://api-s.dbbl.scb.world/teams/{team_id}" 
     
@@ -299,15 +258,12 @@ def fetch_team_info_basic(team_id):
                     main_venue = venues_list[0] 
             
             if main_venue:
-                print(f"DEBUG: fetch_team_info_basic - Direkter Treffer für Venue für Team {team_id}")
                 return {"id": team_data.get("id"), "venue": main_venue}
 
-    except requests.exceptions.RequestException as e:
-        print(f"DEBUG: fetch_team_info_basic - Netzwerkfehler bei direktem Venue-Abruf für Team {team_id}: {e}")
-    except Exception as e:
-        print(f"DEBUG: fetch_team_info_basic - Parsing-Fehler bei direktem Venue-Abruf für Team {team_id}: {e}")
-
-    print(f"DEBUG: fetch_team_info_basic - Direkter Venue-Abruf fehlgeschlagen oder keine Main Venue gefunden. Versuche Fallback über Spieleplan.")
+    except requests.exceptions.RequestException:
+        pass 
+    except Exception:
+        pass 
 
     # 2. Fallback-Logik: Keine Venue über /teams/{team_id} gefunden,
     # versuchen wir, sie über ein aktuelles Heimspiel zu finden.
@@ -324,11 +280,8 @@ def fetch_team_info_basic(team_id):
         for game in home_games_sorted:
             game_id = game.get("id")
             if game_id:
-                print(f"DEBUG: fetch_team_info_basic - Versuche Venue von Spiel {game_id} zu laden (Fallback)")
                 game_details = fetch_game_details(game_id)
                 if game_details and game_details.get("venue"):
-                    print(f"DEBUG: fetch_team_info_basic - Venue von Spiel {game_id} gefunden: {game_details['venue'].get('name')}")
                     return {"id": team_id, "venue": game_details["venue"]}
     
-    print(f"DEBUG: fetch_team_info_basic - Nach allen Versuchen keine Venue für Team {team_id} gefunden.")
     return {"id": team_id, "venue": None}
