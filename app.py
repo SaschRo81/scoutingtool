@@ -2,6 +2,7 @@
 
 import streamlit as st
 import pandas as pd
+# HIER WURDE DER IMPORT KORRIGIERT, um alle benötigten Klassen direkt zu importieren:
 from datetime import datetime, date, time 
 import base64
 import altair as alt
@@ -271,7 +272,6 @@ def render_analysis_page():
             
             if st.button("Analyse laden", type="primary"):
                 st.session_state.selected_game_id = selected_id
-                # Nach dem Laden die alte generierte Meldung löschen, falls vorhanden
                 if "generated_ai_report" in st.session_state:
                     del st.session_state["generated_ai_report"]
                 
@@ -294,28 +294,23 @@ def render_analysis_page():
                         
                         render_game_header(box)
                         
-                        # --- NEUE SEKTION: SPIELBERICHTE & KI ---
                         st.markdown("### 📝 Spielberichte & KI-Generator")
 
                         tab_simple, tab_prompt, tab_auto = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "🤖 Automatisch (API)"])
 
-                        # TAB 1: Einfacher Regel-Bericht
                         with tab_simple:
                             report_text = generate_game_summary(box)
                             st.markdown(report_text)
                             st.caption("Regelbasierter Kurzbericht.")
 
-                        # TAB 2: Prompt zum Kopieren (Backup)
                         with tab_prompt:
                             st.info("Falls du keinen API Key hast, kopiere diesen Text in ChatGPT:")
                             ai_prompt = generate_complex_ai_prompt(box)
                             st.code(ai_prompt, language="text")
 
-                        # TAB 3: Die neue Automatik mit OpenAI API
                         with tab_auto:
                             st.write("Generiere die ausführlichen SEO-Artikel direkt hier mit deinem OpenAI Key.")
                             
-                            # API Key aus Secrets laden oder Eingabefeld nutzen
                             default_key = st.secrets.get("OPENAI_API_KEY", "")
                             user_api_key = st.text_input("OpenAI API Key:", value=default_key, type="password", key="openai_key_input")
                             
@@ -325,23 +320,18 @@ def render_analysis_page():
                                 if not user_api_key:
                                     st.error("Bitte API Key eingeben (oder in secrets.toml hinterlegen).")
                                 else:
-                                    # 1. Prompt bauen
                                     full_prompt = generate_complex_ai_prompt(box)
                                     
-                                    # 2. API aufrufen (mit Ladebalken)
                                     with st.spinner("Die KI schreibt gerade die Artikel... (das kann ca. 30-60 Sekunden dauern)"):
                                         result_text = run_openai_generation(user_api_key, full_prompt)
                                     
-                                    # 3. Ergebnis speichern
                                     st.session_state["generated_ai_report"] = result_text
                             
-                            # Ergebnis anzeigen
                             if "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is not None:
                                 st.success("Berichte erfolgreich erstellt!")
                                 st.divider()
                                 st.markdown(st.session_state["generated_ai_report"])
                                 
-                                # Download Button
                                 h_n = get_team_name(box.get("homeTeam", {}), "Heim").replace(" ", "_")
                                 g_n = get_team_name(box.get("guestTeam", {}), "Gast").replace(" ", "_")
                                 st.download_button(
@@ -353,12 +343,9 @@ def render_analysis_page():
                             elif "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is None:
                                 st.info("Kein Bericht generiert oder es gab einen Fehler. Bitte erneut versuchen.")
 
-
                         st.write("")
                         st.divider()
-                        # --- ENDE SEKTION: SPIELBERICHTE & KI ---
 
-                        # Rest der Analyse Seite (war schon da)
                         h_name = get_team_name(box.get("homeTeam", {}), "Heim")
                         g_name = get_team_name(box.get("guestTeam", {}), "Gast")
                         h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
@@ -411,7 +398,6 @@ def render_game_venue_page():
     st.divider()
 
     if selected_team_id:
-        # --- Hauptspielort des Teams ---
         st.subheader(f"Standard-Heimspielort von {selected_team_name}")
         with st.spinner(f"Lade Standard-Spielort-Details für {selected_team_name}..."):
             team_venue_info = fetch_team_info_basic(selected_team_id)
@@ -433,22 +419,16 @@ def render_game_venue_page():
         
         st.divider()
 
-        # --- Alle Spiele und deren Spielorte ---
         st.subheader(f"Alle Spiele von {selected_team_name} und deren Spielorte")
         
-        # Holen Sie sich den Spielplan des ausgewählten Teams (mit Caching)
         all_games = fetch_schedule(selected_team_id, SEASON_ID)
         
         if all_games:
-            # Sortieren Sie die Spiele nach Datum, um eine chronologische Reihenfolge zu gewährleisten
-            # Der 'date'-String sollte bereits im Format "%Y-%m-%d %H:%M" vorliegen,
-            # wie in fetch_schedule formatiert.
             sorted_games = sorted(all_games, key=lambda x: datetime.strptime(x['date'], "%Y-%m-%d %H:%M"), reverse=True)
             
             for game in sorted_games:
                 game_id = game.get("id")
                 
-                # Wenn das ausgewählte Team das Heimteam dieses Spiels ist
                 if str(game.get("homeTeamId")) == str(selected_team_id):
                     with st.expander(f"🏟️ Heimspiel: {game.get('date')} vs. {game.get('guest')} ({game.get('score')})"):
                         if game_id:
@@ -461,7 +441,6 @@ def render_game_venue_page():
                                 st.markdown(f"**Spielort:** {game_venue_name}")
                                 st.markdown(f"**Adresse:** {game_venue_address}")
                                 
-                                # Vergleich mit dem Standard-Heimspielort, falls dieser verfügbar ist
                                 if main_venue_data:
                                     if (game_venue_name != main_venue_data.get("name") or 
                                         game_venue_address != main_venue_data.get("address")):
@@ -475,7 +454,7 @@ def render_game_venue_page():
                                 st.info(f"Spielort-Details für dieses Heimspiel (ID: {game_id}) nicht verfügbar.")
                         else:
                             st.info(f"Keine Game ID für dieses Heimspiel vorhanden.")
-                else: # Auswärtsspiele
+                else: 
                     with st.expander(f"🚌 Auswärtsspiel: {game.get('date')} bei {game.get('home')} ({game.get('score')})"):
                         if game_id:
                             game_details = fetch_game_details(game_id)
@@ -503,8 +482,9 @@ def render_game_venue_page():
 # SEITE 4: SCOUTING REPORT
 # ==========================================
 def render_scouting_page():
-    target = None 
-    
+    # Debugging: Überprüfen, ob game_meta beim Laden der Seite schon vorhanden ist
+    # print(f"DEBUG (Scouting Page Load): game_meta at start: {st.session_state.game_meta}")
+
     if not st.session_state.print_mode:
         c_home, c_head = st.columns([1, 5])
         with c_home: st.button("🏠 Home", on_click=go_home)
@@ -519,7 +499,6 @@ def render_scouting_page():
                 else: st.error(msg)
             st.divider()
             if st.session_state.roster_df is not None:
-                # KORRIGIERTER AUFRUF:
                 save_name = f"Save_{date.today()}.json" 
                 st.download_button("💾 Speichern", export_session_state(), save_name, "application/json")
 
@@ -530,47 +509,79 @@ def render_scouting_page():
             teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
             team_options = {v["name"]: k for k, v in teams_filtered.items()}
         with c2:
-            home_name_selected = st.selectbox("Heim:", list(team_options.keys()), 0, key="sel_home") 
+            # Voreinstellung für selectbox, wenn game_meta existiert
+            initial_home_idx = 0
+            if "home_name" in st.session_state.game_meta and st.session_state.game_meta["home_name"] in team_options:
+                initial_home_idx = list(team_options.keys()).index(st.session_state.game_meta["home_name"])
+
+            home_name_selected = st.selectbox("Heim:", list(team_options.keys()), index=initial_home_idx, key="sel_home") 
             home_id = team_options[home_name_selected]
             if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != home_name_selected:
                  st.session_state.logo_h = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
             st.image(st.session_state.logo_h, width=80)
         with c3:
-            guest_name_selected = st.selectbox("Gast:", list(team_options.keys()), 1, key="sel_guest") 
+            # Voreinstellung für selectbox
+            initial_guest_idx = 1
+            if "guest_name" in st.session_state.game_meta and st.session_state.game_meta["guest_name"] in team_options:
+                initial_guest_idx = list(team_options.keys()).index(st.session_state.game_meta["guest_name"])
+
+            guest_name_selected = st.selectbox("Gast:", list(team_options.keys()), index=initial_guest_idx, key="sel_guest") 
             guest_id = team_options[guest_name_selected]
             if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != guest_name_selected:
                  st.session_state.logo_g = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
             st.image(st.session_state.logo_g, width=80)
 
         st.write("---")
-        target_radio_selection = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, key="sel_target") 
+        # Voreinstellung für radio button
+        initial_target_idx = 0
+        if "selected_target" in st.session_state.game_meta:
+             if st.session_state.game_meta["selected_target"] == "Heimteam":
+                 initial_target_idx = 1
+        target_radio_selection = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, index=initial_target_idx, key="sel_target") 
         tid = guest_id if target_radio_selection == "Gastteam (Gegner)" else home_id
         
         c_d, c_t = st.columns(2)
-        d_inp = c_d.date_input("Datum", date.today(), key="scout_date")
-        t_inp = c_t.time_input("Tip-Off", time(16,0), key="scout_time") 
+        
+        # Voreinstellung für date_input und time_input
+        initial_date = date.today()
+        if "date" in st.session_state.game_meta:
+            try: initial_date = datetime.strptime(st.session_state.game_meta["date"], "%d.%m.%Y").date()
+            except ValueError: pass # Fallback auf today()
+        
+        initial_time = time(16,0)
+        if "time" in st.session_state.game_meta:
+            try: initial_time = datetime.strptime(st.session_state.game_meta["time"], "%H-%M").time()
+            except ValueError: pass # Fallback auf 16:00
+        
+        d_inp = c_d.date_input("Datum", initial_date, key="scout_date")
+        t_inp = c_t.time_input("Tip-Off", initial_time, key="scout_time") 
 
         st.divider()
-        data_loaded_successfully = False # Flag, um zu überprüfen, ob fetch_team_data erfolgreich war
         
-        if st.button(f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden", type="primary") or \
-           (st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid): # 'data_ready' logic
+        # Check ob Daten geladen werden müssen
+        data_needs_loading = (st.session_state.roster_df is None or 
+                              st.session_state.get("current_tid") != tid or 
+                              st.button(f"Lade Daten für Team {tid} neu", key="reload_scouting_data_btn"))
+
+        if st.button(f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden", type="primary", key="load_scouting_data_btn") or \
+           (st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid and not data_needs_loading):
             
-            # Nur laden, wenn noch keine Daten für dieses Team im State sind oder wenn Button geklickt wurde
-            if st.session_state.roster_df is None or st.session_state.get("current_tid") != tid or st.button(f"Lade Daten für Team {tid} neu"):
+            if data_needs_loading:
                 with st.spinner(f"Lade Daten für Team {tid}..."):
                     df, ts = fetch_team_data(tid, SEASON_ID)
                     if df is not None:
                         st.session_state.roster_df = df
                         st.session_state.team_stats = ts
                         st.session_state.current_tid = tid 
-                        data_loaded_successfully = True
+                        # print(f"DEBUG: Kaderdaten für Team {tid} geladen. {len(df)} Spieler.") # Debugging
                     else: 
-                        st.error(f"Fehler API: Kaderdaten für Team-ID {tid} konnten nicht geladen werden.")
-            else: # Daten sind bereits im State und müssen nicht neu geladen werden
-                data_loaded_successfully = True
+                        st.error(f"Fehler API: Kaderdaten für Team-ID {tid} konnten nicht geladen werden. Bitte Team-ID und Saison prüfen.")
+                        st.session_state.roster_df = None # Sicherstellen, dass keine alten Daten verwendet werden
+                        st.session_state.team_stats = None
             
-            if data_loaded_successfully:
+            # Diese Werte MÜSSEN im session_state gespeichert werden, da sie später benötigt werden
+            # Aber nur, wenn roster_df erfolgreich geladen wurde!
+            if st.session_state.roster_df is not None:
                 st.session_state.game_meta = {
                     "home_name": home_name_selected, 
                     "home_logo": st.session_state.logo_h,
@@ -580,15 +591,13 @@ def render_scouting_page():
                     "time": t_inp.strftime("%H-%M"),
                     "selected_target": target_radio_selection 
                 }
-                st.session_state.print_mode = False
-                # st.rerun() # Kein rerun hier, sonst geht der Flow kaputt. Die Daten sind im Session State.
-        else:
-            # Zeigen Sie dies an, wenn keine Daten geladen wurden und der Button nicht geklickt wurde
-            st.info("Bitte wählen Sie Teams aus und klicken Sie auf 'Kader laden'.")
+                st.session_state.print_mode = False # Nach dem Laden in den Bearbeitungsmodus wechseln
+            # else: # Wenn Ladevorgang fehlschlug
+            #     st.session_state.game_meta = {} # game_meta zurücksetzen, um Fehler zu vermeiden
 
-    # Der folgende Block soll nur ausgeführt werden, WENN st.session_state.roster_df tatsächlich Daten enthält
-    # und der Ladevorgag (oder das Laden aus dem Cache) erfolgreich war.
-    if st.session_state.roster_df is not None: # <- Diese Bedingung ist entscheidend
+
+    # Der folgende Block wird nur ausgeführt, WENN st.session_state.roster_df tatsächlich Daten enthält
+    if st.session_state.roster_df is not None: 
         st.subheader("3. Auswahl & Notizen")
         cols = {
             "select": st.column_config.CheckboxColumn("Auswahl", default=False, width="small"),
@@ -599,14 +608,14 @@ def render_scouting_page():
             "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
             "TOT": st.column_config.NumberColumn("REB", format="%.1f")
         }
-        # Explicit key for data_editor
+        # Expliziter und eindeutiger Key für data_editor
         edited = st.data_editor(st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], 
-            column_config=cols, disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], hide_index=True, key="player_selector_table") 
+            column_config=cols, disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], hide_index=True, key="player_selector_table_scouting") 
         sel_idx = edited[edited["select"]].index
 
         if len(sel_idx) > 0:
             st.divider()
-            with st.form("scouting_form", clear_on_submit=False): # Expliziter Key für das Formular
+            with st.form("scouting_form_editor", clear_on_submit=False): # Expliziter und eindeutiger Key für das Formular
                 selection = st.session_state.roster_df.loc[sel_idx]
                 form_res = []
                 c_map = {"Grau": "#999999", "Grün": "#5c9c30", "Rot": "#d9534f"}
@@ -617,26 +626,25 @@ def render_scouting_page():
                     c_h, c_c = st.columns([3, 1])
                     c_h.markdown(f"**#{r['NR']} {r['NAME_FULL']}**")
                     saved_c = st.session_state.saved_colors.get(pid, "Grau")
-                    # Sicherstellen, dass idx immer einen gültigen Index hat
                     idx = list(c_map.keys()).index(saved_c) if saved_c in c_map else 0
                     
                     # Keys robuster machen durch Hinzufügen des Schleifenindex 'i'
-                    col = c_c.selectbox("Farbe", list(c_map.keys()), key=f"color_select_{pid}_{i}", index=idx, label_visibility="collapsed") 
+                    col = c_c.selectbox("Farbe", list(c_map.keys()), key=f"color_select_{pid}_{i}_scouting", index=idx, label_visibility="collapsed") 
                     
                     c1, c2 = st.columns(2)
                     notes = {}
-                    for k_note in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: # Variablennamen geändert, um Konflikte zu vermeiden
+                    for k_note in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: 
                         val = st.session_state.saved_notes.get(f"{k_note}_{pid}", "")
                         # Keys robuster machen durch Hinzufügen des Schleifenindex 'i'
-                        notes[k_note] = (c1 if k_note.startswith("l") else c2).text_input(k_note, value=val, key=f"note_input_{k_note}_{pid}_{i}", label_visibility="collapsed")
+                        notes[k_note] = (c1 if k_note.startswith("l") else c2).text_input(k_note, value=val, key=f"note_input_{k_note}_{pid}_{i}_scouting", label_visibility="collapsed")
                     st.divider()
                     form_res.append({"row": r, "pid": pid, "color": col, "notes": notes})
 
                 c1, c2, c3 = st.columns(3)
-                with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo_facts")
-                with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True, key="ed_facts")
-                with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea_facts")
-                up_files = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"], key="plays_uploader")
+                with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo_facts_scouting")
+                with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True, key="ed_facts_scouting")
+                with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea_facts_scouting")
+                up_files = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"], key="plays_uploader_scouting")
                 
                 if st.form_submit_button("Speichern & Generieren", type="primary"):
                     st.session_state.facts_offense = e_off
@@ -670,7 +678,7 @@ def render_scouting_page():
                     html += generate_custom_sections_html(e_off, e_def, e_abt)
                     st.session_state.final_html = html
 
-                    print(f"Generated HTML length: {len(st.session_state.final_html)}") 
+                    # print(f"Generated HTML length: {len(st.session_state.final_html)}") 
 
                     if HAS_PDFKIT:
                         try:
