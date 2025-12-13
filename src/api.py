@@ -1,3 +1,5 @@
+# --- START OF FILE api.py ---
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -159,8 +161,6 @@ def fetch_schedule(team_id, season_id):
         st.error(f"Fehler beim Laden des Spielplans: {e}")
     return []
 
-# --- NEU: ZWEI FUNKTIONEN FÜR SPIELDATEN ---
-
 @st.cache_data(ttl=600)
 def fetch_game_boxscore(game_id):
     """Lädt die Statistiken (Boxscore)."""
@@ -184,16 +184,22 @@ def fetch_game_details(game_id):
     except Exception:
         pass
     return None
-# --- Fügen Sie dies zu src/api.py hinzu ---
 
 @st.cache_data(ttl=3600) # Cache für eine Stunde
 def fetch_team_info_basic(team_id):
-    """Lädt grundlegende Teaminformationen inklusive Spielort-Details."""
-    url = f"https://api-s.dbbl.scb.world/teams/{team_id}"
+    """
+    Lädt grundlegende Teaminformationen inklusive Spielort-Details.
+    Verwendet api-1.dbbl.scb.world, da diese Subdomain oft umfassendere Teamdetails liefert.
+    """
+    url = f"https://api-1.dbbl.scb.world/teams/{team_id}" 
+    
     try:
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
             return resp.json()
+        else:
+            st.error(f"Fehler beim Laden der Basis-Teaminformationen für Team-ID {team_id}. Status: {resp.status_code}")
+            return None
     except Exception as e:
-        st.error(f"Fehler beim Laden der Basis-Teaminformationen für Team-ID {team_id}: {e}")
+        st.error(f"Ausnahme beim Laden der Basis-Teaminformationen für Team-ID {team_id}: {e}")
     return None
