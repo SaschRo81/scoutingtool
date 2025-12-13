@@ -45,7 +45,7 @@ def fetch_team_data(team_id, season_id):
         # 1. Team Stats
         ts = {}
         if team_data_list and isinstance(team_data_list, list):
-            td = team_data_list[0]
+            td = team_data_list
             blocks = td.get("blocksPerGame", td.get("blockedShotsPerGame", 0))
             ts = {
                 "ppg": td.get("pointsPerGame", 0), 
@@ -80,7 +80,7 @@ def fetch_team_data(team_id, season_id):
             for t, p_list in col_map.items():
                 for p in p_list:
                     m = [c for c in df.columns if p in c]
-                    if m: final_cols[t] = sorted(m, key=len)[0]; break
+                    if m: final_cols[t] = sorted(m, key=len); break
             
             fn = df[final_cols["firstname"]].fillna("") if "firstname" in final_cols else ""
             ln = df[final_cols["lastname"]].fillna("") if "lastname" in final_cols else ""
@@ -204,14 +204,15 @@ def fetch_team_info_basic(team_id):
             main_venue = None
             
             # Überprüfe, ob der 'venues'-Schlüssel existiert und eine Liste ist
-            if "venues" in team_data and isinstance(team_data["venues"], list) and len(team_data["venues"]) > 0:
-                for venue in team_data["venues"]:
+            venues_list = team_data.get("venues")
+            if venues_list and isinstance(venues_list, list) and len(venues_list) > 0:
+                for venue in venues_list:
                     if venue.get("isMain"):
                         main_venue = venue
                         break
                 # Wenn keine Hauptspielstätte gefunden, nimm die erste (falls vorhanden)
                 if not main_venue:
-                    main_venue = team_data["venues"][0]
+                    main_venue = venues_list
             
             if main_venue:
                 st.info(f"DEBUG: Hauptspielstätte gefunden: {main_venue.get('name', 'k.A.')}") # Debugging
@@ -226,4 +227,4 @@ def fetch_team_info_basic(team_id):
         st.error(f"DEBUG: Netzwerkfehler beim Laden der Team-Info für {team_id}: {req_e}") # Debugging
     except Exception as e:
         st.error(f"DEBUG: Unerwarteter Fehler beim Parsen der Team-Info für {team_id}: {e}") # Debugging
-    return None```
+    return None
