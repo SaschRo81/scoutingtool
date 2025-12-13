@@ -1,724 +1,325 @@
-# --- START OF FILE app.py ---
+# --- START OF FILE api.py ---
 
 import streamlit as st
+import requests
 import pandas as pd
-from datetime import datetime, date, time 
-import base64
-import altair as alt
-from urllib.parse import quote_plus 
+from datetime import datetime
+import pytz
+from src.config import API_HEADERS, SEASON_ID 
+from src.utils import optimize_image_base64, format_minutes
 
-# Externe Imports prüfen
-try:
-    import pdfkit
-    HAS_PDFKIT = True
-except ImportError:
-    HAS_PDFKIT = False
-
-# Module aus SRC
-from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-from src.utils import get_logo_url, optimize_image_base64
-from src.api import (
-    fetch_team_data, get_player_metadata_cached, fetch_schedule, 
-    fetch_game_boxscore, fetch_game_details, fetch_team_info_basic 
-)
-from src.html_gen import (
-    generate_header_html, generate_top3_html, generate_card_html, 
-    generate_team_stats_html, generate_custom_sections_html,
-    generate_comparison_html
-)
-from src.state_manager import export_session_state, load_session_state
-
-from src.analysis_ui import (
-    render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
-    get_team_name, render_game_top_performers, generate_game_summary,
-    generate_complex_ai_prompt, run_openai_generation 
-)
-
-st.set_page_config(page_title=f"DBBL Scouting Suite {VERSION}", layout="wide", page_icon="🏀")
-
-# --- SESSION STATE ---
-for key, default in [
-    ("current_page", "home"),
-    ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
-    ("roster_df", None), ("team_stats", None), ("game_meta", {}),
-    ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
-    ("facts_offense", pd.DataFrame([
-        {"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"},
-        {"Fokus": "Spacing", "Beschreibung": "swing or skip the ball to get it inside"},
-        {"Fokus": "Rules", "Beschreibung": "Stick to our offense rules"},
-        {"Fokus": "Automatics", "Beschreibung": "use cuts and shifts to get movement on court"},
-        {"Fokus": "Share", "Beschreibung": "the ball / always look for an extra pass"},
-        {"Fokus": "Set Offense", "Beschreibung": "look inside a lot"},
-        {"Fokus": "Pick´n Roll", "Beschreibung": "watch out for the half rol against the hetch"},
-        {"Fokus": "Pace", "Beschreibung": "Execution over speed, take care of the ball"},
-    ])),
-    ("facts_defense", pd.DataFrame([
-        {"Fokus": "Rebound", "Beschreibung": "box out!"},
-        {"Fokus": "Transition", "Beschreibung": "Slow the ball down! Pick up the ball early!"},
-        {"Fokus": "Communication", "Beschreibung": "Talk on positioning, helpside & on screens"},
-        {"Fokus": "Positioning", "Beschreibung": "close the middle on close outs and drives"},
-        {"Fokus": "Pick´n Roll", "Beschreibung": "red (yellow, last 8 sec. from shot clock)"},
-        {"Fokus": "DHO", "Beschreibung": "aggressive switch - same size / gap - small and big"},
-        {"Fokus": "Offball screens", "Beschreibung": "yellow"},
-    ])),
-    ("facts_about", pd.DataFrame([
-        {"Fokus": "Be ready for wild caotic / a lot of 1-1 and shooting", "Beschreibung": ""},
-        {"Fokus": "Stay ready no matter what happens", "Beschreibung": "Don’t be bothered by calls/no calls"},
-        {"Fokus": "No matter what the score is, we always give 100%.", "Beschreibung": ""},
-        {"Fokus": "Together", "Beschreibung": "Fight for & trust in each other!"},
-        {"Fokus": "Take care of the ball", "Beschreibung": "no easy turnovers to prevent easy fastbreaks!"},
-        {"Fokus": "Halfcourt", "Beschreibung": "Take responsibility! Stop them as a team!"},
-        {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"},
-    ])),
-    ("selected_game_id", None),
-    ("generated_ai_report", None)
-]:
-    if key not in st.session_state: st.session_state[key] = default
-
-# --- NAVIGATIONS-HELFER ---
-def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
-def go_scouting(): st.session_state.current_page = "scouting"
-def go_comparison(): st.session_state.current_page = "comparison"
-def go_analysis(): st.session_state.current_page = "analysis"
-def go_player_comparison(): st.session_state.current_page = "player_comparison"
-def go_game_venue(): st.session_state.current_page = "game_venue" 
-
-# ==========================================
-# SEITE 1: HOME (AKTUALISIERT)
-# ==========================================
-def render_home():
-    st.markdown("<h1 style='text-align: center;'>🏀 DBBL Scouting Suite by Sascha Rosanke</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align: center; color: gray;'>Version {VERSION}</p>", unsafe_allow_html=True)
-    st.write(""); st.write("")
-    c1, c2, c3 = st.columns([3, 2, 3])
-    with c2:
-        st.markdown("<style>div.stButton > button:first-child { width: 100%; height: 3em; font-size: 18px; margin-bottom: 10px; }</style>", unsafe_allow_html=True)
-        if st.button("📊 Teamvergleich"): go_comparison(); st.rerun()
-        if st.button("🤼 Spielervergleich"): go_player_comparison(); st.rerun()
-        if st.button("📝 Scouting Report"): go_scouting(); st.rerun()
-        if st.button("🎥 Spielnachbereitung"): go_analysis(); st.rerun()
-        if st.button("📍 Spielorte"): go_game_venue(); st.rerun() 
-
-# ==========================================
-# SEITE 2: TEAMVERGLEICH
-# ==========================================
-def render_comparison_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("📊 Head-to-Head Vergleich")
-    c1, c2, c3 = st.columns([1, 2, 2])
-    with c1: 
-        staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="comp_staffel")
-        teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-        team_options = {v["name"]: k for k, v in teams_filtered.items()}
-    with c2:
-        home_name = st.selectbox("Heim:", list(team_options.keys()), 0, key="comp_home")
-        home_id = team_options[home_name]
-        st.image(optimize_image_base64(get_logo_url(home_id, SEASON_ID)), width=60)
-    with c3:
-        guest_name = st.selectbox("Gast:", list(team_options.keys()), 1, key="comp_guest")
-        guest_id = team_options[guest_name]
-        st.image(optimize_image_base64(get_logo_url(guest_id, SEASON_ID)), width=60)
-    st.divider()
-    if st.button("Vergleich starten", type="primary"):
-        with st.spinner("Lade Daten..."):
-            _, ts_home = fetch_team_data(home_id, SEASON_ID)
-            _, ts_guest = fetch_team_data(guest_id, SEASON_ID)
-            if ts_home and ts_guest:
-                comp_html = generate_comparison_html(ts_home, ts_guest, home_name, guest_name)
-                st.markdown(comp_html, unsafe_allow_html=True)
-            else:
-                st.error("Daten nicht verfügbar.")
-
-# ==========================================
-# SEITE: SPIELERVERGLEICH
-# ==========================================
-def render_player_comparison_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("🤼 Head-to-Head Spielervergleich")
-
-    # Auswahlbereich
-    col_left, col_mid, col_right = st.columns([1, 0.1, 1])
-
-    # --- LINKE SEITE (SPIELER A) ---
-    with col_left:
-        st.subheader("Spieler A")
-        staffel_a = st.radio("Staffel A", ["Süd", "Nord"], horizontal=True, key="pc_s_a")
-        teams_a = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel_a}
-        t_name_a = st.selectbox("Team", list({v["name"]: k for k, v in teams_a.items()}.keys()), key="pc_t_a")
-        tid_a = {v["name"]: k for k, v in teams_a.items()}[t_name_a]
-        
-        df_a, _ = fetch_team_data(tid_a, SEASON_ID)
-        
-        if df_a is not None:
-            p_opts_a = df_a["NAME_FULL"].tolist()
-            p_name_a = st.selectbox("Spieler", p_opts_a, key="pc_p_a")
-            row_a = df_a[df_a["NAME_FULL"] == p_name_a].iloc[0]
-            
-            meta_a = get_player_metadata_cached(row_a["PLAYER_ID"])
-            if meta_a["img"]:
-                st.image(meta_a["img"], width=150)
-        else:
-            st.error("Daten nicht geladen")
-            row_a = None
-
-    with col_mid:
-        st.write("") 
-
-    # --- RECHTE SEITE (SPIELER B) ---
-    with col_right:
-        st.subheader("Spieler B")
-        staffel_b = st.radio("Staffel B", ["Süd", "Nord"], horizontal=True, key="pc_s_b")
-        teams_b = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel_b}
-        t_name_b = st.selectbox("Team", list({v["name"]: k for k, v in teams_b.items()}.keys()), key="pc_t_b")
-        tid_b = {v["name"]: k for k, v in teams_b.items()}[t_name_b]
-        
-        df_b, _ = fetch_team_data(tid_b, SEASON_ID)
-        
-        if df_b is not None:
-            p_opts_b = df_b["NAME_FULL"].tolist()
-            p_name_b = st.selectbox("Spieler", p_opts_b, key="pc_p_b")
-            row_b = df_b[df_b["NAME_FULL"] == p_name_b].iloc[0]
-            
-            meta_b = get_player_metadata_cached(row_b["PLAYER_ID"])
-            if meta_b["img"]:
-                st.image(meta_b["img"], width=150)
-        else:
-            row_b = None
-
-    st.divider()
-
-    # --- VERGLEICH ---
-    if row_a is not None and row_b is not None:
-        metrics = [
-            ("Spiele (GP)", "GP", int),
-            ("Punkte (PPG)", "PPG", float),
-            ("Minuten", "MIN_DISPLAY", str),
-            ("FG %", "FG%", float),
-            ("3er %", "3PCT", float),
-            ("Freiwurf %", "FTPCT", float),
-            ("Rebounds (RPG)", "TOT", float),
-            ("Assists (APG)", "AS", float),
-            ("Turnovers (TO)", "TO", float),
-            ("Steals (ST)", "ST", float),
-            ("Blocks (BS)", "BS", float),
-            ("Fouls (PF)", "PF", float)
-        ]
-
-        # Header Namen
-        h1, h2, h3 = st.columns([1, 1, 1])
-        h1.markdown(f"<h3 style='text-align: right; color: #333;'>{p_name_a}</h3>", unsafe_allow_html=True)
-        h2.markdown(f"<div style='text-align: center; font-weight: bold; padding-top: 10px; color: #999;'>VS</div>", unsafe_allow_html=True)
-        h3.markdown(f"<h3 style='text-align: left; color: #333;'>{p_name_b}</h3>", unsafe_allow_html=True)
-        st.write("")
-
-        # Zeilenweise Ausgabe
-        for label, col, dtype in metrics:
-            val_a = row_a[col]
-            val_b = row_b[col]
-
-            # Style Logic: Better value gets bold + slightly bigger
-            style_a = "color: #444;"
-            style_b = "color: #444;"
-            
-            if dtype in [int, float]:
-                try:
-                    va = float(val_a)
-                    vb = float(val_b)
-                    # Turnovers und Fouls: Weniger ist besser
-                    if col in ["TO", "PF"]:
-                        if va < vb: style_a = "font-weight: bold; color: #000; font-size: 1.1em;"
-                        elif vb < va: style_b = "font-weight: bold; color: #000; font-size: 1.1em;"
-                    else:
-                        if va > vb: style_a = "font-weight: bold; color: #000; font-size: 1.1em;"
-                        elif vb > va: style_b = "font-weight: bold; color: #000; font-size: 1.1em;"
-                except:
-                    pass
-
-            # Layout: Spalte 1 (Wert A) | Spalte 2 (Label) | Spalte 3 (Wert B)
-            c1, c2, c3 = st.columns([1, 1.5, 1])
-            
-            with c1:
-                st.markdown(f"<div style='text-align: right; padding: 5px; {style_a}'>{val_a}</div>", unsafe_allow_html=True)
-            with c2:
-                # Kategorie zentriert mit leichtem Hintergrund oder Rahmen
-                st.markdown(f"<div style='text-align: center; background-color: #f8f9fa; padding: 5px; border-radius: 5px; color: #666; font-size: 0.9em;'>{label}</div>", unsafe_allow_html=True)
-            with c3:
-                st.markdown(f"<div style='text-align: left; padding: 5px; {style_b}'>{val_b}</div>", unsafe_allow_html=True)
-
-
-# ==========================================
-# SEITE 3: SPIELNACHBEREITUNG
-# ==========================================
-def render_analysis_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("🎥 Spielnachbereitung")
-    
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
-        teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-        team_options = {v["name"]: k for k, v in teams_filtered.items()}
-    with c2:
-        my_team_name = st.selectbox("Dein Team:", list(team_options.keys()), key="ana_team")
-        my_team_id = team_options[my_team_name]
-
-    if my_team_id:
-        games = fetch_schedule(my_team_id, SEASON_ID)
-        if games:
-            game_opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in games}
-            selected_label = st.selectbox("Wähle ein Spiel:", list(game_opts.keys()), key="ana_game_select")
-            selected_id = game_opts[selected_label]
-            
-            if st.button("Analyse laden", type="primary"):
-                st.session_state.selected_game_id = selected_id
-                if "generated_ai_report" in st.session_state:
-                    del st.session_state["generated_ai_report"]
-                
-            if st.session_state.selected_game_id == selected_id:
-                st.divider()
-                
-                with st.spinner("Lade Boxscore & Details..."):
-                    box = fetch_game_boxscore(selected_id)
-                    details = fetch_game_details(selected_id)
-                    
-                    if box and details: 
-                        box["venue"] = details.get("venue")
-                        box["result"] = details.get("result")
-                        box["referee1"] = details.get("referee1")
-                        box["referee2"] = details.get("referee2")
-                        box["referee3"] = details.get("referee3")
-                        box["scheduledTime"] = details.get("scheduledTime")
-                        box["attendance"] = details.get("result", {}).get("spectators")
-                        box["id"] = details.get("id") 
-                        
-                        render_game_header(box)
-                        
-                        st.markdown("### 📝 Spielberichte & KI-Generator")
-
-                        tab_simple, tab_prompt, tab_auto = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "🤖 Automatisch (API)"])
-
-                        with tab_simple:
-                            report_text = generate_game_summary(box)
-                            st.markdown(report_text)
-                            st.caption("Regelbasierter Kurzbericht.")
-
-                        with tab_prompt:
-                            st.info("Falls du keinen API Key hast, kopiere diesen Text in ChatGPT:")
-                            ai_prompt = generate_complex_ai_prompt(box)
-                            st.code(ai_prompt, language="text")
-
-                        with tab_auto:
-                            st.write("Generiere die ausführlichen SEO-Artikel direkt hier mit deinem OpenAI Key.")
-                            
-                            default_key = st.secrets.get("OPENAI_API_KEY", "")
-                            user_api_key = st.text_input("OpenAI API Key:", value=default_key, type="password", key="openai_key_input")
-                            
-                            col_gen, col_info = st.columns([1, 3])
-                            
-                            if col_gen.button("🚀 Berichte generieren", type="primary"):
-                                if not user_api_key:
-                                    st.error("Bitte API Key eingeben (oder in secrets.toml hinterlegen).")
-                                else:
-                                    full_prompt = generate_complex_ai_prompt(box)
-                                    
-                                    with st.spinner("Die KI schreibt gerade die Artikel... (das kann ca. 30-60 Sekunden dauern)"):
-                                        result_text = run_openai_generation(user_api_key, full_prompt)
-                                    
-                                    st.session_state["generated_ai_report"] = result_text
-                            
-                            if "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is not None:
-                                st.success("Berichte erfolgreich erstellt!")
-                                st.divider()
-                                st.markdown(st.session_state["generated_ai_report"])
-                                
-                                h_n = get_team_name(box.get("homeTeam", {}), "Heim").replace(" ", "_")
-                                g_n = get_team_name(box.get("guestTeam", {}), "Gast").replace(" ", "_")
-                                st.download_button(
-                                    label="📄 Text herunterladen (.txt)",
-                                    data=st.session_state["generated_ai_report"],
-                                    file_name=f"Spielbericht_{h_n}_vs_{g_n}.txt",
-                                    mime="text/plain"
-                                )
-                            elif "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is None:
-                                st.info("Kein Bericht generiert oder es gab einen Fehler. Bitte erneut versuchen.")
-
-                        st.write("")
-                        st.divider()
-
-                        h_name = get_team_name(box.get("homeTeam", {}), "Heim")
-                        g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-                        h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
-                        g_coach = box.get("guestTeam", {}).get("headCoachName", "-")
-                        
-                        render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name, h_coach)
-                        st.write("")
-                        render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name, g_coach)
-                        
-                        st.divider()
-                        
-                        render_game_top_performers(box)
-                        st.divider()
-
-                        render_charts_and_stats(box)
-                        
-                    elif box:
-                         render_game_header(box)
-                         st.error("Details (Schiris/Viertel) konnten nicht geladen werden.")
-                         h_name = get_team_name(box.get("homeTeam", {}), "Heim")
-                         g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-                         render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name)
-                         render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name)
-
-                    elif details:
-                         render_game_header(details)
-                         st.info("Noch keine Spieler-Statistiken verfügbar.")
-                    else:
-                        st.error("Konnte Spieldaten nicht laden.")
-        else:
-            st.warning("Keine Spiele gefunden.")
-
-# ==========================================
-# NEUE SEITE: SPIELORTE (AKTUALISIERT)
-# ==========================================
-def render_game_venue_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("📍 Spielorte der Teams")
-
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="venue_staffel")
-        teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-        team_options = {v["name"]: k for k, v in teams_filtered.items()}
-
-    with c2:
-        selected_team_name = st.selectbox("Wähle ein Team:", list(team_options.keys()), key="venue_team_select")
-        selected_team_id = team_options[selected_team_name]
-
-    st.divider()
-
-    if selected_team_id:
-        st.subheader(f"Standard-Heimspielort von {selected_team_name}")
-        with st.spinner(f"Lade Standard-Spielort-Details für {selected_team_name}..."):
-            team_venue_info = fetch_team_info_basic(selected_team_id)
-            main_venue_data = team_venue_info.get("venue") if team_venue_info else None
-            
-            if main_venue_data:
-                main_venue_name = main_venue_data.get("name", "Nicht verfügbar")
-                main_venue_address = main_venue_data.get("address", "Nicht verfügbar")
-                
-                st.markdown(f"**Halle:** {main_venue_name}")
-                st.markdown(f"**Adresse:** {main_venue_address}")
-
-                if main_venue_address != "Nicht verfügbar":
-                    maps_query = quote_plus(f"{main_venue_name}, {main_venue_address}")
-                    maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
-                    st.markdown(f"**Route planen:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
-            else:
-                st.warning(f"Standard-Heimspielort für {selected_team_name} konnte nicht geladen werden oder ist nicht verfügbar.")
-        
-        st.divider()
-
-        st.subheader(f"Alle Spiele von {selected_team_name} und deren Spielorte")
-        
-        all_games = fetch_schedule(selected_team_id, SEASON_ID)
-        
-        if all_games:
-            sorted_games = sorted(all_games, key=lambda x: datetime.strptime(x['date'], "%Y-%m-%d %H:%M"), reverse=True)
-            
-            for game in sorted_games:
-                game_id = game.get("id")
-                
-                if str(game.get("homeTeamId")) == str(selected_team_id):
-                    with st.expander(f"🏟️ Heimspiel: {game.get('date')} vs. {game.get('guest')} ({game.get('score')})"):
-                        if game_id:
-                            game_details = fetch_game_details(game_id)
-                            if game_details and game_details.get("venue"):
-                                game_venue_data = game_details.get("venue")
-                                game_venue_name = game_venue_data.get("name", "Nicht verfügbar")
-                                game_venue_address = game_venue_data.get("address", "Nicht verfügbar")
-
-                                st.markdown(f"**Spielort:** {game_venue_name}")
-                                st.markdown(f"**Adresse:** {game_venue_address}")
-                                
-                                if main_venue_data:
-                                    if (game_venue_name != main_venue_data.get("name") or 
-                                        game_venue_address != main_venue_data.get("address")):
-                                        st.info("ℹ️ **ACHTUNG:** Dieser Spielort weicht vom Standard-Heimspielort ab!")
-                                
-                                if game_venue_address != "Nicht verfügbar":
-                                    maps_query = quote_plus(f"{game_venue_name}, {game_venue_address}")
-                                    maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
-                                    st.markdown(f"**Route planen für dieses Spiel:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
-                            else:
-                                st.info(f"Spielort-Details für dieses Heimspiel (ID: {game_id}) nicht verfügbar.")
-                        else:
-                            st.info(f"Keine Game ID für dieses Heimspiel vorhanden.")
-                else: 
-                    with st.expander(f"🚌 Auswärtsspiel: {game.get('date')} bei {game.get('home')} ({game.get('score')})"):
-                        if game_id:
-                            game_details = fetch_game_details(game_id)
-                            if game_details and game_details.get("venue"):
-                                game_venue_data = game_details.get("venue")
-                                game_venue_name = game_venue_data.get("name", "Nicht verfügbar")
-                                game_venue_address = game_venue_data.get("address", "Nicht verfügbar")
-
-                                st.markdown(f"**Spielort:** {game_venue_name}")
-                                st.markdown(f"**Adresse:** {game_venue_address}")
-                                
-                                if game_venue_address != "Nicht verfügbar":
-                                    maps_query = quote_plus(f"{game_venue_name}, {game_venue_address}")
-                                    maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
-                                    st.markdown(f"**Route planen für dieses Spiel:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
-                            else:
-                                st.info(f"Spielort-Details für dieses Auswärtsspiel (ID: {game_id}) nicht verfügbar.")
-                        else:
-                            st.info(f"Keine Game ID für dieses Auswärtsspiel vorhanden.")
-        else:
-            st.info(f"Keine Spiele für {selected_team_name} in der Saison {SEASON_ID} gefunden.")
-
-
-# ==========================================
-# SEITE 4: SCOUTING REPORT
-# ==========================================
-def render_scouting_page():
-    # Top-Level-Button, der immer sichtbar ist
-    st.button("🏠 Home", on_click=go_home, key="scouting_home_btn_top_level")
-    st.title(f"📝 Scouting")
-
-    # --- TOP-LEVEL IF-ELSE FÜR PRINT-MODUS ---
-    if st.session_state.print_mode:
-        # --- ANZEIGE DES GENERIERTEN BERICHTS UND DOWNLOAD-OPTIONEN ---
-        st.subheader("Vorschau & Export")
-        c1, c2 = st.columns([1, 4])
-        with c1:
-            if st.button("⬅️ Bearbeiten", key="exit_print_mode_scouting_final"): # Eindeutiger Key
-                st.session_state.print_mode = False
-                st.rerun()
-        with c2:
-            if st.session_state.pdf_bytes:
-                st.download_button("📄 Download PDF", st.session_state.pdf_bytes, st.session_state.report_filename, "application/pdf")
-            else:
-                st.warning("PDF-Datei konnte nicht generiert werden oder ist leer.")
-                
-        st.divider()
-
-        if st.session_state.final_html:
-            st.markdown("### HTML-Vorschau")
-            st.markdown(CSS_STYLES + st.session_state.final_html, unsafe_allow_html=True)
-        else:
-            st.warning("Es wurde kein HTML-Bericht generiert oder der Bericht ist leer.")
-            st.info("Bitte klicken Sie auf 'Bearbeiten' und versuchen Sie es erneut.")
-
-    else:
-        # --- BEARBEITUNGSMODUS (Standardansicht) ---
-        with st.sidebar: 
-            st.header("💾 Spielstand")
-            uploaded_state = st.file_uploader("Laden (JSON)", type=["json"], key="scouting_upload_state")
-            if uploaded_state and st.button("Daten wiederherstellen", key="scouting_restore_btn"):
-                success, msg = load_session_state(uploaded_state)
-                if success: st.success("✅ " + msg)
-                else: st.error(msg)
-            st.divider()
-            if st.session_state.roster_df is not None:
-                save_name = f"Save_{date.today()}.json" 
-                st.download_button("💾 Speichern", export_session_state(), save_name, "application/json", key="scouting_save_btn")
-
-        st.subheader("1. Spieldaten")
-        c1, c2, c3 = st.columns([1, 2, 2])
-        with c1: 
-            staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="scout_staffel")
-            teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-            team_options = {v["name"]: k for k, v in teams_filtered.items()}
-        with c2:
-            initial_home_idx = 0
-            if "home_name" in st.session_state.game_meta and st.session_state.game_meta["home_name"] in team_options:
-                initial_home_idx = list(team_options.keys()).index(st.session_state.game_meta["home_name"])
-
-            home_name_selected = st.selectbox("Heim:", list(team_options.keys()), index=initial_home_idx, key="sel_home") 
-            home_id = team_options[home_name_selected]
-            if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != home_name_selected:
-                 st.session_state.logo_h = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
-            st.image(st.session_state.logo_h, width=80)
-        with c3:
-            initial_guest_idx = 1
-            if "guest_name" in st.session_state.game_meta and st.session_state.game_meta["guest_name"] in team_options:
-                initial_guest_idx = list(team_options.keys()).index(st.session_state.game_meta["guest_name"])
-
-            guest_name_selected = st.selectbox("Gast:", list(team_options.keys()), index=initial_guest_idx, key="sel_guest") 
-            guest_id = team_options[guest_name_selected]
-            if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != guest_name_selected:
-                 st.session_state.logo_g = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
-            st.image(st.session_state.logo_g, width=80)
-
-        st.write("---")
-        initial_target_idx = 0
-        if "selected_target" in st.session_state.game_meta:
-             if st.session_state.game_meta["selected_target"] == "Heimteam":
-                 initial_target_idx = 1
-        target_radio_selection = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, index=initial_target_idx, key="sel_target") 
-        tid = guest_id if target_radio_selection == "Gastteam (Gegner)" else home_id
-        
-        c_d, c_t = st.columns(2)
-        
-        initial_date = date.today()
-        if "date" in st.session_state.game_meta:
-            try: initial_date = datetime.strptime(st.session_state.game_meta["date"], "%d.%m.%Y").date()
-            except ValueError: pass 
-        
-        initial_time = time(16,0)
-        if "time" in st.session_state.game_meta:
-            try: initial_time = datetime.strptime(st.session_state.game_meta["time"], "%H-%M").time()
-            except ValueError: pass 
-        
-        d_inp = c_d.date_input("Datum", initial_date, key="scout_date")
-        t_inp = c_t.time_input("Tip-Off", initial_time, key="scout_time") 
-
-        st.divider()
-        
-        # Check ob Daten geladen werden müssen
-        current_tid_in_state = st.session_state.get("current_tid")
-        data_is_loaded_for_current_team = (st.session_state.roster_df is not None and current_tid_in_state == tid)
-        
-        load_button_label = f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden"
-        
-        # Der Button, der das Laden auslöst. Nur anzeigen, wenn noch keine Daten da sind oder wenn es ein anderer Team-ID ist.
-        if st.button(load_button_label, type="primary", key="load_scouting_data_btn") or not data_is_loaded_for_current_team:
-            if not data_is_loaded_for_current_team: # Wenn Daten für dieses Team nicht geladen sind oder neu geladen werden sollen
-                with st.spinner(f"Lade Daten für Team {tid}..."):
-                    df, ts = fetch_team_data(tid, SEASON_ID)
-                    if df is not None and not df.empty: # Prüfen, ob DataFrame nicht leer ist
-                        st.session_state.roster_df = df
-                        st.session_state.team_stats = ts
-                        st.session_state.current_tid = tid 
-                        st.session_state.game_meta = { # Update game_meta here after successful load
-                            "home_name": home_name_selected, 
-                            "home_logo": st.session_state.logo_h,
-                            "guest_name": guest_name_selected, 
-                            "guest_logo": st.session_state.logo_g,
-                            "date": d_inp.strftime("%d.%m.%Y"), 
-                            "time": t_inp.strftime("%H-%M"),
-                            "selected_target": target_radio_selection 
-                        }
-                        st.session_state.print_mode = False # Sicherstellen, dass nicht im Druckmodus
-                        # st.rerun() # Kein rerun hier, sonst geht der Flow kaputt. Die Daten sind im Session State.
-                    else: 
-                        st.error(f"Fehler API: Kaderdaten für Team-ID {tid} konnten nicht geladen werden oder sind leer. Bitte Team-ID und Saison prüfen.")
-                        st.session_state.roster_df = None # Alte Daten bei Fehler löschen
-                        st.session_state.team_stats = None
-                        st.session_state.game_meta = {} # game_meta zurücksetzen
-            # else: # Falls Daten bereits geladen und Button geklickt wurde, aber keine Aktion nötig war.
-            #     pass # Nichts tun, Daten sind schon da
-        
-        # Dieser Bereich soll nur erscheinen, wenn Daten erfolgreich geladen wurden
-        if st.session_state.roster_df is not None and not st.session_state.roster_df.empty: 
-            st.subheader("3. Auswahl & Notizen")
-            cols = {
-                "select": st.column_config.CheckboxColumn("Auswahl", default=False, width="small"),
-                "NR": st.column_config.TextColumn("#", width="small"),
-                "NAME_FULL": st.column_config.TextColumn("Name"),
-                "GP": st.column_config.NumberColumn("GP", format="%d"),
-                "PPG": st.column_config.NumberColumn("PPG", format="%.1f"),
-                "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
-                "TOT": st.column_config.NumberColumn("REB", format="%.1f")
+@st.cache_data(ttl=600, show_spinner="Lade Spieler-Metadaten...")
+def get_player_metadata_cached(player_id):
+    try:
+        url = f"https://api-s.dbbl.scb.world/season-players/{player_id}"
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            data = resp.json()
+            raw_img = data.get("imageUrl", "")
+            opt_img = optimize_image_base64(raw_img) if raw_img else ""
+            return {
+                "img": opt_img,
+                "height": data.get("height", 0),
+                "pos": data.get("position", "-"),
             }
-            edited = st.data_editor(st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], 
-                column_config=cols, disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], hide_index=True, key="player_selector_table_scouting") 
-            sel_idx = edited[edited["select"]].index
+    except Exception as e:
+        print(f"DEBUG: Fehler in get_player_metadata_cached für Player-ID {player_id}: {e}")
+        pass
+    return {"img": "", "height": 0, "pos": "-"}
 
-            if len(sel_idx) > 0:
-                st.divider()
-                with st.form("scouting_form_editor", clear_on_submit=False): 
-                    selection = st.session_state.roster_df.loc[sel_idx]
-                    form_res = []
-                    c_map = {"Grau": "#999999", "Grün": "#5c9c30", "Rot": "#d9534f"}
-                    
-                    for i, (_, r) in enumerate(selection.iterrows()): 
-                        pid = r["PLAYER_ID"]
-                        c_h, c_c = st.columns([3, 1])
-                        c_h.markdown(f"**#{r['NR']} {r['NAME_FULL']}**")
-                        saved_c = st.session_state.saved_colors.get(pid, "Grau")
-                        idx = list(c_map.keys()).index(saved_c) if saved_c in c_map else 0
-                        
-                        col = c_c.selectbox("Farbe", list(c_map.keys()), key=f"color_select_{pid}_{i}_scouting", index=idx, label_visibility="collapsed") 
-                        
-                        c1, c2 = st.columns(2)
-                        notes = {}
-                        for k_note in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: 
-                            val = st.session_state.saved_notes.get(f"{k_note}_{pid}", "")
-                            notes[k_note] = (c1 if k_note.startswith("l") else c2).text_input(k_note, value=val, key=f"note_input_{k_note}_{pid}_{i}_scouting", label_visibility="collapsed")
-                        st.divider()
-                        form_res.append({"row": r, "pid": pid, "color": col, "notes": notes})
+@st.cache_data(ttl=600)
+def fetch_team_data(team_id, season_id):
+    """Lädt Kader und Team-Statistiken für die Saison."""
+    api_url = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
+    api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
+    
+    print(f"DEBUG: fetch_team_data startet für Team {team_id}, Saison {season_id}")
+    print(f"DEBUG: API URL (Spielerstats): {api_url}")
+    print(f"DEBUG: API URL (Teamstats): {api_team}")
 
-                    c1, c2, c3 = st.columns(3)
-                    with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo_facts_scouting")
-                    with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True, key="ed_facts_scouting")
-                    with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea_facts_scouting")
-                    up_files = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"], key="plays_uploader_scouting")
-                    
-                    if st.form_submit_button("Speichern & Generieren", type="primary"):
-                        st.session_state.facts_offense = e_off
-                        st.session_state.facts_defense = e_def
-                        st.session_state.facts_about = e_abt
-                        for item in form_res:
-                            st.session_state.saved_colors[item["pid"]] = item["color"]
-                            for k_note, v in item["notes"].items(): st.session_state.saved_notes[f"{k_note}_{item['pid']}"] = v
-                        
-                        current_home_name = st.session_state.game_meta.get("home_name", "UnbekanntesHeimteam")
-                        current_guest_name = st.session_state.game_meta.get("guest_name", "UnbekanntesGastteam")
-                        current_date_str = st.session_state.game_meta.get("date", date.today().strftime("%d.%m.%Y"))
-                        current_time_str = st.session_state.game_meta.get("time", time(16,0).strftime("%H-%M"))
-                        selected_target_label = st.session_state.game_meta.get("selected_target", "Gastteam (Gegner)") 
-
-                        t_name = (current_guest_name if selected_target_label == "Gastteam (Gegner)" else current_home_name).replace(" ", "_")
-                        
-                        st.session_state.report_filename = f"Scouting_Report_{t_name}_{current_date_str}_{current_time_str}.pdf"
-                        
-                        html = generate_header_html(st.session_state.game_meta)
-                        html += generate_top3_html(st.session_state.roster_df)
-                        for item in form_res:
-                            meta = get_player_metadata_cached(item["pid"])
-                            html += generate_card_html(item["row"].to_dict(), meta, item["notes"], c_map[item["color"]])
-                        html += generate_team_stats_html(st.session_state.team_stats)
-                        if up_files:
-                            html += "<div style='page-break-before:always'><h2>Plays</h2>"
-                            for f in up_files:
-                                b64 = base64.b64encode(f.getvalue()).decode()
-                                html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
-                        html += generate_custom_sections_html(e_off, e_def, e_abt)
-                        st.session_state.final_html = html
-
-                        if HAS_PDFKIT:
-                            try:
-                                full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
-                                opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
-                                        "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
-                                        "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
-                                st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
-                                st.session_state.print_mode = True
-                                st.rerun()
-                            except Exception as e: 
-                                st.error(f"PDF Error: {e}. PDF-Datei konnte nicht generiert werden.")
-                                st.session_state.pdf_bytes = None 
-                                st.session_state.print_mode = True 
-                                st.rerun()
-                        else:
-                            st.warning("PDFKit oder wkhtmltopdf ist nicht installiert. PDF-Export nicht verfügbar.")
-                            st.session_state.pdf_bytes = None 
-                            st.session_state.print_mode = True
-                            st.rerun()
-
-            else: # Keine Spieler ausgewählt
-                st.info("Bitte wählen Sie mindestens einen Spieler aus, um Notizen zu bearbeiten und einen Bericht zu generieren.")
-
-        else: # Keine Spielerdaten im roster_df
-            st.info("Bitte laden Sie zuerst den Kader, um Spieler auszuwählen.")
+    try:
+        resp_players = requests.get(api_url, headers=API_HEADERS)
+        resp_team_stats = requests.get(api_team, headers=API_HEADERS)
         
-# ==========================================
-# HAUPT STEUERUNG (AKTUALISIERT)
-# ==========================================
-if st.session_state.current_page == "home": render_home()
-elif st.session_state.current_page == "scouting": render_scouting_page()
-elif st.session_state.current_page == "comparison": render_comparison_page()
-elif st.session_state.current_page == "analysis": render_analysis_page()
-elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
-elif st.session_state.current_page == "game_venue": render_game_venue_page()
+        print(f"DEBUG: Spielerstats API Status: {resp_players.status_code}")
+        print(f"DEBUG: Teamstats API Status: {resp_team_stats.status_code}")
+
+        if resp_players.status_code != 200:
+            print(f"DEBUG: Fehler beim Abrufen der Spielerstatistik. Status: {resp_players.status_code}, Antwort: {resp_players.text[:200]}")
+            return None, None
+        if resp_team_stats.status_code != 200:
+            print(f"DEBUG: Fehler beim Abrufen der Teamstatistik. Status: {resp_team_stats.status_code}, Antwort: {resp_team_stats.text[:200]}")
+            return None, None
+
+        raw_player_data = resp_players.json()
+        raw_team_stats_list = resp_team_stats.json()
+
+        print(f"DEBUG: Raw Spielerdaten Typ: {type(raw_player_data)}, Länge/Keys: {len(raw_player_data) if isinstance(raw_player_data, list) else list(raw_player_data.keys()) if isinstance(raw_player_data, dict) else 'n/a'}")
+        print(f"DEBUG: Raw Teamstats Typ: {type(raw_team_stats_list)}, Länge/Keys: {len(raw_team_stats_list) if isinstance(raw_team_stats_list, list) else list(raw_team_stats_list.keys()) if isinstance(raw_team_stats_list, dict) else 'n/a'}")
+
+        # 1. Team Stats
+        ts = {}
+        if raw_team_stats_list and isinstance(raw_team_stats_list, list) and len(raw_team_stats_list) > 0:
+            td = raw_team_stats_list[0] 
+            blocks = td.get("blocksPerGame", td.get("blockedShotsPerGame", 0))
+            ts = {
+                "ppg": td.get("pointsPerGame", 0), 
+                "2m": td.get("twoPointShotsMadePerGame", 0), "2a": td.get("twoPointShotsAttemptedPerGame", 0), "2pct": td.get("twoPointShotsSuccessPercent", 0),
+                "3m": td.get("threePointShotsMadePerGame", 0), "3a": td.get("threePointShotsAttemptedPerGame", 0), "3pct": td.get("threePointShotsSuccessPercent", 0),
+                "ftm": td.get("freeThrowsMadePerGame", 0), "fta": td.get("freeThrowsAttemptedPerGame", 0), "ftpct": td.get("freeThrowsSuccessPercent", 0),
+                "dr": td.get("defensiveReboundsPerGame", 0), "or": td.get("offensiveReboundsPerGame", 0), "tot": td.get("totalReboundsPerGame", 0),
+                "as": td.get("assistsPerGame", 0), "to": td.get("turnoversPerGame", 0), "st": td.get("stealsPerGame", 0),
+                "bs": blocks, "pf": td.get("foulsCommittedPerGame", 0)
+            }
+            print(f"DEBUG: Teamstats erfolgreich geparst: {ts.get('ppg')} PPG")
+        else:
+            print("DEBUG: Keine Teamstatistik-Daten gefunden oder Liste leer.")
+            ts = {} # Sicherstellen, dass ts immer ein Dict ist
+
+        # 2. Player Stats
+        df = None
+        player_list = raw_player_data if isinstance(raw_player_data, list) else raw_player_data.get("data", [])
+        
+        print(f"DEBUG: player_list bereit zur Normalisierung. Anzahl Einträge: {len(player_list)}")
+        
+        if player_list:
+            df = pd.json_normalize(player_list)
+            df.columns = [str(c).lower() for c in df.columns]
+            
+            print(f"DEBUG: DataFrame nach json_normalize. Spalten: {df.columns.tolist()}")
+            print(f"DEBUG: DataFrame nach json_normalize. Head:\n{df.head()}")
+
+            col_map = {
+                "firstname": ["person.firstname", "firstname"], "lastname": ["person.lastname", "lastname"],
+                "shirtnumber": ["jerseynumber", "shirtnumber", "no"], "id": ["id", "person.id", "personid"],
+                "gp": ["matches", "gamesplayed", "games"], "ppg": ["pointspergame"], "tot": ["totalreboundspergame"],
+                "min_sec": ["secondsplayedpergame", "minutespergame", "avgminutes"], "sec_total": ["secondsplayed"],
+                "2m": ["twopointshotsmadepergame"], "2a": ["twopointshotsattemptedpergame"], "2pct": ["twopointshotsuccesspercent"],
+                "3m": ["threepointshotsmadepergame"], "3a": ["threepointshotsattemptedpergame"], "3pct": ["threepointshotsuccesspercent"],
+                "ftm": ["freethrowsmadepergame"], "fta": ["freethrowsattemptedpergame"], "ftpct": ["freethrowssuccesspercent"],
+                "dr": ["defensivereboundspergame"], "or": ["offensivereboundspergame"], "as": ["assistspergame"],
+                "to": ["turnoverspergame"], "st": ["stealspergame"], "pf": ["foulscommittedpergame"], "bs": ["blockspergame"]
+            }
+            
+            final_cols = {}
+            for target_col, potential_api_names in col_map.items():
+                for api_name in potential_api_names:
+                    # Prüfen, ob der API-Name als Spalte im DataFrame existiert
+                    if api_name in df.columns:
+                        final_cols[target_col] = api_name
+                        break # Ersten Treffer nehmen und zur nächsten Zielspalte wechseln
+            
+            print(f"DEBUG: Final Column Map: {final_cols}")
+
+            # KORRIGIERT UND DEBUGGED: Sicherstellen, dass immer Series-Objekte für String-Operationen verwendet werden
+            firstname_series = df[final_cols["firstname"]].fillna("") if final_cols.get("firstname") and final_cols["firstname"] in df.columns else pd.Series([""] * len(df), index=df.index)
+            lastname_series = df[final_cols["lastname"]].fillna("") if final_cols.get("lastname") and final_cols["lastname"] in df.columns else pd.Series([""] * len(df), index=df.index)
+            df["NAME_FULL"] = (firstname_series + " " + lastname_series).str.strip()
+
+            df["NR"] = df[final_cols["shirtnumber"]].fillna("-").astype(str).str.replace(".0", "", regex=False) if final_cols.get("shirtnumber") and final_cols["shirtnumber"] in df.columns else pd.Series(["-"] * len(df), index=df.index)
+            df["PLAYER_ID"] = df[final_cols["id"]].astype(str) if final_cols.get("id") and final_cols["id"] in df.columns else pd.Series([""] * len(df), index=df.index)
+            
+            print(f"DEBUG: DataFrame nach NAME_FULL, NR, PLAYER_ID Erstellung. Head:\n{df[['NAME_FULL', 'NR', 'PLAYER_ID']].head()}")
+
+            def get_v(k): 
+                col_name = final_cols.get(k)
+                if col_name and col_name in df.columns:
+                    return pd.to_numeric(df[col_name], errors="coerce").fillna(0)
+                # Rückgabe einer Series der richtigen Länge, wenn Spalte fehlt
+                return pd.Series([0.0]*len(df), index=df.index) 
+            
+            def pct(v): 
+                return round(v*100, 1) if v <= 1 and v > 0 else round(v, 1) 
+            
+            df["GP"] = get_v("gp").replace(0,1)
+            min_raw = get_v("min_sec"); sec_total = get_v("sec_total")
+            
+            df["MIN_FINAL"] = min_raw
+            mask_zero = (df["MIN_FINAL"] <= 0) & (df["GP"] > 0) 
+            # Sicherstellen, dass die Bedingung auf einen nicht-leeren DataFrame angewendet wird
+            if not df.loc[mask_zero].empty: # .loc[mask_zero] könnte einen leeren DataFrame zurückgeben
+                df.loc[mask_zero, "MIN_FINAL"] = sec_total[mask_zero] / df.loc[mask_zero, "GP"]
+
+            df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
+            
+            df["PPG"] = get_v("ppg"); df["TOT"] = get_v("tot")
+            df["2M"] = get_v("2m"); df["2A"] = get_v("2a"); df["2PCT"] = get_v("2pct").apply(pct)
+            df["3M"] = get_v("3m"); df["3A"] = get_v("3a"); df["3PCT"] = get_v("3pct").apply(pct)
+            df["FTM"] = get_v("ftm"); df["FTA"] = get_v("fta"); df["FTPCT"] = get_v("ftpct").apply(pct)
+            
+            total_made_fg = df["2M"] + df["3M"]
+            total_att_fg = df["2A"] + df["3A"]
+            
+            # Vermeide Division durch Null für FG%
+            # Auch hier absichern, falls total_att_fg komplett 0 ist
+            if not total_att_fg.empty and (total_att_fg != 0).any():
+                df["FG%"] = (total_made_fg / total_att_fg * 100).fillna(0).round(1)
+            else:
+                df["FG%"] = pd.Series([0.0]*len(df), index=df.index)
+            
+            df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
+            df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
+            df["select"] = False
+            print(f"DEBUG: DataFrame für Spielerstats erfolgreich erstellt. Reihen: {len(df)}")
+        else:
+            print("DEBUG: Keine Spielerstatistik-Daten gefunden oder player_list war leer.")
+            df = pd.DataFrame() # Sicherstellen, dass df immer ein DataFrame ist
+            
+        print(f"DEBUG: fetch_team_data beendet. df ist leer: {df.empty}, ts ist leer: {not ts}")
+        return df, ts
+    except requests.exceptions.Timeout:
+        print(f"DEBUG: API-Anfrage Timeout für Team {team_id}, Saison {season_id}")
+        st.error(f"Die Anfrage an die DBBL-API hat einen Timeout verursacht. Bitte versuchen Sie es später erneut.")
+        return None, None
+    except requests.exceptions.RequestException as e:
+        print(f"DEBUG: Netzwerkfehler für Team {team_id}, Saison {season_id}: {e}")
+        st.error(f"Ein Netzwerkfehler ist aufgetreten: {e}. Bitte prüfen Sie Ihre Internetverbindung oder versuchen Sie es später erneut.")
+        return None, None
+    except Exception as e:
+        print(f"DEBUG: Unerwarteter Fehler in fetch_team_data für Team {team_id}, Saison {season_id}: {e}")
+        import traceback
+        traceback.print_exc() 
+        st.error(f"Ein unerwarteter Fehler ist aufgetreten: {e}. Bitte kontaktieren Sie den Entwickler.")
+        return None, None
+
+@st.cache_data(ttl=300)
+def fetch_schedule(team_id, season_id):
+    """Lädt die Spiele eines Teams für die Saison."""
+    url = f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}"
+    
+    try:
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("items", [])
+            
+            clean_games = []
+            for g in items:
+                res = g.get("result")
+                score_str = "-"
+                if res and isinstance(res, dict):
+                    score_str = f"{res.get('homeTeamFinalScore', 0)} : {res.get('guestTeamFinalScore', 0)}"
+                
+                raw_date = g.get("scheduledTime", "")
+                date_display = raw_date
+                if raw_date:
+                    try:
+                        dt_utc = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                        berlin = pytz.timezone("Europe/Berlin")
+                        dt_berlin = dt_utc.astimezone(berlin)
+                        date_display = dt_berlin.strftime("%Y-%m-%d %H:%M")
+                    except Exception:
+                        pass 
+
+                home_val = g.get("homeTeam")
+                guest_val = g.get("guestTeam")
+                home_name = home_val.get("name", "Unknown") if isinstance(home_val, dict) else "Unknown"
+                guest_name = guest_val.get("name", "Unknown") if isinstance(guest_val, dict) else "Unknown"
+                
+                stage_val = g.get("stage")
+                stage_name = stage_val.get("name", "-") if isinstance(stage_val, dict) else str(stage_val)
+
+                clean_games.append({
+                    "id": g.get("id"),
+                    "date": date_display,
+                    "home": home_name,
+                    "guest": guest_name,
+                    "score": score_str,
+                    "stage": stage_name,
+                    "homeTeamId": home_val.get("teamId"), 
+                    "guestTeamId": guest_val.get("teamId") 
+                })
+            return clean_games
+    except requests.exceptions.RequestException as e:
+        st.error(f"Fehler beim Laden des Spielplans: {e}. Bitte versuchen Sie es später erneut.")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        st.error(f"Unerwarteter Fehler beim Laden des Spielplans: {e}. Bitte kontaktieren Sie den Entwickler.")
+    return []
+
+@st.cache_data(ttl=600)
+def fetch_game_boxscore(game_id):
+    """Lädt die Statistiken (Boxscore)."""
+    url = f"https://api-s.dbbl.scb.world/games/{game_id}/stats"
+    
+    try:
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            return resp.json()
+    except requests.exceptions.RequestException as e:
+        pass
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+    return None
+
+@st.cache_data(ttl=600)
+def fetch_game_details(game_id):
+    """Lädt die Metadaten (Schiris, Halle, Quarter-Scores)."""
+    url = f"https://api-s.dbbl.scb.world/games/{game_id}"
+    
+    try:
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            return resp.json()
+    except requests.exceptions.RequestException as e:
+        pass
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+    return None
+
+@st.cache_data(ttl=3600) 
+def fetch_team_info_basic(team_id):
+    """
+    Lädt grundlegende Teaminformationen inklusive Spielort-Details.
+    Versucht zuerst den /teams/{team_id} Endpunkt (api-s), und falls dort keine Venue gefunden wird,
+    versucht es einen Spielort von einem der letzten Heimspiele zu extrahieren.
+    """
+    # 1. Versuch: Spielort direkt vom Team-Endpunkt bekommen
+    team_url_direct = f"https://api-s.dbbl.scb.world/teams/{team_id}" 
+    
+    try:
+        resp = requests.get(team_url_direct, headers=API_HEADERS)
+        if resp.status_code == 200:
+            team_data = resp.json()
+            main_venue = None
+            
+            venues_list = team_data.get("venues")
+            if venues_list and isinstance(venues_list, list) and len(venues_list) > 0:
+                for venue in venues_list:
+                    if venue.get("isMain"):
+                        main_venue = venue
+                        break
+                if not main_venue:
+                    main_venue = venues_list[0] 
+            
+            if main_venue:
+                return {"id": team_data.get("id"), "venue": main_venue}
+
+    except requests.exceptions.RequestException:
+        pass 
+    except Exception:
+        pass 
+
+    # 2. Fallback-Logik: Keine Venue über /teams/{team_id} gefunden,
+    # versuchen wir, sie über ein aktuelles Heimspiel zu finden.
+    
+    all_games = fetch_schedule(team_id, SEASON_ID) 
+    
+    if all_games:
+        home_games = [g for g in all_games if str(g.get("homeTeamId")) == str(team_id)]
+        
+        home_games_sorted = sorted(home_games, 
+                                   key=lambda x: datetime.strptime(x['date'], "%Y-%m-%d %H:%M"), 
+                                   reverse=True)
+        
+        for game in home_games_sorted:
+            game_id = game.get("id")
+            if game_id:
+                game_details = fetch_game_details(game_id)
+                if game_details and game_details.get("venue"):
+                    return {"id": team_id, "venue": game_details["venue"]}
+    
+    return {"id": team_id, "venue": None}
