@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 # HIER WURDE DER IMPORT GEÄNDERT, um alle benötigten Klassen direkt zu importieren:
-from datetime import datetime, date, time # <-- GEÄNDERTE ZEILE
+from datetime import datetime, date, time # <-- KORRIGIERTE ZEILE
 import base64
 import altair as alt
 from urllib.parse import quote_plus 
@@ -520,7 +520,8 @@ def render_scouting_page():
                 else: st.error(msg)
             st.divider()
             if st.session_state.roster_df is not None:
-                save_name = f"Save_{datetime.date.today()}.json"
+                # KORRIGIERTER AUFRUF:
+                save_name = f"Save_{date.today()}.json" 
                 st.download_button("💾 Speichern", export_session_state(), save_name, "application/json")
 
         st.subheader("1. Spieldaten")
@@ -547,9 +548,9 @@ def render_scouting_page():
         tid = guest_id if target == "Gastteam (Gegner)" else home_id
         
         c_d, c_t = st.columns(2)
-        # HIER WURDE DIE AUFRUFMETHODE KORRIGIERT:
+        # HIER WURDE DIE AUFRUFMETHODE KORRIGIERT (bereits in der letzten Version geschehen):
         d_inp = c_d.date_input("Datum", date.today(), key="scout_date")
-        t_inp = c_t.time_input("Tip-Off", time(16,0), key="scout_time") # <-- AUCH HIER KORRIGIERT
+        t_inp = c_t.time_input("Tip-Off", time(16,0), key="scout_time") 
 
         st.divider()
         data_ready = st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid
