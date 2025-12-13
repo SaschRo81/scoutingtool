@@ -481,17 +481,14 @@ def render_game_venue_page():
 # SEITE 4: SCOUTING REPORT
 # ==========================================
 def render_scouting_page():
-    # Top-Level-Button, der immer sichtbar ist
     st.button("🏠 Home", on_click=go_home, key="scouting_home_btn_top_level")
     st.title(f"📝 Scouting")
 
-    # --- TOP-LEVEL IF-ELSE FÜR PRINT-MODUS ---
     if st.session_state.print_mode:
-        # --- ANZEIGE DES GENERIERTEN BERICHTS UND DOWNLOAD-OPTIONEN ---
         st.subheader("Vorschau & Export")
         c1, c2 = st.columns([1, 4])
         with c1:
-            if st.button("⬅️ Bearbeiten", key="exit_print_mode_scouting_final"): # Eindeutiger Key
+            if st.button("⬅️ Bearbeiten", key="exit_print_mode_scouting_final"): 
                 st.session_state.print_mode = False
                 st.rerun()
         with c2:
@@ -510,7 +507,6 @@ def render_scouting_page():
             st.info("Bitte klicken Sie auf 'Bearbeiten' und versuchen Sie es erneut.")
 
     else:
-        # --- BEARBEITUNGSMODUS (Standardansicht) ---
         with st.sidebar: 
             st.header("💾 Spielstand")
             uploaded_state = st.file_uploader("Laden (JSON)", type=["json"], key="scouting_upload_state")
@@ -577,39 +573,38 @@ def render_scouting_page():
         
         # Check ob Daten geladen werden müssen
         current_tid_in_state = st.session_state.get("current_tid")
-        data_is_loaded_for_current_team = (st.session_state.roster_df is not None and current_tid_in_state == tid)
         
-        load_button_label = f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden"
+        load_button_clicked = st.button(f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden", type="primary", key="load_scouting_data_btn")
         
-        # Der Button, der das Laden auslöst. Nur anzeigen, wenn noch keine Daten da sind oder wenn es ein anderer Team-ID ist.
-        if st.button(load_button_label, type="primary", key="load_scouting_data_btn") or not data_is_loaded_for_current_team:
-            if not data_is_loaded_for_current_team: # Wenn Daten für dieses Team nicht geladen sind oder neu geladen werden sollen
-                with st.spinner(f"Lade Daten für Team {tid}..."):
-                    df, ts = fetch_team_data(tid, SEASON_ID)
-                    if df is not None and not df.empty: # Prüfen, ob DataFrame nicht leer ist
-                        st.session_state.roster_df = df
-                        st.session_state.team_stats = ts
-                        st.session_state.current_tid = tid 
-                        st.session_state.game_meta = { # Update game_meta here after successful load
-                            "home_name": home_name_selected, 
-                            "home_logo": st.session_state.logo_h,
-                            "guest_name": guest_name_selected, 
-                            "guest_logo": st.session_state.logo_g,
-                            "date": d_inp.strftime("%d.%m.%Y"), 
-                            "time": t_inp.strftime("%H-%M"),
-                            "selected_target": target_radio_selection 
-                        }
-                        st.session_state.print_mode = False # Sicherstellen, dass nicht im Druckmodus
-                        # st.rerun() # Kein rerun hier, sonst geht der Flow kaputt. Die Daten sind im Session State.
-                    else: 
-                        st.error(f"Fehler API: Kaderdaten für Team-ID {tid} konnten nicht geladen werden oder sind leer. Bitte Team-ID und Saison prüfen.")
-                        st.session_state.roster_df = None # Alte Daten bei Fehler löschen
-                        st.session_state.team_stats = None
-                        st.session_state.game_meta = {} # game_meta zurücksetzen
-            # else: # Falls Daten bereits geladen und Button geklickt wurde, aber keine Aktion nötig war.
-            #     pass # Nichts tun, Daten sind schon da
-        
-        # Dieser Bereich soll nur erscheinen, wenn Daten erfolgreich geladen wurden
+        # Logik für das Laden der Daten (oder Nutzung des Caches)
+        if load_button_clicked or (st.session_state.roster_df is None and st.session_state.get("current_tid") != tid) or \
+           (st.session_state.roster_df is not None and st.session_state.get("current_tid") != tid and not load_button_clicked):
+            # Bedingung: Button geklickt ODER (keine Daten im State für aktuelles Team ODER Daten sind für ein anderes Team geladen)
+            with st.spinner(f"Lade Daten für Team {tid}..."):
+                df, ts = fetch_team_data(tid, SEASON_ID)
+                if df is not None and not df.empty: 
+                    st.session_state.roster_df = df
+                    st.session_state.team_stats = ts
+                    st.session_state.current_tid = tid 
+                    st.session_state.game_meta = { 
+                        "home_name": home_name_selected, 
+                        "home_logo": st.session_state.logo_h,
+                        "guest_name": guest_name_selected, 
+                        "guest_logo": st.session_state.logo_g,
+                        "date": d_inp.strftime("%d.%m.%Y"), 
+                        "time": t_inp.strftime("%H-%M"),
+                        "selected_target": target_radio_selection 
+                    }
+                    st.session_state.print_mode = False 
+                else: 
+                    st.error(f"Fehler API: Kaderdaten für Team-ID {tid} konnten nicht geladen werden oder sind leer. Bitte Team-ID und Saison prüfen.")
+                    st.session_state.roster_df = pd.DataFrame() # Leeren DataFrame setzen, um UI zu aktualisieren
+                    st.session_state.team_stats = {}
+                    st.session_state.game_meta = {} 
+        elif st.session_state.roster_df is None or st.session_state.roster_df.empty:
+            st.info("Bitte wählen Sie Teams aus und klicken Sie auf 'Kader laden'.")
+
+        # Dieser Bereich soll nur erscheinen, wenn Daten erfolgreich geladen wurden UND nicht leer sind
         if st.session_state.roster_df is not None and not st.session_state.roster_df.empty: 
             st.subheader("3. Auswahl & Notizen")
             cols = {
