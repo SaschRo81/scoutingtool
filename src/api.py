@@ -290,22 +290,4 @@ def fetch_team_info_basic(team_id):
         pass 
 
     # 2. Fallback-Logik: Keine Venue über /teams/{team_id} gefunden,
-    # versuchen wir, sie über ein aktuelles Heimspiel zu finden.
-    
-    all_games = fetch_schedule(team_id, SEASON_ID) 
-    
-    if all_games:
-        home_games = [g for g in all_games if str(g.get("homeTeamId")) == str(team_id)]
-        
-        home_games_sorted = sorted(home_games, 
-                                   key=lambda x: datetime.strptime(x['date'], "%Y-%m-%d %H:%M"), 
-                                   reverse=True)
-        
-        for game in home_games_sorted:
-            game_id = game.get("id")
-            if game_id:
-                game_details = fetch_game_details(game_id)
-                if game_details and game_details.get("venue"):
-                    return {"id": team_id, "venue": game_details["venue"]}
-    
-    return {"id": team_id, "venue": None}
+    # versuchen wir, sie über ein aktuell
