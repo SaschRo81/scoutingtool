@@ -5,7 +5,7 @@ import requests
 import pandas as pd
 from datetime import datetime
 import pytz
-from src.config import API_HEADERS
+from src.config import API_HEADERS, SEASON_ID # <-- SEASON_ID ist jetzt hier importiert
 from src.utils import optimize_image_base64, format_minutes
 
 @st.cache_data(ttl=600, show_spinner="Lade Spieler-Metadaten...")
@@ -45,7 +45,7 @@ def fetch_team_data(team_id, season_id):
         # 1. Team Stats
         ts = {}
         if team_data_list and isinstance(team_data_list, list):
-            td = team_data_list
+            td = team_data_list[0] # Nehme den ersten Eintrag aus der Liste
             blocks = td.get("blocksPerGame", td.get("blockedShotsPerGame", 0))
             ts = {
                 "ppg": td.get("pointsPerGame", 0), 
@@ -80,7 +80,7 @@ def fetch_team_data(team_id, season_id):
             for t, p_list in col_map.items():
                 for p in p_list:
                     m = [c for c in df.columns if p in c]
-                    if m: final_cols[t] = sorted(m, key=len); break
+                    if m: final_cols[t] = sorted(m, key=len)[0]; break # Korrigiert: nimmt den kürzesten passenden Namen
             
             fn = df[final_cols["firstname"]].fillna("") if "firstname" in final_cols else ""
             ln = df[final_cols["lastname"]].fillna("") if "lastname" in final_cols else ""
@@ -88,7 +88,10 @@ def fetch_team_data(team_id, season_id):
             df["NR"] = df[final_cols["shirtnumber"]].fillna("-").astype(str).str.replace(".0", "", regex=False) if "shirtnumber" in final_cols else "-"
             df["PLAYER_ID"] = df[final_cols["id"]].astype(str) if "id" in final_cols else ""
             
-            def get_v(k): return pd.to_numeric(df[final_cols[k]], errors="coerce").fillna(0) if k in final_cols else pd.Series([0.0]*len(df))
+            def get_v(k): 
+                col_name = final_cols.get(k)
+                return pd.to_numeric(df[col_name], errors="coerce").fillna(0) if col_name in df.columns else pd.Series([0.0]*len(df))
+            
             def pct(v): return round(v*100, 1) if v<=1 else round(v,1)
             
             df["GP"] = get_v("gp").replace(0,1)
@@ -108,6 +111,7 @@ def fetch_team_data(team_id, season_id):
             df["select"] = False
         return df, ts
     except Exception as e:
+        st.error(f"Fehler in fetch_team_data: {e}") 
         return None, None
 
 @st.cache_data(ttl=300)
@@ -154,7 +158,8 @@ def fetch_schedule(team_id, season_id):
                     "home": home_name,
                     "guest": guest_name,
                     "score": score_str,
-                    "stage": stage_name
+                    "stage": stage_name,
+                    "homeTeamId": home_val.get("teamId") # <-- Team-ID des Heimteams hinzufügen
                 })
             return clean_games
     except Exception as e:
@@ -189,42 +194,56 @@ def fetch_game_details(game_id):
 def fetch_team_info_basic(team_id):
     """
     Lädt grundlegende Teaminformationen inklusive Spielort-Details.
-    Verwendet api-s.dbbl.scb.world/teams/{team_id} und extrahiert die Hauptspielstätte.
+    Versucht zuerst den /teams/{team_id} Endpunkt (api-s), und falls dort keine Venue gefunden wird,
+    versucht es einen Spielort von einem der letzten Heimspiele zu extrahieren.
     """
-    url = f"https://api-s.dbbl.scb.world/teams/{team_id}" 
-    st.info(f"DEBUG: Versuche Spielort-Daten für Team-ID {team_id} von {url} zu laden...") # Debugging
+    # 1. Versuch: Spielort direkt vom Team-Endpunkt bekommen
+    team_url_direct = f"https://api-s.dbbl.scb.world/teams/{team_id}" 
     
     try:
-        resp = requests.get(url, headers=API_HEADERS)
-        
+        resp = requests.get(team_url_direct, headers=API_HEADERS)
         if resp.status_code == 200:
             team_data = resp.json()
-            st.info(f"DEBUG: API-Antwort (Status 200) für Team-ID {team_id}. Hat 'venues' Daten: {'venues' in team_data and len(team_data.get('venues', [])) > 0}") # Debugging
-            
             main_venue = None
             
-            # Überprüfe, ob der 'venues'-Schlüssel existiert und eine Liste ist
             venues_list = team_data.get("venues")
             if venues_list and isinstance(venues_list, list) and len(venues_list) > 0:
                 for venue in venues_list:
                     if venue.get("isMain"):
                         main_venue = venue
                         break
-                # Wenn keine Hauptspielstätte gefunden, nimm die erste (falls vorhanden)
                 if not main_venue:
-                    main_venue = venues_list
+                    main_venue = venues_list[0] # Nimm die erste, wenn keine als "main" markiert ist
             
             if main_venue:
-                st.info(f"DEBUG: Hauptspielstätte gefunden: {main_venue.get('name', 'k.A.')}") # Debugging
                 return {"id": team_data.get("id"), "venue": main_venue}
-            else:
-                st.warning(f"DEBUG: Keine Hauptspielstätte oder andere Spielstätten in der API-Antwort für Team-ID {team_id} gefunden.") # Debugging
-                return {"id": team_data.get("id"), "venue": None} # Team-ID zurückgeben, aber keine Venue
-        else:
-            st.warning(f"DEBUG: Fehler beim Laden der Basis-Teaminformationen für Team-ID {team_id}. HTTP Status: {resp.status_code}. Antwort: {resp.text[:200]}") # Debugging
-            return None
-    except requests.exceptions.RequestException as req_e:
-        st.error(f"DEBUG: Netzwerkfehler beim Laden der Team-Info für {team_id}: {req_e}") # Debugging
-    except Exception as e:
-        st.error(f"DEBUG: Unerwarteter Fehler beim Parsen der Team-Info für {team_id}: {e}") # Debugging
-    return None
+
+    except requests.exceptions.RequestException:
+        pass # Ignoriere Netzwerkfehler, gehe zur Fallback-Logik
+    except Exception:
+        pass # Ignoriere Parsing-Fehler, gehe zur Fallback-Logik
+
+    # 2. Fallback-Logik: Keine Venue über /teams/{team_id} gefunden,
+    # versuchen wir, sie über ein aktuelles Heimspiel zu finden.
+    
+    all_games = fetch_schedule(team_id, SEASON_ID) 
+    
+    if all_games:
+        # Filter nach Heimspielen des aktuellen Teams (team_id ist ein String!)
+        home_games = [g for g in all_games if str(g.get("homeTeamId")) == str(team_id)]
+        
+        # Sortiere nach Datum, um die neuesten Spiele zuerst zu haben
+        # Konvertiere 'date' string in datetime-Objekte für korrekte Sortierung
+        home_games_sorted = sorted(home_games, 
+                                   key=lambda x: datetime.strptime(x['date'], "%Y-%m-%d %H:%M"), 
+                                   reverse=True)
+        
+        for game in home_games_sorted:
+            game_id = game.get("id")
+            if game_id:
+                game_details = fetch_game_details(game_id)
+                if game_details and game_details.get("venue"):
+                    return {"id": team_id, "venue": game_details["venue"]}
+    
+    # Wenn nach beiden Versuchen keine Venue gefunden wurde
+    return {"id": team_id, "venue": None}
