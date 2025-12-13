@@ -5,6 +5,7 @@ import pandas as pd
 import datetime
 import base64
 import altair as alt
+from urllib.parse import quote_plus # <-- Hinzugefügt für Google Maps Link
 
 # Externe Imports prüfen
 try:
@@ -18,7 +19,7 @@ from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url, optimize_image_base64
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
-    fetch_game_boxscore, fetch_game_details, fetch_team_info_basic # <-- NEU: fetch_team_info_basic
+    fetch_game_boxscore, fetch_game_details, fetch_team_info_basic 
 )
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
@@ -70,7 +71,7 @@ for key, default in [
         {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"},
     ])),
     ("selected_game_id", None),
-    ("generated_ai_report", None)
+    ("generated_ai_report", None) 
 ]:
     if key not in st.session_state: st.session_state[key] = default
 
@@ -80,7 +81,7 @@ def go_scouting(): st.session_state.current_page = "scouting"
 def go_comparison(): st.session_state.current_page = "comparison"
 def go_analysis(): st.session_state.current_page = "analysis"
 def go_player_comparison(): st.session_state.current_page = "player_comparison"
-def go_game_venue(): st.session_state.current_page = "game_venue" # <-- NEUER NAVIGATIONS-HELFER
+def go_game_venue(): st.session_state.current_page = "game_venue" 
 
 # ==========================================
 # SEITE 1: HOME (AKTUALISIERT)
@@ -96,7 +97,7 @@ def render_home():
         if st.button("🤼 Spielervergleich"): go_player_comparison(); st.rerun()
         if st.button("📝 Scouting Report"): go_scouting(); st.rerun()
         if st.button("🎥 Spielnachbereitung"): go_analysis(); st.rerun()
-        if st.button("📍 Spielorte"): go_game_venue(); st.rerun() # <-- NEUER BUTTON
+        if st.button("📍 Spielorte"): go_game_venue(); st.rerun() 
 
 # ==========================================
 # SEITE 2: TEAMVERGLEICH
@@ -281,7 +282,7 @@ def render_analysis_page():
                     box = fetch_game_boxscore(selected_id)
                     details = fetch_game_details(selected_id)
                     
-                    if box and details: # <-- HIER BEGINNT DER WICHTIGE BLOCK
+                    if box and details: 
                         box["venue"] = details.get("venue")
                         box["result"] = details.get("result")
                         box["referee1"] = details.get("referee1")
@@ -289,6 +290,7 @@ def render_analysis_page():
                         box["referee3"] = details.get("referee3")
                         box["scheduledTime"] = details.get("scheduledTime")
                         box["attendance"] = details.get("result", {}).get("spectators")
+                        box["id"] = details.get("id") # <-- HIER WURDE DIE ZEILE HINZUGEFÜGT!
                         
                         render_game_header(box)
                         
@@ -314,7 +316,6 @@ def render_analysis_page():
                             st.write("Generiere die ausführlichen SEO-Artikel direkt hier mit deinem OpenAI Key.")
                             
                             # API Key aus Secrets laden oder Eingabefeld nutzen
-                            # Wenn der Key aus secrets geladen wird, ist er im Textfeld sichtbar
                             default_key = st.secrets.get("OPENAI_API_KEY", "")
                             user_api_key = st.text_input("OpenAI API Key:", value=default_key, type="password", key="openai_key_input")
                             
@@ -423,8 +424,6 @@ def render_game_venue_page():
 
                 if venue_address != "Nicht verfügbar":
                     # Generiere Google Maps Link
-                    # Verwende requests.utils.quote um die Adresse URL-sicher zu machen
-                    from urllib.parse import quote_plus
                     maps_query = quote_plus(f"{venue_name}, {venue_address}")
                     maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
                     st.markdown(f"**Route planen:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
@@ -607,4 +606,4 @@ elif st.session_state.current_page == "scouting": render_scouting_page()
 elif st.session_state.current_page == "comparison": render_comparison_page()
 elif st.session_state.current_page == "analysis": render_analysis_page()
 elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
-elif st.session_state.current_page == "game_venue": render_game_venue_page() # <-- NEUE SEITE HIER AUFRUFEN
+elif st.session_state.current_page == "game_venue": render_game_venue_page()
