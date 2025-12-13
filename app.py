@@ -23,9 +23,12 @@ from src.html_gen import (
     generate_comparison_html
 )
 from src.state_manager import export_session_state, load_session_state
+
+# HIER WURDEN DIE NEUEN FUNKTIONEN HINZUGEFÜGT:
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
-    get_team_name, render_game_top_performers, generate_game_summary
+    get_team_name, render_game_top_performers, generate_game_summary,
+    generate_complex_ai_prompt, run_openai_generation
 )
 
 st.set_page_config(page_title=f"DBBL Scouting Suite {VERSION}", layout="wide", page_icon="🏀")
@@ -121,7 +124,7 @@ def render_comparison_page():
                 st.error("Daten nicht verfügbar.")
 
 # ==========================================
-# NEU: SEITE - SPIELERVERGLEICH
+# SEITE: SPIELERVERGLEICH
 # ==========================================
 def render_player_comparison_page():
     st.button("🏠 Zurück zum Start", on_click=go_home)
@@ -238,7 +241,7 @@ def render_player_comparison_page():
 
 
 # ==========================================
-# SEITE 3: SPIELNACHBEREITUNG
+# SEITE 3: SPIELNACHBEREITUNG (UPDATE)
 # ==========================================
 def render_analysis_page():
     st.button("🏠 Zurück zum Start", on_click=go_home)
@@ -281,14 +284,67 @@ def render_analysis_page():
                         
                         render_game_header(box)
                         
-                        # Automatischer Spielbericht
-                        with st.expander("📝 Automatischer Spielbericht (KI-Generiert)", expanded=False):
+                        # --- NEUE SEKTION: SPIELBERICHTE & KI ---
+                        st.markdown("### 📝 Spielberichte & KI-Generator")
+
+                        tab_simple, tab_prompt, tab_auto = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "🤖 Automatisch (API)"])
+
+                        # TAB 1: Einfacher Regel-Bericht
+                        with tab_simple:
                             report_text = generate_game_summary(box)
                             st.markdown(report_text)
-                            st.caption("Text kopieren und für Presseberichte anpassen.")
+                            st.caption("Regelbasierter Kurzbericht.")
+
+                        # TAB 2: Prompt zum Kopieren (Backup)
+                        with tab_prompt:
+                            st.info("Falls du keinen API Key hast, kopiere diesen Text in ChatGPT:")
+                            ai_prompt = generate_complex_ai_prompt(box)
+                            st.code(ai_prompt, language="text")
+
+                        # TAB 3: Die neue Automatik mit OpenAI API
+                        with tab_auto:
+                            st.write("Generiere die ausführlichen SEO-Artikel direkt hier mit deinem OpenAI Key.")
+                            
+                            # API Key aus Secrets laden oder Eingabefeld nutzen
+                            default_key = st.secrets.get("OPENAI_API_KEY", "")
+                            user_api_key = st.text_input("OpenAI API Key:", value=default_key, type="password", key="openai_key_input")
+                            
+                            col_gen, col_info = st.columns([1, 3])
+                            
+                            if col_gen.button("🚀 Berichte generieren", type="primary"):
+                                if not user_api_key:
+                                    st.error("Bitte API Key eingeben (oder in secrets.toml hinterlegen).")
+                                else:
+                                    # 1. Prompt bauen
+                                    full_prompt = generate_complex_ai_prompt(box)
+                                    
+                                    # 2. API aufrufen (mit Ladebalken)
+                                    with st.spinner("Die KI schreibt gerade die Artikel... (das kann ca. 30-60 Sekunden dauern)"):
+                                        result_text = run_openai_generation(user_api_key, full_prompt)
+                                    
+                                    # 3. Ergebnis speichern
+                                    st.session_state["generated_ai_report"] = result_text
+                            
+                            # Ergebnis anzeigen
+                            if "generated_ai_report" in st.session_state:
+                                st.success("Berichte erfolgreich erstellt!")
+                                st.divider()
+                                st.markdown(st.session_state["generated_ai_report"])
+                                
+                                # Download Button
+                                h_n = get_team_name(box.get("homeTeam", {}), "Heim").replace(" ", "_")
+                                g_n = get_team_name(box.get("guestTeam", {}), "Gast").replace(" ", "_")
+                                st.download_button(
+                                    label="📄 Text herunterladen (.txt)",
+                                    data=st.session_state["generated_ai_report"],
+                                    file_name=f"Spielbericht_{h_n}_vs_{g_n}.txt",
+                                    mime="text/plain"
+                                )
 
                         st.write("")
+                        st.divider()
 
+                        # Rest der Analyse Seite
                         h_name = get_team_name(box.get("homeTeam", {}), "Heim")
                         g_name = get_team_name(box.get("guestTeam", {}), "Gast")
                         h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
