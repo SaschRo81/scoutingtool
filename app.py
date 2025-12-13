@@ -14,7 +14,6 @@ except ImportError:
 # Module aus SRC
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url, optimize_image_base64
-# HIER WURDE DER IMPORT ERGÄNZT: fetch_game_details
 from src.api import fetch_team_data, get_player_metadata_cached, fetch_schedule, fetch_game_boxscore, fetch_game_details
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
@@ -149,39 +148,43 @@ def render_analysis_page():
                     details = fetch_game_details(selected_id)
                     
                     if box and details:
-                        # Schreibe wichtige Meta-Daten aus Details in das Box-Objekt für die Berechnungen
+                        # 1. Alles Wichtige aus 'details' in 'box' kopieren
                         box["venue"] = details.get("venue")
                         box["result"] = details.get("result")
                         box["referee1"] = details.get("referee1")
                         box["referee2"] = details.get("referee2")
                         box["referee3"] = details.get("referee3")
-                        box["attendance"] = details.get("result", {}).get("spectators") # Zuschauer aus Result holen
+                        box["scheduledTime"] = details.get("scheduledTime") # Wichtig für korrekte Uhrzeit!
+                        box["attendance"] = details.get("result", {}).get("spectators")
                         
-                        # 1. HEADER (nutzt jetzt die reichen Details)
-                        render_game_header(details)
+                        # 2. HIER WAR DER FEHLER: Wir rufen jetzt render_game_header mit BOX auf!
+                        # 'box' hat jetzt die Trainer (von sich selbst) UND die Schiris (von details)
+                        render_game_header(box) 
+                        
                         st.write("")
 
                         h_name = get_team_name(box.get("homeTeam", {}), "Heim")
                         g_name = get_team_name(box.get("guestTeam", {}), "Gast")
                         
-                        # 2. BOXSCORES
                         render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name)
                         st.write("")
                         render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name)
                         
                         st.divider()
                         
-                        # 3. TOP PERFORMER
                         render_game_top_performers(box)
                         st.divider()
 
-                        # 4. CHARTS & STATS
                         render_charts_and_stats(box)
                         
                     elif box: # Fallback
                          render_game_header(box)
                          st.error("Details (Schiris/Viertel) konnten nicht geladen werden.")
-                         # ... Rest wie oben ...
+                         h_name = get_team_name(box.get("homeTeam", {}), "Heim")
+                         g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+                         render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name)
+                         render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name)
+
                     elif details:
                          render_game_header(details)
                          st.info("Noch keine Spieler-Statistiken verfügbar.")
