@@ -2,8 +2,8 @@
 
 import streamlit as st
 import pandas as pd
-# HIER WURDE DER IMPORT GEÄNDERT:
-from datetime import datetime 
+# HIER WURDE DER IMPORT GEÄNDERT, um alle benötigten Klassen direkt zu importieren:
+from datetime import datetime, date, time # <-- GEÄNDERTE ZEILE
 import base64
 import altair as alt
 from urllib.parse import quote_plus 
@@ -547,8 +547,9 @@ def render_scouting_page():
         tid = guest_id if target == "Gastteam (Gegner)" else home_id
         
         c_d, c_t = st.columns(2)
-        d_inp = c_d.date_input("Datum", datetime.date.today(), key="scout_date")
-        t_inp = c_t.time_input("Tip-Off", datetime.time(16,0), key="scout_time")
+        # HIER WURDE DIE AUFRUFMETHODE KORRIGIERT:
+        d_inp = c_d.date_input("Datum", date.today(), key="scout_date")
+        t_inp = c_t.time_input("Tip-Off", time(16,0), key="scout_time") # <-- AUCH HIER KORRIGIERT
 
         st.divider()
         data_ready = st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid
