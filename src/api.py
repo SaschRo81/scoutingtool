@@ -76,12 +76,11 @@ def fetch_team_data(team_id, season_id):
             
             print(f"DEBUG: DataFrame Spalten nach Lowercase: {df.columns.tolist()}") 
 
-            # KORRIGIERT: Erweiterte col_map für robustere Spaltenerkennung mit Prioritäten
             col_map = {
                 "firstname": ["seasonplayer.person.firstname", "person.firstname", "firstname"], 
                 "lastname": ["seasonplayer.person.lastname", "person.lastname", "lastname"],
                 "shirtnumber": ["seasonplayer.shirtnumber", "jerseynumber", "shirtnumber", "no", "jersey_number"], 
-                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "person.id", "id"] # player ID
+                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "person.id", "id"] 
             }
             
             final_cols = {}
@@ -94,20 +93,27 @@ def fetch_team_data(team_id, season_id):
             print(f"DEBUG: Final Column Map: {final_cols}") 
 
             # Helper to safely get a Series for a column
-            def get_series_or_empty_str(col_key):
+            # Ensure it always returns a Series of strings, replacing None/NaN with empty strings
+            def get_string_series_for_column(col_key, default_value=""):
                 col_name = final_cols.get(col_key)
                 if col_name and col_name in df.columns:
-                    return df[col_name].fillna("")
-                return pd.Series([""] * len(df), index=df.index)
+                    # Convert to string first, then fillna, to handle mixed types gracefully
+                    return df[col_name].astype(str).fillna(default_value)
+                return pd.Series([default_value] * len(df), index=df.index)
             
-            # Robusterer Zugriff auf Spalten für NAME_FULL
-            firstname_series = get_series_or_empty_str("firstname")
-            lastname_series = get_series_or_empty_str("lastname")
-            df["NAME_FULL"] = (firstname_series.astype(str) + " " + lastname_series.astype(str)).str.strip()
+            # KORRIGIERT: Robusterer Zugriff auf Spalten für NAME_FULL
+            firstname_series = get_string_series_for_column("firstname")
+            lastname_series = get_string_series_for_column("lastname")
+            
+            # Zusätzliche Debug-Ausgabe für den Inhalt der Namensspalten
+            print(f"DEBUG: Content of 'firstname_series' before concat:\n{firstname_series.to_list()}")
+            print(f"DEBUG: Content of 'lastname_series' before concat:\n{lastname_series.to_list()}")
+
+            df["NAME_FULL"] = (firstname_series + " " + lastname_series).str.strip()
 
             # Robusterer Zugriff auf Spalten für NR und PLAYER_ID
-            df["NR"] = get_series_or_empty_str("shirtnumber").astype(str).str.replace(".0", "", regex=False)
-            df["PLAYER_ID"] = get_series_or_empty_str("id").astype(str)
+            df["NR"] = get_string_series_for_column("shirtnumber").str.replace(".0", "", regex=False)
+            df["PLAYER_ID"] = get_string_series_for_column("id")
             
             print(f"DEBUG: DataFrame nach NAME_FULL, NR, PLAYER_ID Erstellung. Head:\n{df[['NAME_FULL', 'NR', 'PLAYER_ID']].head()}")
 
@@ -147,7 +153,7 @@ def fetch_team_data(team_id, season_id):
             df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
             df["select"] = False
         else:
-            df = pd.DataFrame() # Leerer DataFrame, wenn keine Spielerdaten gefunden
+            df = pd.DataFrame() 
             
         return df, ts
     except requests.exceptions.Timeout:
