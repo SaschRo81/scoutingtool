@@ -184,3 +184,16 @@ def fetch_game_details(game_id):
     except Exception:
         pass
     return None
+# --- Fügen Sie dies zu src/api.py hinzu ---
+
+@st.cache_data(ttl=3600) # Cache für eine Stunde
+def fetch_team_info_basic(team_id):
+    """Lädt grundlegende Teaminformationen inklusive Spielort-Details."""
+    url = f"https://api-s.dbbl.scb.world/teams/{team_id}"
+    try:
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        st.error(f"Fehler beim Laden der Basis-Teaminformationen für Team-ID {team_id}: {e}")
+    return None
