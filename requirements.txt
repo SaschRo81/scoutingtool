@@ -3,4 +3,4 @@ pandas
 requests
 Pillow
 pdfkit
-pip install openai
+openai
