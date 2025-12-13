@@ -76,18 +76,33 @@ def fetch_team_data(team_id, season_id):
             
             print(f"DEBUG: DataFrame Spalten nach Lowercase: {df.columns.tolist()}") 
 
+            # KORRIGIERT: Erweiterte col_map für robustere Spaltenerkennung mit Prioritäten
+            # UND Wiederherstellung der "fuzzy" Suche `p in c`
             col_map = {
                 "firstname": ["seasonplayer.person.firstname", "person.firstname", "firstname"], 
                 "lastname": ["seasonplayer.person.lastname", "person.lastname", "lastname"],
                 "shirtnumber": ["seasonplayer.shirtnumber", "jerseynumber", "shirtnumber", "no", "jersey_number"], 
-                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "person.id", "id"] 
+                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "person.id", "id"],
+                "gp": ["matches", "gamesplayed", "games"], 
+                "ppg": ["pointspergame"], 
+                "tot": ["totalreboundspergame"],
+                "min_sec": ["secondsplayedpergame", "minutespergame", "avgminutes"], 
+                "sec_total": ["secondsplayed"],
+                "2m": ["twopointshotsmadepergame"], "2a": ["twopointshotsattemptedpergame"], "2pct": ["twopointshotsuccesspercent"],
+                "3m": ["threepointshotsmadepergame"], "3a": ["threepointshotsattemptedpergame"], "3pct": ["threepointshotsuccesspercent"],
+                "ftm": ["freethrowsmadepergame"], "fta": ["freethrowsattemptedpergame"], "ftpct": ["freethrowssuccesspercent"],
+                "dr": ["defensivereboundspergame"], "or": ["offensivereboundspergame"], "as": ["assistspergame"],
+                "to": ["turnoverspergame"], "st": ["stealspergame"], "pf": ["foulscommittedpergame"], "bs": ["blockspergame"]
             }
             
             final_cols = {}
             for target_col, potential_api_names in col_map.items():
-                for api_name in potential_api_names:
-                    if api_name in df.columns:
-                        final_cols[target_col] = api_name
+                for api_name_part in potential_api_names: # api_name_part kann ein Teil des Spaltennamens sein
+                    # Suche nach Spalten, die `api_name_part` enthalten
+                    matching_cols = [col for col in df.columns if api_name_part in col]
+                    if matching_cols:
+                        # Nimm den kürzesten passenden Spaltennamen, um präziser zu sein
+                        final_cols[target_col] = sorted(matching_cols, key=len)[0]
                         break 
             
             print(f"DEBUG: Final Column Map: {final_cols}") 
@@ -97,15 +112,13 @@ def fetch_team_data(team_id, season_id):
             def get_string_series_for_column(col_key, default_value=""):
                 col_name = final_cols.get(col_key)
                 if col_name and col_name in df.columns:
-                    # Convert to string first, then fillna, to handle mixed types gracefully
                     return df[col_name].astype(str).fillna(default_value)
                 return pd.Series([default_value] * len(df), index=df.index)
             
-            # KORRIGIERT: Robusterer Zugriff auf Spalten für NAME_FULL
+            # Robusterer Zugriff auf Spalten für NAME_FULL
             firstname_series = get_string_series_for_column("firstname")
             lastname_series = get_string_series_for_column("lastname")
             
-            # Zusätzliche Debug-Ausgabe für den Inhalt der Namensspalten
             print(f"DEBUG: Content of 'firstname_series' before concat:\n{firstname_series.to_list()}")
             print(f"DEBUG: Content of 'lastname_series' before concat:\n{lastname_series.to_list()}")
 
@@ -117,17 +130,18 @@ def fetch_team_data(team_id, season_id):
             
             print(f"DEBUG: DataFrame nach NAME_FULL, NR, PLAYER_ID Erstellung. Head:\n{df[['NAME_FULL', 'NR', 'PLAYER_ID']].head()}")
 
-            def get_v(k): 
-                col_name = final_cols.get(k)
+            # Helper to safely get numeric series
+            def get_numeric_series_for_column(col_key, default_value=0.0):
+                col_name = final_cols.get(col_key)
                 if col_name and col_name in df.columns:
-                    return pd.to_numeric(df[col_name], errors="coerce").fillna(0)
-                return pd.Series([0.0]*len(df), index=df.index) 
+                    return pd.to_numeric(df[col_name], errors="coerce").fillna(default_value)
+                return pd.Series([default_value]*len(df), index=df.index) 
             
             def pct(v): 
                 return round(v*100, 1) if v <= 1 and v > 0 else round(v, 1) 
             
-            df["GP"] = get_v("gp").replace(0,1)
-            min_raw = get_v("min_sec"); sec_total = get_v("sec_total")
+            df["GP"] = get_numeric_series_for_column("gp").replace(0,1)
+            min_raw = get_numeric_series_for_column("min_sec"); sec_total = get_numeric_series_for_column("sec_total")
             
             df["MIN_FINAL"] = min_raw
             mask_zero = (df["MIN_FINAL"] <= 0) & (df["GP"] > 0) 
@@ -136,10 +150,11 @@ def fetch_team_data(team_id, season_id):
 
             df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
             
-            df["PPG"] = get_v("ppg"); df["TOT"] = get_v("tot")
-            df["2M"] = get_v("2m"); df["2A"] = get_v("2a"); df["2PCT"] = get_v("2pct").apply(pct)
-            df["3M"] = get_v("3m"); df["3A"] = get_v("3a"); df["3PCT"] = get_v("3pct").apply(pct)
-            df["FTM"] = get_v("ftm"); df["FTA"] = get_v("fta"); df["FTPCT"] = get_v("ftpct").apply(pct)
+            df["PPG"] = get_numeric_series_for_column("ppg"); 
+            df["TOT"] = get_numeric_series_for_column("tot")
+            df["2M"] = get_numeric_series_for_column("2m"); df["2A"] = get_numeric_series_for_column("2a"); df["2PCT"] = get_numeric_series_for_column("2pct").apply(pct)
+            df["3M"] = get_numeric_series_for_column("3m"); df["3A"] = get_numeric_series_for_column("3a"); df["3PCT"] = get_numeric_series_for_column("3pct").apply(pct)
+            df["FTM"] = get_numeric_series_for_column("ftm"); df["FTA"] = get_numeric_series_for_column("fta"); df["FTPCT"] = get_numeric_series_for_column("ftpct").apply(pct)
             
             total_made_fg = df["2M"] + df["3M"]
             total_att_fg = df["2A"] + df["3A"]
@@ -149,8 +164,13 @@ def fetch_team_data(team_id, season_id):
             else:
                 df["FG%"] = pd.Series([0.0]*len(df), index=df.index)
             
-            df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
-            df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
+            df["DR"] = get_numeric_series_for_column("dr"); 
+            df["OR"] = get_numeric_series_for_column("or"); 
+            df["AS"] = get_numeric_series_for_column("as")
+            df["TO"] = get_numeric_series_for_column("to"); 
+            df["ST"] = get_numeric_series_for_column("st"); 
+            df["PF"] = get_numeric_series_for_column("pf"); 
+            df["BS"] = get_numeric_series_for_column("bs")
             df["select"] = False
         else:
             df = pd.DataFrame() 
@@ -290,4 +310,22 @@ def fetch_team_info_basic(team_id):
         pass 
 
     # 2. Fallback-Logik: Keine Venue über /teams/{team_id} gefunden,
-    # versuchen wir, sie über ein aktuell
+    # versuchen wir, sie über ein aktuelles Heimspiel zu finden.
+    
+    all_games = fetch_schedule(team_id, SEASON_ID) 
+    
+    if all_games:
+        home_games = [g for g in all_games if str(g.get("homeTeamId")) == str(team_id)]
+        
+        home_games_sorted = sorted(home_games, 
+                                   key=lambda x: datetime.strptime(x['date'], "%Y-%m-%d %H:%M"), 
+                                   reverse=True)
+        
+        for game in home_games_sorted:
+            game_id = game.get("id")
+            if game_id:
+                game_details = fetch_game_details(game_id)
+                if game_details and game_details.get("venue"):
+                    return {"id": team_id, "venue": game_details["venue"]}
+    
+    return {"id": team_id, "venue": None}
