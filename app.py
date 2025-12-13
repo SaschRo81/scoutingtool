@@ -34,7 +34,7 @@ from src.analysis_ui import (
     generate_complex_ai_prompt, run_openai_generation 
 )
 
-st.set_page_config(page_title=f"DBBL Scouting Suite {VERSION}", layout="wide", page_icon="🏀")
+st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀") # <-- TITEL HIER AKTUALISIERT
 
 # --- SESSION STATE ---
 for key, default in [
@@ -83,10 +83,21 @@ def go_analysis(): st.session_state.current_page = "analysis"
 def go_player_comparison(): st.session_state.current_page = "player_comparison"
 def go_game_venue(): st.session_state.current_page = "game_venue" 
 
+# --- STANDARD-SEITENHEADER ---
+def render_page_header(page_title):
+    header_col1, header_col2 = st.columns([1, 4])
+    with header_col1:
+        st.button("🏠 Home", on_click=go_home, key=f"home_button_header_{st.session_state.current_page}")
+    with header_col2:
+        st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro by Sascha Rosanke</h3>", unsafe_allow_html=True)
+    st.title(page_title) # Der eigentliche Titel der Seite
+    st.divider()
+
 # ==========================================
 # SEITE 1: HOME (AKTUALISIERT)
 # ==========================================
 def render_home():
+    # Home Seite hat einen speziellen Header/Layout, daher keine render_page_header hier
     st.markdown("<h1 style='text-align: center;'>🏀 DBBL Scouting Suite by Sascha Rosanke</h1>", unsafe_allow_html=True)
     st.markdown(f"<p style='text-align: center; color: gray;'>Version {VERSION}</p>", unsafe_allow_html=True)
     st.write(""); st.write("")
@@ -103,8 +114,8 @@ def render_home():
 # SEITE 2: TEAMVERGLEICH
 # ==========================================
 def render_comparison_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("📊 Head-to-Head Vergleich")
+    render_page_header("📊 Head-to-Head Vergleich") # <-- Hinzugefügt
+    
     c1, c2, c3 = st.columns([1, 2, 2])
     with c1: 
         staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="comp_staffel")
@@ -133,10 +144,8 @@ def render_comparison_page():
 # SEITE: SPIELERVERGLEICH
 # ==========================================
 def render_player_comparison_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("🤼 Head-to-Head Spielervergleich")
+    render_page_header("🤼 Head-to-Head Spielervergleich") # <-- Hinzugefügt
 
-    # Auswahlbereich
     col_left, col_mid, col_right = st.columns([1, 0.1, 1])
 
     # --- LINKE SEITE (SPIELER A) ---
@@ -149,7 +158,7 @@ def render_player_comparison_page():
         
         df_a, _ = fetch_team_data(tid_a, SEASON_ID)
         
-        if df_a is not None:
+        if df_a is not None and not df_a.empty: # Sicherstellen, dass df_a nicht leer ist
             p_opts_a = df_a["NAME_FULL"].tolist()
             p_name_a = st.selectbox("Spieler", p_opts_a, key="pc_p_a")
             row_a = df_a[df_a["NAME_FULL"] == p_name_a].iloc[0]
@@ -158,7 +167,7 @@ def render_player_comparison_page():
             if meta_a["img"]:
                 st.image(meta_a["img"], width=150)
         else:
-            st.error("Daten nicht geladen")
+            st.error("Daten für Spieler A nicht geladen oder Team hat keinen Kader.")
             row_a = None
 
     with col_mid:
@@ -174,7 +183,7 @@ def render_player_comparison_page():
         
         df_b, _ = fetch_team_data(tid_b, SEASON_ID)
         
-        if df_b is not None:
+        if df_b is not None and not df_b.empty: # Sicherstellen, dass df_b nicht leer ist
             p_opts_b = df_b["NAME_FULL"].tolist()
             p_name_b = st.selectbox("Spieler", p_opts_b, key="pc_p_b")
             row_b = df_b[df_b["NAME_FULL"] == p_name_b].iloc[0]
@@ -183,6 +192,7 @@ def render_player_comparison_page():
             if meta_b["img"]:
                 st.image(meta_b["img"], width=150)
         else:
+            st.error("Daten für Spieler B nicht geladen oder Team hat keinen Kader.")
             row_b = None
 
     st.divider()
@@ -250,8 +260,7 @@ def render_player_comparison_page():
 # SEITE 3: SPIELNACHBEREITUNG
 # ==========================================
 def render_analysis_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("🎥 Spielnachbereitung")
+    render_page_header("🎥 Spielnachbereitung") # <-- Hinzugefügt
     
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -381,8 +390,7 @@ def render_analysis_page():
 # NEUE SEITE: SPIELORTE (AKTUALISIERT)
 # ==========================================
 def render_game_venue_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("📍 Spielorte der Teams")
+    render_page_header("📍 Spielorte der Teams") # <-- Hinzugefügt
 
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -481,10 +489,14 @@ def render_game_venue_page():
 # SEITE 4: SCOUTING REPORT
 # ==========================================
 def render_scouting_page():
-    st.button("🏠 Home", on_click=go_home, key="scouting_home_btn_top_level")
-    st.title(f"📝 Scouting")
+    # Top-Level-Button, der immer sichtbar ist
+    # WICHTIG: Diesen Button jetzt in den render_page_header verschoben
+    # st.button("🏠 Home", on_click=go_home, key="scouting_home_btn_top_level") 
+    render_page_header("📝 Scouting") # <-- Hinzugefügt und Top-Level-Title entfernt
 
+    # --- TOP-LEVEL IF-ELSE FÜR PRINT-MODUS ---
     if st.session_state.print_mode:
+        # --- ANZEIGE DES GENERIERTEN BERICHTS UND DOWNLOAD-OPTIONEN ---
         st.subheader("Vorschau & Export")
         c1, c2 = st.columns([1, 4])
         with c1:
@@ -507,6 +519,7 @@ def render_scouting_page():
             st.info("Bitte klicken Sie auf 'Bearbeiten' und versuchen Sie es erneut.")
 
     else:
+        # --- BEARBEITUNGSMODUS (Standardansicht) ---
         with st.sidebar: 
             st.header("💾 Spielstand")
             uploaded_state = st.file_uploader("Laden (JSON)", type=["json"], key="scouting_upload_state")
@@ -576,10 +589,9 @@ def render_scouting_page():
         
         load_button_clicked = st.button(f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden", type="primary", key="load_scouting_data_btn")
         
-        # Logik für das Laden der Daten (oder Nutzung des Caches)
-        if load_button_clicked or (st.session_state.roster_df is None and st.session_state.get("current_tid") != tid) or \
-           (st.session_state.roster_df is not None and st.session_state.get("current_tid") != tid and not load_button_clicked):
-            # Bedingung: Button geklickt ODER (keine Daten im State für aktuelles Team ODER Daten sind für ein anderes Team geladen)
+        if load_button_clicked or (st.session_state.roster_df is None and current_tid_in_state != tid) or \
+           (st.session_state.roster_df is not None and current_tid_in_state != tid):
+            # Wenn der Button geklickt wurde ODER (noch keine Daten geladen ODER Daten für ein anderes Team geladen)
             with st.spinner(f"Lade Daten für Team {tid}..."):
                 df, ts = fetch_team_data(tid, SEASON_ID)
                 if df is not None and not df.empty: 
@@ -598,7 +610,7 @@ def render_scouting_page():
                     st.session_state.print_mode = False 
                 else: 
                     st.error(f"Fehler API: Kaderdaten für Team-ID {tid} konnten nicht geladen werden oder sind leer. Bitte Team-ID und Saison prüfen.")
-                    st.session_state.roster_df = pd.DataFrame() # Leeren DataFrame setzen, um UI zu aktualisieren
+                    st.session_state.roster_df = pd.DataFrame() 
                     st.session_state.team_stats = {}
                     st.session_state.game_meta = {} 
         elif st.session_state.roster_df is None or st.session_state.roster_df.empty:
