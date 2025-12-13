@@ -2,8 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-# HIER WURDE DER IMPORT GEÄNDERT, um alle benötigten Klassen direkt zu importieren:
-from datetime import datetime, date, time 
+from datetime import datetime, date, time # <-- KORRIGIERTE ZEILE
 import base64
 import altair as alt
 from urllib.parse import quote_plus 
@@ -11,9 +10,13 @@ from urllib.parse import quote_plus
 # Externe Imports prüfen
 try:
     import pdfkit
+    # Konfiguration für wkhtmltopdf, falls nötig und vorhanden
+    # config = pdfkit.configuration(wkhtmltopdf='/usr/local/bin/wkhtmltopdf') # Beispielpfad
     HAS_PDFKIT = True
 except ImportError:
     HAS_PDFKIT = False
+    # st.warning("PDFKit oder wkhtmltopdf ist nicht installiert. PDF-Export nicht verfügbar.")
+
 
 # Module aus SRC
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
@@ -531,30 +534,31 @@ def render_scouting_page():
             teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
             team_options = {v["name"]: k for k, v in teams_filtered.items()}
         with c2:
-            home_name = st.selectbox("Heim:", list(team_options.keys()), 0, key="sel_home")
-            home_id = team_options[home_name]
-            if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != home_name:
+            home_name_selected = st.selectbox("Heim:", list(team_options.keys()), 0, key="sel_home") # <--- Umbenannt zu home_name_selected
+            home_id = team_options[home_name_selected]
+            if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != home_name_selected:
                  st.session_state.logo_h = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
             st.image(st.session_state.logo_h, width=80)
         with c3:
-            guest_name = st.selectbox("Gast:", list(team_options.keys()), 1, key="sel_guest")
-            guest_id = team_options[guest_name]
-            if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != guest_name:
+            guest_name_selected = st.selectbox("Gast:", list(team_options.keys()), 1, key="sel_guest") # <--- Umbenannt zu guest_name_selected
+            guest_id = team_options[guest_name_selected]
+            if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != guest_name_selected:
                  st.session_state.logo_g = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
             st.image(st.session_state.logo_g, width=80)
 
         st.write("---")
-        target = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, key="sel_target")
-        tid = guest_id if target == "Gastteam (Gegner)" else home_id
+        target_radio_selection = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, key="sel_target") # <--- Umbenannt zu target_radio_selection
+        tid = guest_id if target_radio_selection == "Gastteam (Gegner)" else home_id
         
         c_d, c_t = st.columns(2)
+        # Die Variablen d_inp und t_inp sind hier lokal definiert und für game_meta notwendig
         d_inp = c_d.date_input("Datum", date.today(), key="scout_date")
         t_inp = c_t.time_input("Tip-Off", time(16,0), key="scout_time") 
 
         st.divider()
         data_ready = st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid
         
-        if st.button(f"2. Kader von {target} laden", type="primary") or data_ready:
+        if st.button(f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden", type="primary") or data_ready:
             if not data_ready:
                 with st.spinner(f"Lade Daten für Team {tid}..."):
                     df, ts = fetch_team_data(tid, SEASON_ID)
@@ -564,11 +568,20 @@ def render_scouting_page():
                         st.session_state.current_tid = tid 
                     else: st.error(f"Fehler API.")
             
+            # Diese Werte MÜSSEN im session_state gespeichert werden, da sie später benötigt werden
             st.session_state.game_meta = {
-                "home_name": home_name, "home_logo": st.session_state.logo_h,
-                "guest_name": guest_name, "guest_logo": st.session_state.logo_g,
-                "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M")
+                "home_name": home_name_selected, 
+                "home_logo": st.session_state.logo_h,
+                "guest_name": guest_name_selected, 
+                "guest_logo": st.session_state.logo_g,
+                "date": d_inp.strftime("%d.%m.%Y"), 
+                "time": t_inp.strftime("%H-%M"),
+                # Speichere den "Target" auch im game_meta, um später darauf zugreifen zu können
+                "selected_target": target_radio_selection 
             }
+            # Setze print_mode zurück, wenn neue Daten geladen werden
+            st.session_state.print_mode = False
+
 
     if st.session_state.roster_df is not None:
         st.subheader("3. Auswahl & Notizen")
@@ -620,17 +633,14 @@ def render_scouting_page():
                         st.session_state.saved_colors[item["pid"]] = item["color"]
                         for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
                     
-                    # --- KORRIGIERTER BEREICH START ---
-                    # Zugriff auf die persistenten Werte im Session State
+                    # --- KORRIGIERTER BEREICH START - Zugriff auf persistenten State ---
+                    # Diese Werte sollten bereits im session_state.game_meta gespeichert sein
                     current_home_name = st.session_state.game_meta.get("home_name", "UnbekanntesHeimteam")
                     current_guest_name = st.session_state.game_meta.get("guest_name", "UnbekanntesGastteam")
                     current_date_str = st.session_state.game_meta.get("date", date.today().strftime("%d.%m.%Y"))
                     current_time_str = st.session_state.game_meta.get("time", time(16,0).strftime("%H-%M"))
+                    selected_target_label = st.session_state.game_meta.get("selected_target", "Gastteam (Gegner)") 
 
-                    # 'target' kommt vom Radio Button, dessen Wert im session_state gespeichert ist
-                    selected_target_label = st.session_state.get("sel_target", "Gastteam (Gegner)") 
-
-                    # t_name basierend auf dem ausgewählten Target und den Namen aus game_meta
                     t_name = (current_guest_name if selected_target_label == "Gastteam (Gegner)" else current_home_name).replace(" ", "_")
                     
                     st.session_state.report_filename = f"Scouting_Report_{t_name}_{current_date_str}_{current_time_str}.pdf"
@@ -650,8 +660,14 @@ def render_scouting_page():
                     html += generate_custom_sections_html(e_off, e_def, e_abt)
                     st.session_state.final_html = html
 
+                    # Debugging: Prüfen Sie die Länge des generierten HTML-Strings
+                    print(f"Generated HTML length: {len(st.session_state.final_html)}") 
+
                     if HAS_PDFKIT:
                         try:
+                            # Verwende hier das korrekte config Objekt, falls wkhtmltopdf Pfad gesetzt ist
+                            # opts = {"page-size": "A4", ...}
+                            # st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts, configuration=config) 
                             full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
                             opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
                                     "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
@@ -659,21 +675,38 @@ def render_scouting_page():
                             st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
                             st.session_state.print_mode = True
                             st.rerun()
-                        except Exception as e: st.error(f"PDF Error: {e}")
+                        except Exception as e: 
+                            st.error(f"PDF Error: {e}. PDF-Datei konnte nicht generiert werden.")
+                            st.session_state.pdf_bytes = None # Sicherstellen, dass pdf_bytes None ist bei Fehler
+                            st.session_state.print_mode = True # Trotzdem in den Druckmodus wechseln, um HTML zu zeigen
+                            st.rerun()
                     else:
-                        st.warning("PDFKit fehlt")
+                        st.warning("PDFKit oder wkhtmltopdf ist nicht installiert. PDF-Export nicht verfügbar.")
+                        st.session_state.pdf_bytes = None # Sicherstellen, dass pdf_bytes None ist
                         st.session_state.print_mode = True
                         st.rerun()
 
-    else:
+    else: # Dieser Block wird ausgeführt, wenn st.session_state.print_mode True ist
+        st.subheader("Vorschau & Export")
         c1, c2 = st.columns([1, 4])
         with c1:
-            if st.button("⬅️ Bearbeiten"): st.session_state.print_mode = False; st.rerun()
+            if st.button("⬅️ Bearbeiten", key="exit_print_mode"): # Eindeutiger Key
+                st.session_state.print_mode = False
+                st.rerun()
         with c2:
             if st.session_state.pdf_bytes:
                 st.download_button("📄 Download PDF", st.session_state.pdf_bytes, st.session_state.report_filename, "application/pdf")
+            else:
+                st.warning("PDF-Datei konnte nicht generiert werden oder ist leer.")
+                
         st.divider()
-        st.markdown(CSS_STYLES + st.session_state.final_html, unsafe_allow_html=True)
+
+        if st.session_state.final_html:
+            st.markdown("### HTML-Vorschau")
+            st.markdown(CSS_STYLES + st.session_state.final_html, unsafe_allow_html=True)
+        else:
+            st.warning("Es wurde kein HTML-Bericht generiert oder der Bericht ist leer. Bitte klicken Sie auf 'Bearbeiten' und versuchen Sie es erneut.")
+            st.info("Überprüfen Sie, ob Spieler ausgewählt sind und Daten geladen wurden.")
 
 # ==========================================
 # HAUPT STEUERUNG (AKTUALISIERT)
