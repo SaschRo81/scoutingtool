@@ -166,9 +166,13 @@ def render_analysis_page():
                         h_name = get_team_name(box.get("homeTeam", {}), "Heim")
                         g_name = get_team_name(box.get("guestTeam", {}), "Gast")
                         
-                        render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name)
+                        # Coaches auslesen (für die Anzeige unter der Tabelle)
+                        h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
+                        g_coach = box.get("guestTeam", {}).get("headCoachName", "-")
+                        
+                        render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name, h_coach)
                         st.write("")
-                        render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name)
+                        render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name, g_coach)
                         
                         st.divider()
                         
