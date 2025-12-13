@@ -15,12 +15,23 @@ def safe_int(val):
     return 0
 
 def get_team_name(team_data, default_name="Team"):
-    name = team_data.get("gameStat", {}).get("seasonTeam", {}).get("name")
-    if name: return name
-    name = team_data.get("seasonTeam", {}).get("name")
-    if name: return name
-    name = team_data.get("name")
-    if name: return name
+    """
+    Sucht den Teamnamen extrem gründlich in allen möglichen Feldern.
+    """
+    if not team_data: return default_name
+    
+    # 1. Direkter Name (oft in 'details')
+    if team_data.get("name"): return team_data.get("name")
+    
+    # 2. Im seasonTeam Objekt (oft in 'boxscore')
+    season_team = team_data.get("seasonTeam", {})
+    if season_team.get("name"): return season_team.get("name")
+    
+    # 3. Im gameStat -> seasonTeam (tief verschachtelt)
+    game_stat = team_data.get("gameStat", {})
+    season_team_nested = game_stat.get("seasonTeam", {})
+    if season_team_nested.get("name"): return season_team_nested.get("name")
+    
     return default_name
 
 def format_date_time(iso_string):
@@ -86,52 +97,37 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
     return stats
 
 def render_game_header(details):
-    """Zeigt den Header basierend auf den DETAILS (nicht Boxscore)."""
+    """Header mit Teamnamen, Logo-Platzhaltern und Ergebnis."""
     h_data = details.get("homeTeam", {})
     g_data = details.get("guestTeam", {})
-    h_name = h_data.get("name", "Heim")
-    g_name = g_data.get("name", "Gast")
     
-    # Da headCoachName im Details-DTO oft fehlt, nehmen wir es raus oder lassen es leer
-    # (Coaches stehen meist im Boxscore, nicht in Details, aber wir nutzen hier Details)
+    # Robuste Namenssuche
+    h_name = get_team_name(h_data, "Heim")
+    g_name = get_team_name(g_data, "Gast")
     
-    # Ergebnis & Viertel
     res = details.get("result", {})
     score_h = res.get("homeTeamFinalScore", 0)
     score_g = res.get("guestTeamFinalScore", 0)
     
-    # 1. Zeit
+    # Meta
     time_str = format_date_time(details.get("scheduledTime"))
-
-    # 2. Ort
+    
     venue = details.get("venue", {})
     venue_str = venue.get("name", "-")
     address = venue.get("address", "")
-    if address:
-        # Einfacher Split um Stadt zu finden
+    if address and isinstance(address, str):
         parts = address.split(",")
-        if len(parts) > 1:
-            venue_str += f", {parts[-1].strip()}"
-        else:
-             venue_str += f", {address}"
+        if len(parts) > 1: venue_str += f", {parts[-1].strip()}"
 
-    # 3. Schiedsrichter (Namen extrahieren)
+    # Schiris
     refs = []
     for i in range(1, 4):
         r = details.get(f"referee{i}")
         if r and isinstance(r, dict):
-             # Oft nur refId, aber wenn Name da ist:
-             fn = r.get("firstName", "")
-             ln = r.get("lastName", "")
-             # Wenn keine Namen da sind, zeigen wir nur "Ref ID: ..." an (besser als nichts)
-             if fn or ln:
-                 refs.append(f"{ln} {fn}".strip())
-             elif r.get("refId"):
-                 refs.append(f"Ref#{r.get('refId')}")
-
+             fn = r.get("firstName", ""); ln = r.get("lastName", "")
+             if fn or ln: refs.append(f"{ln} {fn}".strip())
+             elif r.get("refId"): refs.append(f"Ref#{r.get('refId')}")
     ref_str = ", ".join(refs) if refs else "-"
-
-    # 4. Zuschauer
     att = res.get("spectators", "-")
     
     # --- LAYOUT ---
@@ -149,11 +145,9 @@ def render_game_header(details):
             "Q3": [res.get("homeTeamQ3Score",0), res.get("guestTeamQ3Score",0)],
             "Q4": [res.get("homeTeamQ4Score",0), res.get("guestTeamQ4Score",0)]
         }
-        # OT
         if res.get("homeTeamOT1Score", 0) > 0 or res.get("guestTeamOT1Score", 0) > 0:
              q_data["OT"] = [res.get("homeTeamOT1Score",0), res.get("guestTeamOT1Score",0)]
         
-        # HTML Tabelle für Quarter (kompakt)
         q_html = "<table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 auto; text-align:center;'>"
         q_html += "<tr style='border-bottom:1px solid #ddd;'><th></th>" + "".join([f"<th>{k}</th>" for k in q_data.keys()]) + "</tr>"
         q_html += f"<tr><td style='font-weight:bold;'>{h_name[:3].upper()}</td>" + "".join([f"<td>{v[0]}</td>" for v in q_data.values()]) + "</tr>"
@@ -165,7 +159,6 @@ def render_game_header(details):
         st.markdown(f"## {g_name}")
     
     st.write("---")
-    
     st.markdown(f"""
     <div style='display: flex; justify-content: space-between; color: #333; font-size: 14px; background-color: #f9f9f9; padding: 10px; border-radius: 5px;'>
         <span>👥 <b>Zuschauer:</b> {att}</span>
@@ -174,7 +167,8 @@ def render_game_header(details):
     </div>
     """, unsafe_allow_html=True)
 
-def render_boxscore_table_pro(player_stats, team_name):
+def render_boxscore_table_pro(player_stats, team_name, coach_name="-"):
+    """Boxscore Tabelle mit Coach darunter."""
     if not player_stats: return
 
     data = []
@@ -192,7 +186,6 @@ def render_boxscore_table_pro(player_stats, team_name):
             t_min += sec
             min_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
             pts = safe_int(p.get("points")); t_pts += pts
-            
             m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted"))
             p2 = safe_int(p.get("twoPointShotSuccessPercent"))
             m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted"))
@@ -201,7 +194,6 @@ def render_boxscore_table_pro(player_stats, team_name):
             pfg = safe_int(p.get("fieldGoalsSuccessPercent")); t_fgm += mfg; t_fga += afg
             mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted"))
             pft = safe_int(p.get("freeThrowsSuccessPercent")); t_ftm += mft; t_fta += aft
-            
             oreb = safe_int(p.get("offensiveRebounds")); t_or += oreb
             dreb = safe_int(p.get("defensiveRebounds")); t_dr += dreb
             treb = safe_int(p.get("totalRebounds")); t_tr += treb
@@ -249,59 +241,17 @@ def render_boxscore_table_pro(player_stats, team_name):
     st.markdown(f"#### {team_name}")
     calc_height = (len(df) + 1) * 35 + 3
     st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
-
-def render_game_top_performers(box):
-    h_data = box.get("homeTeam", {})
-    g_data = box.get("guestTeam", {})
-    h_name = get_team_name(h_data, "Heim")
-    g_name = get_team_name(g_data, "Gast")
-
-    def get_top3(stats_list, key="points"):
-        active = [p for p in stats_list if safe_int(p.get("secondsPlayed")) > 0]
-        sorted_p = sorted(active, key=lambda x: safe_int(x.get(key)), reverse=True)
-        return sorted_p[:3]
-
-    def mk_box(players, title, color, val_key="points"):
-        html = f"<div style='flex:1; border:1px solid #ccc; margin:5px;'>"
-        html += f"<div style='background:{color}; color:white; padding:5px; font-weight:bold; text-align:center;'>{title}</div>"
-        html += "<table style='width:100%; border-collapse:collapse;'>"
-        for p in players:
-             info = p.get("seasonPlayer", {})
-             name = f"{info.get('lastName', '')}"
-             val = safe_int(p.get(val_key))
-             html += f"<tr><td style='padding:6px; font-size:16px;'>{name}</td><td style='padding:6px; text-align:right; font-weight:bold; font-size:16px;'>{val}</td></tr>"
-        html += "</table></div>"
-        return html
-
-    h_pts = get_top3(h_data.get("playerStats", []), "points")
-    g_pts = get_top3(g_data.get("playerStats", []), "points")
-    h_reb = get_top3(h_data.get("playerStats", []), "totalRebounds")
-    g_reb = get_top3(g_data.get("playerStats", []), "totalRebounds")
-    h_ast = get_top3(h_data.get("playerStats", []), "assists")
-    g_ast = get_top3(g_data.get("playerStats", []), "assists")
-
-    st.markdown("#### Top Performer")
-    html = f"""
-    <div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">
-        {mk_box(h_pts, f"Points ({h_name})", "#e35b00", "points")}
-        {mk_box(g_pts, f"Points ({g_name})", "#e35b00", "points")}
-    </div>
-    <div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">
-        {mk_box(h_reb, f"Rebounds ({h_name})", "#0055ff", "totalRebounds")}
-        {mk_box(g_reb, f"Rebounds ({g_name})", "#0055ff", "totalRebounds")}
-    </div>
-    <div style="display:flex; flex-direction:row; gap:10px;">
-        {mk_box(h_ast, f"Assists ({h_name})", "#ffc107", "assists")}
-        {mk_box(g_ast, f"Assists ({g_name})", "#ffc107", "assists")}
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
+    
+    # Coach unter der Tabelle
+    if coach_name and coach_name != "-":
+        st.markdown(f"*Head Coach: {coach_name}*")
 
 def render_charts_and_stats(box):
     h_data = box.get("homeTeam", {})
     g_data = box.get("guestTeam", {})
     h = h_data.get("gameStat", {})
     g = g_data.get("gameStat", {})
+    
     h_name = get_team_name(h_data, "Heim")
     g_name = get_team_name(g_data, "Gast")
 
@@ -344,6 +294,7 @@ def render_charts_and_stats(box):
     ]
     
     source = pd.DataFrame(h_vals + g_vals)
+
     base = alt.Chart(source).encode(x=alt.X('Cat', sort=categories, title=None), xOffset='Team', y=alt.Y('Pct', title=None, axis=None))
     bar = base.mark_bar().encode(color=alt.Color('Team', legend=alt.Legend(title=None, orient='top')), tooltip=['Team', 'Cat', 'Label'])
     text = base.mark_text(dy=-10, color='black').encode(text='Label')
