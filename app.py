@@ -5,6 +5,7 @@ import pandas as pd
 import datetime
 import base64
 import altair as alt
+import openai
 
 # Externe Imports prüfen
 try:
