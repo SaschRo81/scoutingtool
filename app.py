@@ -3,7 +3,7 @@
 import streamlit as st
 import pandas as pd
 # HIER WURDE DER IMPORT GEÄNDERT, um alle benötigten Klassen direkt zu importieren:
-from datetime import datetime, date, time # <-- KORRIGIERTE ZEILE
+from datetime import datetime, date, time 
 import base64
 import altair as alt
 from urllib.parse import quote_plus 
@@ -548,7 +548,6 @@ def render_scouting_page():
         tid = guest_id if target == "Gastteam (Gegner)" else home_id
         
         c_d, c_t = st.columns(2)
-        # HIER WURDE DIE AUFRUFMETHODE KORRIGIERT (bereits in der letzten Version geschehen):
         d_inp = c_d.date_input("Datum", date.today(), key="scout_date")
         t_inp = c_t.time_input("Tip-Off", time(16,0), key="scout_time") 
 
@@ -583,93 +582,4 @@ def render_scouting_page():
             "TOT": st.column_config.NumberColumn("REB", format="%.1f")
         }
         edited = st.data_editor(st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], 
-            column_config=cols, disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], hide_index=True, key="player_selector")
-        sel_idx = edited[edited["select"]].index
-
-        if len(sel_idx) > 0:
-            st.divider()
-            with st.form("scouting_form"):
-                selection = st.session_state.roster_df.loc[sel_idx]
-                form_res = []
-                c_map = {"Grau": "#999999", "Grün": "#5c9c30", "Rot": "#d9534f"}
-                for _, r in selection.iterrows():
-                    pid = r["PLAYER_ID"]
-                    c_h, c_c = st.columns([3, 1])
-                    c_h.markdown(f"**#{r['NR']} {r['NAME_FULL']}**")
-                    saved_c = st.session_state.saved_colors.get(pid, "Grau")
-                    idx = list(c_map.keys()).index(saved_c) if saved_c in c_map else 0
-                    col = c_c.selectbox("Farbe", list(c_map.keys()), key=f"c_{pid}", index=idx, label_visibility="collapsed")
-                    c1, c2 = st.columns(2)
-                    notes = {}
-                    for k in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]:
-                        val = st.session_state.saved_notes.get(f"{k}_{pid}", "")
-                        notes[k] = (c1 if k.startswith("l") else c2).text_input(k, value=val, key=f"{k}_{pid}", label_visibility="collapsed")
-                    st.divider()
-                    form_res.append({"row": r, "pid": pid, "color": col, "notes": notes})
-
-                c1, c2, c3 = st.columns(3)
-                with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo")
-                with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True, key="ed")
-                with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea")
-                up_files = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"])
-                
-                if st.form_submit_button("Speichern & Generieren", type="primary"):
-                    st.session_state.facts_offense = e_off
-                    st.session_state.facts_defense = e_def
-                    st.session_state.facts_about = e_abt
-                    for item in form_res:
-                        st.session_state.saved_colors[item["pid"]] = item["color"]
-                        for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
-                    
-                    t_name = (guest_name if target == "Gastteam (Gegner)" else home_name).replace(" ", "_")
-                    date_str = d_inp.strftime("%d.%m.%Y"); time_str = t_inp.strftime("%H-%M") 
-                    st.session_state.report_filename = f"Scouting_Report_{t_name}_{date_str}_{time_str}.pdf"
-                    
-                    html = generate_header_html(st.session_state.game_meta)
-                    html += generate_top3_html(st.session_state.roster_df)
-                    for item in form_res:
-                        meta = get_player_metadata_cached(item["pid"])
-                        html += generate_card_html(item["row"].to_dict(), meta, item["notes"], c_map[item["color"]])
-                    html += generate_team_stats_html(st.session_state.team_stats)
-                    if up_files:
-                        html += "<div style='page-break-before:always'><h2>Plays</h2>"
-                        for f in up_files:
-                            b64 = base64.b64encode(f.getvalue()).decode()
-                            html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
-                    html += generate_custom_sections_html(e_off, e_def, e_abt)
-                    st.session_state.final_html = html
-
-                    if HAS_PDFKIT:
-                        try:
-                            full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
-                            opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
-                                    "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
-                                    "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
-                            st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
-                            st.session_state.print_mode = True
-                            st.rerun()
-                        except Exception as e: st.error(f"PDF Error: {e}")
-                    else:
-                        st.warning("PDFKit fehlt")
-                        st.session_state.print_mode = True
-                        st.rerun()
-
-    else:
-        c1, c2 = st.columns([1, 4])
-        with c1:
-            if st.button("⬅️ Bearbeiten"): st.session_state.print_mode = False; st.rerun()
-        with c2:
-            if st.session_state.pdf_bytes:
-                st.download_button("📄 Download PDF", st.session_state.pdf_bytes, st.session_state.report_filename, "application/pdf")
-        st.divider()
-        st.markdown(CSS_STYLES + st.session_state.final_html, unsafe_allow_html=True)
-
-# ==========================================
-# HAUPT STEUERUNG (AKTUALISIERT)
-# ==========================================
-if st.session_state.current_page == "home": render_home()
-elif st.session_state.current_page == "scouting": render_scouting_page()
-elif st.session_state.current_page == "comparison": render_comparison_page()
-elif st.session_state.current_page == "analysis": render_analysis_page()
-elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
-elif st.session_state.current_page == "game_venue": render_game_venue_page()
+            column_config=cols, disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], hide_index=True, key="playe
