@@ -5,7 +5,7 @@ import pandas as pd
 import datetime
 import base64
 import altair as alt
-from urllib.parse import quote_plus # <-- Hinzugefügt für Google Maps Link, korrekt platziert
+from urllib.parse import quote_plus 
 
 # Externe Imports prüfen
 try:
@@ -290,7 +290,7 @@ def render_analysis_page():
                         box["referee3"] = details.get("referee3")
                         box["scheduledTime"] = details.get("scheduledTime")
                         box["attendance"] = details.get("result", {}).get("spectators")
-                        box["id"] = details.get("id") # <-- Game ID wird hier korrekt übernommen
+                        box["id"] = details.get("id") 
                         
                         render_game_header(box)
                         
@@ -392,7 +392,7 @@ def render_analysis_page():
             st.warning("Keine Spiele gefunden.")
 
 # ==========================================
-# NEUE SEITE: SPIELORTE
+# NEUE SEITE: SPIELORTE (AKTUALISIERT)
 # ==========================================
 def render_game_venue_page():
     st.button("🏠 Zurück zum Start", on_click=go_home)
@@ -411,29 +411,70 @@ def render_game_venue_page():
     st.divider()
 
     if selected_team_id:
-        st.subheader(f"Spielort von {selected_team_name}")
-        with st.spinner(f"Lade Spielort-Details für {selected_team_name}..."):
-            team_info = fetch_team_info_basic(selected_team_id)
-            if team_info and team_info.get("venue"):
-                venue_data = team_info.get("venue")
-                venue_name = venue_data.get("name", "Nicht verfügbar")
-                venue_address = venue_data.get("address", "Nicht verfügbar")
+        # --- Hauptspielort des Teams ---
+        st.subheader(f"Standard-Heimspielort von {selected_team_name}")
+        with st.spinner(f"Lade Standard-Spielort-Details für {selected_team_name}..."):
+            team_venue_info = fetch_team_info_basic(selected_team_id)
+            main_venue_data = team_venue_info.get("venue") if team_venue_info else None
+            
+            if main_venue_data:
+                main_venue_name = main_venue_data.get("name", "Nicht verfügbar")
+                main_venue_address = main_venue_data.get("address", "Nicht verfügbar")
                 
-                st.markdown(f"**Halle:** {venue_name}")
-                st.markdown(f"**Adresse:** {venue_address}")
+                st.markdown(f"**Halle:** {main_venue_name}")
+                st.markdown(f"**Adresse:** {main_venue_address}")
 
-                if venue_address != "Nicht verfügbar":
-                    # Generiere Google Maps Link
-                    maps_query = quote_plus(f"{venue_name}, {venue_address}")
+                if main_venue_address != "Nicht verfügbar":
+                    maps_query = quote_plus(f"{main_venue_name}, {main_venue_address}")
                     maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
                     st.markdown(f"**Route planen:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
-                
-                # Optional Teamlogo anzeigen
-                logo_url = get_logo_url(selected_team_id, SEASON_ID)
-                if logo_url:
-                    st.image(optimize_image_base64(logo_url), width=100)
             else:
-                st.warning("Spielort-Details konnten nicht geladen werden oder sind nicht verfügbar.")
+                st.warning(f"Standard-Heimspielort für {selected_team_name} konnte nicht geladen werden oder ist nicht verfügbar.")
+        
+        st.divider()
+
+        # --- Alle Spiele und deren Spielorte ---
+        st.subheader(f"Alle Spiele von {selected_team_name} und deren Spielorte")
+        
+        all_games = fetch_schedule(selected_team_id, SEASON_ID)
+        
+        if all_games:
+            # Sortieren Sie die Spiele nach Datum, um eine chronologische Reihenfolge zu gewährleisten
+            sorted_games = sorted(all_games, key=lambda x: datetime.strptime(x['date'], "%Y-%m-%d %H:%M"), reverse=True)
+            
+            for game in sorted_games:
+                game_id = game.get("id")
+                
+                # Nur Heimspiele anzeigen, da dort der Spielort relevant ist für "Hallentausch"
+                # Oder alle Spiele, falls man wissen möchte, wo Auswärtsspiele sind.
+                # Entscheidung: Zeige alle Spiele an und markiere den relevanten Spielort.
+                
+                with st.expander(f"{game.get('date')} | {game.get('home')} vs {game.get('guest')} ({game.get('score')})"):
+                    if game_id:
+                        game_details = fetch_game_details(game_id)
+                        if game_details and game_details.get("venue"):
+                            game_venue_data = game_details.get("venue")
+                            game_venue_name = game_venue_data.get("name", "Nicht verfügbar")
+                            game_venue_address = game_venue_data.get("address", "Nicht verfügbar")
+
+                            st.markdown(f"**Spielort:** {game_venue_name}")
+                            st.markdown(f"**Adresse:** {game_venue_address}")
+                            
+                            # Vergleich mit dem Standard-Heimspielort, falls dieser verfügbar ist
+                            if main_venue_data:
+                                if game_venue_name != main_venue_data.get("name") or game_venue_address != main_venue_data.get("address"):
+                                    st.info("ℹ️ **ACHTUNG:** Dieser Spielort weicht vom Standard-Heimspielort ab!")
+                            
+                            if game_venue_address != "Nicht verfügbar":
+                                maps_query = quote_plus(f"{game_venue_name}, {game_venue_address}")
+                                maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
+                                st.markdown(f"**Route planen für dieses Spiel:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
+                        else:
+                            st.info(f"Spielort-Details für Spiel {game_id} nicht verfügbar.")
+                    else:
+                        st.info(f"Keine Game ID für dieses Spiel vorhanden.")
+        else:
+            st.info(f"Keine Spiele für {selected_team_name} in der Saison {SEASON_ID} gefunden.")
 
 
 # ==========================================
