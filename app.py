@@ -2,7 +2,6 @@
 
 import streamlit as st
 import pandas as pd
-# HIER WURDE DER IMPORT KORRIGIERT, um alle benötigten Klassen direkt zu importieren:
 from datetime import datetime, date, time 
 import base64
 import altair as alt
@@ -482,232 +481,17 @@ def render_game_venue_page():
 # SEITE 4: SCOUTING REPORT
 # ==========================================
 def render_scouting_page():
-    # Debugging: Überprüfen, ob game_meta beim Laden der Seite schon vorhanden ist
-    # print(f"DEBUG (Scouting Page Load): game_meta at start: {st.session_state.game_meta}")
+    # Top-Level-Button, der immer sichtbar ist
+    st.button("🏠 Home", on_click=go_home, key="scouting_home_btn_top_level")
+    st.title(f"📝 Scouting")
 
-    if not st.session_state.print_mode:
-        c_home, c_head = st.columns([1, 5])
-        with c_home: st.button("🏠 Home", on_click=go_home)
-        with c_head: st.title(f"📝 Scouting")
-
-        with st.sidebar:
-            st.header("💾 Spielstand")
-            uploaded_state = st.file_uploader("Laden (JSON)", type=["json"])
-            if uploaded_state and st.button("Daten wiederherstellen"):
-                success, msg = load_session_state(uploaded_state)
-                if success: st.success("✅ " + msg)
-                else: st.error(msg)
-            st.divider()
-            if st.session_state.roster_df is not None:
-                save_name = f"Save_{date.today()}.json" 
-                st.download_button("💾 Speichern", export_session_state(), save_name, "application/json")
-
-        st.subheader("1. Spieldaten")
-        c1, c2, c3 = st.columns([1, 2, 2])
-        with c1: 
-            staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="scout_staffel")
-            teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-            team_options = {v["name"]: k for k, v in teams_filtered.items()}
-        with c2:
-            # Voreinstellung für selectbox, wenn game_meta existiert
-            initial_home_idx = 0
-            if "home_name" in st.session_state.game_meta and st.session_state.game_meta["home_name"] in team_options:
-                initial_home_idx = list(team_options.keys()).index(st.session_state.game_meta["home_name"])
-
-            home_name_selected = st.selectbox("Heim:", list(team_options.keys()), index=initial_home_idx, key="sel_home") 
-            home_id = team_options[home_name_selected]
-            if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != home_name_selected:
-                 st.session_state.logo_h = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
-            st.image(st.session_state.logo_h, width=80)
-        with c3:
-            # Voreinstellung für selectbox
-            initial_guest_idx = 1
-            if "guest_name" in st.session_state.game_meta and st.session_state.game_meta["guest_name"] in team_options:
-                initial_guest_idx = list(team_options.keys()).index(st.session_state.game_meta["guest_name"])
-
-            guest_name_selected = st.selectbox("Gast:", list(team_options.keys()), index=initial_guest_idx, key="sel_guest") 
-            guest_id = team_options[guest_name_selected]
-            if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != guest_name_selected:
-                 st.session_state.logo_g = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
-            st.image(st.session_state.logo_g, width=80)
-
-        st.write("---")
-        # Voreinstellung für radio button
-        initial_target_idx = 0
-        if "selected_target" in st.session_state.game_meta:
-             if st.session_state.game_meta["selected_target"] == "Heimteam":
-                 initial_target_idx = 1
-        target_radio_selection = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, index=initial_target_idx, key="sel_target") 
-        tid = guest_id if target_radio_selection == "Gastteam (Gegner)" else home_id
-        
-        c_d, c_t = st.columns(2)
-        
-        # Voreinstellung für date_input und time_input
-        initial_date = date.today()
-        if "date" in st.session_state.game_meta:
-            try: initial_date = datetime.strptime(st.session_state.game_meta["date"], "%d.%m.%Y").date()
-            except ValueError: pass # Fallback auf today()
-        
-        initial_time = time(16,0)
-        if "time" in st.session_state.game_meta:
-            try: initial_time = datetime.strptime(st.session_state.game_meta["time"], "%H-%M").time()
-            except ValueError: pass # Fallback auf 16:00
-        
-        d_inp = c_d.date_input("Datum", initial_date, key="scout_date")
-        t_inp = c_t.time_input("Tip-Off", initial_time, key="scout_time") 
-
-        st.divider()
-        
-        # Check ob Daten geladen werden müssen
-        data_needs_loading = (st.session_state.roster_df is None or 
-                              st.session_state.get("current_tid") != tid or 
-                              st.button(f"Lade Daten für Team {tid} neu", key="reload_scouting_data_btn"))
-
-        if st.button(f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden", type="primary", key="load_scouting_data_btn") or \
-           (st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid and not data_needs_loading):
-            
-            if data_needs_loading:
-                with st.spinner(f"Lade Daten für Team {tid}..."):
-                    df, ts = fetch_team_data(tid, SEASON_ID)
-                    if df is not None:
-                        st.session_state.roster_df = df
-                        st.session_state.team_stats = ts
-                        st.session_state.current_tid = tid 
-                        # print(f"DEBUG: Kaderdaten für Team {tid} geladen. {len(df)} Spieler.") # Debugging
-                    else: 
-                        st.error(f"Fehler API: Kaderdaten für Team-ID {tid} konnten nicht geladen werden. Bitte Team-ID und Saison prüfen.")
-                        st.session_state.roster_df = None # Sicherstellen, dass keine alten Daten verwendet werden
-                        st.session_state.team_stats = None
-            
-            # Diese Werte MÜSSEN im session_state gespeichert werden, da sie später benötigt werden
-            # Aber nur, wenn roster_df erfolgreich geladen wurde!
-            if st.session_state.roster_df is not None:
-                st.session_state.game_meta = {
-                    "home_name": home_name_selected, 
-                    "home_logo": st.session_state.logo_h,
-                    "guest_name": guest_name_selected, 
-                    "guest_logo": st.session_state.logo_g,
-                    "date": d_inp.strftime("%d.%m.%Y"), 
-                    "time": t_inp.strftime("%H-%M"),
-                    "selected_target": target_radio_selection 
-                }
-                st.session_state.print_mode = False # Nach dem Laden in den Bearbeitungsmodus wechseln
-            # else: # Wenn Ladevorgang fehlschlug
-            #     st.session_state.game_meta = {} # game_meta zurücksetzen, um Fehler zu vermeiden
-
-
-    # Der folgende Block wird nur ausgeführt, WENN st.session_state.roster_df tatsächlich Daten enthält
-    if st.session_state.roster_df is not None: 
-        st.subheader("3. Auswahl & Notizen")
-        cols = {
-            "select": st.column_config.CheckboxColumn("Auswahl", default=False, width="small"),
-            "NR": st.column_config.TextColumn("#", width="small"),
-            "NAME_FULL": st.column_config.TextColumn("Name"),
-            "GP": st.column_config.NumberColumn("GP", format="%d"),
-            "PPG": st.column_config.NumberColumn("PPG", format="%.1f"),
-            "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
-            "TOT": st.column_config.NumberColumn("REB", format="%.1f")
-        }
-        # Expliziter und eindeutiger Key für data_editor
-        edited = st.data_editor(st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], 
-            column_config=cols, disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], hide_index=True, key="player_selector_table_scouting") 
-        sel_idx = edited[edited["select"]].index
-
-        if len(sel_idx) > 0:
-            st.divider()
-            with st.form("scouting_form_editor", clear_on_submit=False): # Expliziter und eindeutiger Key für das Formular
-                selection = st.session_state.roster_df.loc[sel_idx]
-                form_res = []
-                c_map = {"Grau": "#999999", "Grün": "#5c9c30", "Rot": "#d9534f"}
-                
-                # Iteriere mit einem expliziten Index, um die Eindeutigkeit der Keys zu gewährleisten
-                for i, (_, r) in enumerate(selection.iterrows()): 
-                    pid = r["PLAYER_ID"]
-                    c_h, c_c = st.columns([3, 1])
-                    c_h.markdown(f"**#{r['NR']} {r['NAME_FULL']}**")
-                    saved_c = st.session_state.saved_colors.get(pid, "Grau")
-                    idx = list(c_map.keys()).index(saved_c) if saved_c in c_map else 0
-                    
-                    # Keys robuster machen durch Hinzufügen des Schleifenindex 'i'
-                    col = c_c.selectbox("Farbe", list(c_map.keys()), key=f"color_select_{pid}_{i}_scouting", index=idx, label_visibility="collapsed") 
-                    
-                    c1, c2 = st.columns(2)
-                    notes = {}
-                    for k_note in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: 
-                        val = st.session_state.saved_notes.get(f"{k_note}_{pid}", "")
-                        # Keys robuster machen durch Hinzufügen des Schleifenindex 'i'
-                        notes[k_note] = (c1 if k_note.startswith("l") else c2).text_input(k_note, value=val, key=f"note_input_{k_note}_{pid}_{i}_scouting", label_visibility="collapsed")
-                    st.divider()
-                    form_res.append({"row": r, "pid": pid, "color": col, "notes": notes})
-
-                c1, c2, c3 = st.columns(3)
-                with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo_facts_scouting")
-                with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True, key="ed_facts_scouting")
-                with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea_facts_scouting")
-                up_files = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"], key="plays_uploader_scouting")
-                
-                if st.form_submit_button("Speichern & Generieren", type="primary"):
-                    st.session_state.facts_offense = e_off
-                    st.session_state.facts_defense = e_def
-                    st.session_state.facts_about = e_abt
-                    for item in form_res:
-                        st.session_state.saved_colors[item["pid"]] = item["color"]
-                        for k_note, v in item["notes"].items(): st.session_state.saved_notes[f"{k_note}_{item['pid']}"] = v
-                    
-                    current_home_name = st.session_state.game_meta.get("home_name", "UnbekanntesHeimteam")
-                    current_guest_name = st.session_state.game_meta.get("guest_name", "UnbekanntesGastteam")
-                    current_date_str = st.session_state.game_meta.get("date", date.today().strftime("%d.%m.%Y"))
-                    current_time_str = st.session_state.game_meta.get("time", time(16,0).strftime("%H-%M"))
-                    selected_target_label = st.session_state.game_meta.get("selected_target", "Gastteam (Gegner)") 
-
-                    t_name = (current_guest_name if selected_target_label == "Gastteam (Gegner)" else current_home_name).replace(" ", "_")
-                    
-                    st.session_state.report_filename = f"Scouting_Report_{t_name}_{current_date_str}_{current_time_str}.pdf"
-                    
-                    html = generate_header_html(st.session_state.game_meta)
-                    html += generate_top3_html(st.session_state.roster_df)
-                    for item in form_res:
-                        meta = get_player_metadata_cached(item["pid"])
-                        html += generate_card_html(item["row"].to_dict(), meta, item["notes"], c_map[item["color"]])
-                    html += generate_team_stats_html(st.session_state.team_stats)
-                    if up_files:
-                        html += "<div style='page-break-before:always'><h2>Plays</h2>"
-                        for f in up_files:
-                            b64 = base64.b64encode(f.getvalue()).decode()
-                            html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
-                    html += generate_custom_sections_html(e_off, e_def, e_abt)
-                    st.session_state.final_html = html
-
-                    # print(f"Generated HTML length: {len(st.session_state.final_html)}") 
-
-                    if HAS_PDFKIT:
-                        try:
-                            full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
-                            opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
-                                    "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
-                                    "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
-                            st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
-                            st.session_state.print_mode = True
-                            st.rerun()
-                        except Exception as e: 
-                            st.error(f"PDF Error: {e}. PDF-Datei konnte nicht generiert werden.")
-                            st.session_state.pdf_bytes = None 
-                            st.session_state.print_mode = True 
-                            st.rerun()
-                    else:
-                        st.warning("PDFKit oder wkhtmltopdf ist nicht installiert. PDF-Export nicht verfügbar.")
-                        st.session_state.pdf_bytes = None 
-                        st.session_state.print_mode = True
-                        st.rerun()
-
-        else: # Keine Spieler ausgewählt
-            st.info("Bitte wählen Sie mindestens einen Spieler aus, um Notizen zu bearbeiten und einen Bericht zu generieren.")
-
-    else: # Dieser Block wird ausgeführt, wenn st.session_state.print_mode True ist
+    # --- TOP-LEVEL IF-ELSE FÜR PRINT-MODUS ---
+    if st.session_state.print_mode:
+        # --- ANZEIGE DES GENERIERTEN BERICHTS UND DOWNLOAD-OPTIONEN ---
         st.subheader("Vorschau & Export")
         c1, c2 = st.columns([1, 4])
         with c1:
-            if st.button("⬅️ Bearbeiten", key="exit_print_mode_scouting"): # Eindeutiger Key
+            if st.button("⬅️ Bearbeiten", key="exit_print_mode_scouting_final"): # Eindeutiger Key
                 st.session_state.print_mode = False
                 st.rerun()
         with c2:
@@ -722,10 +506,213 @@ def render_scouting_page():
             st.markdown("### HTML-Vorschau")
             st.markdown(CSS_STYLES + st.session_state.final_html, unsafe_allow_html=True)
         else:
-            st.warning("Es wurde kein HTML-Bericht generiert oder der Bericht ist leer. Bitte klicken Sie auf 'Bearbeiten' und versuchen Sie es erneut.")
-            st.info("Überprüfen Sie, ob Spieler ausgewählt sind und Daten geladen wurden.")
+            st.warning("Es wurde kein HTML-Bericht generiert oder der Bericht ist leer.")
+            st.info("Bitte klicken Sie auf 'Bearbeiten' und versuchen Sie es erneut.")
 
+    else:
+        # --- BEARBEITUNGSMODUS (Standardansicht) ---
+        with st.sidebar: 
+            st.header("💾 Spielstand")
+            uploaded_state = st.file_uploader("Laden (JSON)", type=["json"], key="scouting_upload_state")
+            if uploaded_state and st.button("Daten wiederherstellen", key="scouting_restore_btn"):
+                success, msg = load_session_state(uploaded_state)
+                if success: st.success("✅ " + msg)
+                else: st.error(msg)
+            st.divider()
+            if st.session_state.roster_df is not None:
+                save_name = f"Save_{date.today()}.json" 
+                st.download_button("💾 Speichern", export_session_state(), save_name, "application/json", key="scouting_save_btn")
 
+        st.subheader("1. Spieldaten")
+        c1, c2, c3 = st.columns([1, 2, 2])
+        with c1: 
+            staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="scout_staffel")
+            teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
+            team_options = {v["name"]: k for k, v in teams_filtered.items()}
+        with c2:
+            initial_home_idx = 0
+            if "home_name" in st.session_state.game_meta and st.session_state.game_meta["home_name"] in team_options:
+                initial_home_idx = list(team_options.keys()).index(st.session_state.game_meta["home_name"])
+
+            home_name_selected = st.selectbox("Heim:", list(team_options.keys()), index=initial_home_idx, key="sel_home") 
+            home_id = team_options[home_name_selected]
+            if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != home_name_selected:
+                 st.session_state.logo_h = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
+            st.image(st.session_state.logo_h, width=80)
+        with c3:
+            initial_guest_idx = 1
+            if "guest_name" in st.session_state.game_meta and st.session_state.game_meta["guest_name"] in team_options:
+                initial_guest_idx = list(team_options.keys()).index(st.session_state.game_meta["guest_name"])
+
+            guest_name_selected = st.selectbox("Gast:", list(team_options.keys()), index=initial_guest_idx, key="sel_guest") 
+            guest_id = team_options[guest_name_selected]
+            if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != guest_name_selected:
+                 st.session_state.logo_g = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
+            st.image(st.session_state.logo_g, width=80)
+
+        st.write("---")
+        initial_target_idx = 0
+        if "selected_target" in st.session_state.game_meta:
+             if st.session_state.game_meta["selected_target"] == "Heimteam":
+                 initial_target_idx = 1
+        target_radio_selection = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, index=initial_target_idx, key="sel_target") 
+        tid = guest_id if target_radio_selection == "Gastteam (Gegner)" else home_id
+        
+        c_d, c_t = st.columns(2)
+        
+        initial_date = date.today()
+        if "date" in st.session_state.game_meta:
+            try: initial_date = datetime.strptime(st.session_state.game_meta["date"], "%d.%m.%Y").date()
+            except ValueError: pass 
+        
+        initial_time = time(16,0)
+        if "time" in st.session_state.game_meta:
+            try: initial_time = datetime.strptime(st.session_state.game_meta["time"], "%H-%M").time()
+            except ValueError: pass 
+        
+        d_inp = c_d.date_input("Datum", initial_date, key="scout_date")
+        t_inp = c_t.time_input("Tip-Off", initial_time, key="scout_time") 
+
+        st.divider()
+        
+        # Check ob Daten geladen werden müssen
+        current_tid_in_state = st.session_state.get("current_tid")
+        data_is_loaded_for_current_team = (st.session_state.roster_df is not None and current_tid_in_state == tid)
+        
+        load_button_label = f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden"
+        
+        # Der Button, der das Laden auslöst. Nur anzeigen, wenn noch keine Daten da sind oder wenn es ein anderer Team-ID ist.
+        if st.button(load_button_label, type="primary", key="load_scouting_data_btn") or not data_is_loaded_for_current_team:
+            if not data_is_loaded_for_current_team: # Wenn Daten für dieses Team nicht geladen sind oder neu geladen werden sollen
+                with st.spinner(f"Lade Daten für Team {tid}..."):
+                    df, ts = fetch_team_data(tid, SEASON_ID)
+                    if df is not None and not df.empty: # Prüfen, ob DataFrame nicht leer ist
+                        st.session_state.roster_df = df
+                        st.session_state.team_stats = ts
+                        st.session_state.current_tid = tid 
+                        st.session_state.game_meta = { # Update game_meta here after successful load
+                            "home_name": home_name_selected, 
+                            "home_logo": st.session_state.logo_h,
+                            "guest_name": guest_name_selected, 
+                            "guest_logo": st.session_state.logo_g,
+                            "date": d_inp.strftime("%d.%m.%Y"), 
+                            "time": t_inp.strftime("%H-%M"),
+                            "selected_target": target_radio_selection 
+                        }
+                        st.session_state.print_mode = False # Sicherstellen, dass nicht im Druckmodus
+                        # st.rerun() # Kein rerun hier, sonst geht der Flow kaputt. Die Daten sind im Session State.
+                    else: 
+                        st.error(f"Fehler API: Kaderdaten für Team-ID {tid} konnten nicht geladen werden oder sind leer. Bitte Team-ID und Saison prüfen.")
+                        st.session_state.roster_df = None # Alte Daten bei Fehler löschen
+                        st.session_state.team_stats = None
+                        st.session_state.game_meta = {} # game_meta zurücksetzen
+            # else: # Falls Daten bereits geladen und Button geklickt wurde, aber keine Aktion nötig war.
+            #     pass # Nichts tun, Daten sind schon da
+        
+        # Dieser Bereich soll nur erscheinen, wenn Daten erfolgreich geladen wurden
+        if st.session_state.roster_df is not None and not st.session_state.roster_df.empty: 
+            st.subheader("3. Auswahl & Notizen")
+            cols = {
+                "select": st.column_config.CheckboxColumn("Auswahl", default=False, width="small"),
+                "NR": st.column_config.TextColumn("#", width="small"),
+                "NAME_FULL": st.column_config.TextColumn("Name"),
+                "GP": st.column_config.NumberColumn("GP", format="%d"),
+                "PPG": st.column_config.NumberColumn("PPG", format="%.1f"),
+                "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
+                "TOT": st.column_config.NumberColumn("REB", format="%.1f")
+            }
+            edited = st.data_editor(st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], 
+                column_config=cols, disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], hide_index=True, key="player_selector_table_scouting") 
+            sel_idx = edited[edited["select"]].index
+
+            if len(sel_idx) > 0:
+                st.divider()
+                with st.form("scouting_form_editor", clear_on_submit=False): 
+                    selection = st.session_state.roster_df.loc[sel_idx]
+                    form_res = []
+                    c_map = {"Grau": "#999999", "Grün": "#5c9c30", "Rot": "#d9534f"}
+                    
+                    for i, (_, r) in enumerate(selection.iterrows()): 
+                        pid = r["PLAYER_ID"]
+                        c_h, c_c = st.columns([3, 1])
+                        c_h.markdown(f"**#{r['NR']} {r['NAME_FULL']}**")
+                        saved_c = st.session_state.saved_colors.get(pid, "Grau")
+                        idx = list(c_map.keys()).index(saved_c) if saved_c in c_map else 0
+                        
+                        col = c_c.selectbox("Farbe", list(c_map.keys()), key=f"color_select_{pid}_{i}_scouting", index=idx, label_visibility="collapsed") 
+                        
+                        c1, c2 = st.columns(2)
+                        notes = {}
+                        for k_note in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: 
+                            val = st.session_state.saved_notes.get(f"{k_note}_{pid}", "")
+                            notes[k_note] = (c1 if k_note.startswith("l") else c2).text_input(k_note, value=val, key=f"note_input_{k_note}_{pid}_{i}_scouting", label_visibility="collapsed")
+                        st.divider()
+                        form_res.append({"row": r, "pid": pid, "color": col, "notes": notes})
+
+                    c1, c2, c3 = st.columns(3)
+                    with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo_facts_scouting")
+                    with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True, key="ed_facts_scouting")
+                    with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea_facts_scouting")
+                    up_files = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"], key="plays_uploader_scouting")
+                    
+                    if st.form_submit_button("Speichern & Generieren", type="primary"):
+                        st.session_state.facts_offense = e_off
+                        st.session_state.facts_defense = e_def
+                        st.session_state.facts_about = e_abt
+                        for item in form_res:
+                            st.session_state.saved_colors[item["pid"]] = item["color"]
+                            for k_note, v in item["notes"].items(): st.session_state.saved_notes[f"{k_note}_{item['pid']}"] = v
+                        
+                        current_home_name = st.session_state.game_meta.get("home_name", "UnbekanntesHeimteam")
+                        current_guest_name = st.session_state.game_meta.get("guest_name", "UnbekanntesGastteam")
+                        current_date_str = st.session_state.game_meta.get("date", date.today().strftime("%d.%m.%Y"))
+                        current_time_str = st.session_state.game_meta.get("time", time(16,0).strftime("%H-%M"))
+                        selected_target_label = st.session_state.game_meta.get("selected_target", "Gastteam (Gegner)") 
+
+                        t_name = (current_guest_name if selected_target_label == "Gastteam (Gegner)" else current_home_name).replace(" ", "_")
+                        
+                        st.session_state.report_filename = f"Scouting_Report_{t_name}_{current_date_str}_{current_time_str}.pdf"
+                        
+                        html = generate_header_html(st.session_state.game_meta)
+                        html += generate_top3_html(st.session_state.roster_df)
+                        for item in form_res:
+                            meta = get_player_metadata_cached(item["pid"])
+                            html += generate_card_html(item["row"].to_dict(), meta, item["notes"], c_map[item["color"]])
+                        html += generate_team_stats_html(st.session_state.team_stats)
+                        if up_files:
+                            html += "<div style='page-break-before:always'><h2>Plays</h2>"
+                            for f in up_files:
+                                b64 = base64.b64encode(f.getvalue()).decode()
+                                html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
+                        html += generate_custom_sections_html(e_off, e_def, e_abt)
+                        st.session_state.final_html = html
+
+                        if HAS_PDFKIT:
+                            try:
+                                full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
+                                opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
+                                        "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
+                                        "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
+                                st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
+                                st.session_state.print_mode = True
+                                st.rerun()
+                            except Exception as e: 
+                                st.error(f"PDF Error: {e}. PDF-Datei konnte nicht generiert werden.")
+                                st.session_state.pdf_bytes = None 
+                                st.session_state.print_mode = True 
+                                st.rerun()
+                        else:
+                            st.warning("PDFKit oder wkhtmltopdf ist nicht installiert. PDF-Export nicht verfügbar.")
+                            st.session_state.pdf_bytes = None 
+                            st.session_state.print_mode = True
+                            st.rerun()
+
+            else: # Keine Spieler ausgewählt
+                st.info("Bitte wählen Sie mindestens einen Spieler aus, um Notizen zu bearbeiten und einen Bericht zu generieren.")
+
+        else: # Keine Spielerdaten im roster_df
+            st.info("Bitte laden Sie zuerst den Kader, um Spieler auszuwählen.")
+        
 # ==========================================
 # HAUPT STEUERUNG (AKTUALISIERT)
 # ==========================================
