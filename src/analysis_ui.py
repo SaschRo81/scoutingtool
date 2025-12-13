@@ -358,3 +358,74 @@ def render_charts_and_stats(box):
 </tr>"""
         html += "</table>"
         st.markdown(html, unsafe_allow_html=True)
+# --- END OF EXISTING IMPORTS/FUNCTIONS IN analysis_ui.py ---
+
+def generate_game_summary(box):
+    """Generiert einen textbasierten Spielbericht."""
+    if not box: return "Keine Daten verfügbar."
+
+    h_data = box.get("homeTeam", {})
+    g_data = box.get("guestTeam", {})
+    h_name = get_team_name(h_data, "Heim")
+    g_name = get_team_name(g_data, "Gast")
+    res = box.get("result", {})
+    
+    s_h = res.get("homeTeamFinalScore", 0)
+    s_g = res.get("guestTeamFinalScore", 0)
+    
+    # 1. Ergebnis
+    winner = h_name if s_h > s_g else g_name
+    diff = abs(s_h - s_g)
+    text = f"**Endergebnis:** {h_name} {s_h} : {s_g} {g_name}\n\n"
+    
+    if diff < 6:
+        text += f"In einem bis zur letzten Sekunde spannenden Krimi setzte sich {winner} knapp durch. "
+    elif diff > 20:
+        text += f"{winner} dominierte das Spiel deutlich und gewann souverän mit {diff} Punkten Vorsprung. "
+    else:
+        text += f"{winner} konnte das Spiel mit einem soliden {diff}-Punkte-Vorsprung für sich entscheiden. "
+
+    # 2. Viertel-Analyse
+    q_h = [res.get(f"homeTeamQ{i}Score", 0) for i in range(1, 5)]
+    q_g = [res.get(f"guestTeamQ{i}Score", 0) for i in range(1, 5)]
+    
+    h_q_wins = sum(1 for i in range(4) if q_h[i] > q_g[i])
+    if h_q_wins == 4 and s_h > s_g:
+        text += f"{h_name} gewann dabei jedes einzelne Viertel. "
+    elif h_q_wins == 0 and s_h < s_g:
+        text += f"{g_name} ließ nichts anbrennen und entschied alle vier Viertel für sich. "
+    
+    # 3. Schlüsselstatistiken
+    h_fg = safe_int(h_data.get("gameStat", {}).get("fieldGoalsSuccessPercent"))
+    g_fg = safe_int(g_data.get("gameStat", {}).get("fieldGoalsSuccessPercent"))
+    h_reb = safe_int(h_data.get("gameStat", {}).get("totalRebounds"))
+    g_reb = safe_int(g_data.get("gameStat", {}).get("totalRebounds"))
+    h_to = safe_int(h_data.get("gameStat", {}).get("turnovers"))
+    g_to = safe_int(g_data.get("gameStat", {}).get("turnovers"))
+
+    text += "\n\n**Schlüssel zum Sieg:**\n"
+    if s_h > s_g:
+        if h_fg > g_fg + 5: text += f"- {h_name} traf deutlich besser aus dem Feld ({h_fg}% vs {g_fg}%).\n"
+        if h_reb > g_reb + 5: text += f"- Die Dominanz am Brett war entscheidend ({h_reb} zu {g_reb} Rebounds).\n"
+        if h_to < g_to - 3: text += f"- {h_name} passte besser auf den Ball auf ({h_to} Turnover gegenüber {g_to}).\n"
+    else:
+        if g_fg > h_fg + 5: text += f"- {g_name} hatte die heißeren Hände ({g_fg}% vs {h_fg}% Trefferquote).\n"
+        if g_reb > h_reb + 5: text += f"- {g_name} kontrollierte die Rebounds ({g_reb} zu {h_reb}).\n"
+        if g_to < h_to - 3: text += f"- {g_name} erzwang viele Ballverluste ({h_to} Turnover beim Gegner).\n"
+
+    # 4. Top Performer
+    def get_best(p_list, key):
+        if not p_list: return None, 0
+        s = sorted(p_list, key=lambda x: safe_int(x.get(key)), reverse=True)
+        p = s[0]
+        name = p.get("seasonPlayer", {}).get("lastName", "Unknown")
+        return name, safe_int(p.get(key))
+
+    h_p_name, h_p_val = get_best(h_data.get("playerStats", []), "points")
+    g_p_name, g_p_val = get_best(g_data.get("playerStats", []), "points")
+    
+    text += "\n**Top Performer:**\n"
+    text += f"Auf Seiten von {h_name} war **{h_p_name}** mit {h_p_val} Punkten am erfolgreichsten. "
+    text += f"Bei {g_name} hielt **{g_p_name}** mit {g_p_val} Zählern dagegen."
+
+    return text
