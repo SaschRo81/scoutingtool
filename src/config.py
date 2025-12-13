@@ -55,22 +55,20 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"},
 }
 
-# Zentrales CSS
-# --- Inhalt für src/config.py, im Bereich der CSS_STYLES Variable ---
+# ... andere Konfigurationen in src/config.py
 
+# Beispiel CSS_STYLES - PASSEN SIE DIESEN BEREICH IN IHRER DATEI AN!
 CSS_STYLES = """
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 14pt; /* Grundschriftgröße für den gesamten Bericht, falls nicht spezifischer überschrieben */
-            color: #333;
+            font-size: 14pt; /* GRUNDSCHRIFTGRÖSSE FÜR PDF ANPASSEN */
         }
         h1, h2, h3, h4 {
             color: #333;
             margin-bottom: 0.5em;
         }
-
-        /* --- Spieler-Karten Details --- */
+        /* Player Card Adjustments */
         .player-card {
             border: 1px solid #ccc;
             border-radius: 8px;
@@ -78,152 +76,89 @@ CSS_STYLES = """
             margin-bottom: 20px;
             display: flex;
             align-items: flex-start;
-            page-break-inside: avoid; /* Verhindert das Umbrechen von Karten mitten im PDF */
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            page-break-inside: avoid;
         }
         .player-card-image {
-            width: 120px; /* Bildgröße etwas erhöht */
-            height: 120px; /* Bildgröße etwas erhöht */
+            width: 100px;
+            height: 100px;
             border-radius: 50%;
             object-fit: cover;
-            margin-right: 20px;
+            margin-right: 15px;
             flex-shrink: 0;
-            border: 2px solid #ddd;
         }
         .player-info h3 {
             margin-top: 0;
             margin-bottom: 5px;
-            font-size: 20pt; /* Spielername deutlich größer */
-            color: #003366;
+            font-size: 18pt; /* Überschrift Spielername */
         }
         .player-info p {
             margin: 0;
-            font-size: 14pt; /* Spieler Details wie Größe, Position - größer */
-            line-height: 1.4;
+            font-size: 12pt; /* Spieler Details wie Größe, Position */
         }
-
-        /* --- Spieler-Statistik-Tabelle innerhalb der Karte --- */
         .player-stats table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
+            margin-top: 10px;
         }
         .player-stats th, .player-stats td {
             border: 1px solid #ddd;
-            padding: 8px; /* Padding erhöht */
-            text-align: center; /* Werte zentriert */
-            font-size: 12pt; /* Statistikwerte - größer */
+            padding: 5px;
+            text-align: left;
+            font-size: 10pt; /* Spieler Statistikwerte in der Tabelle */
         }
-        .player-stats th {
-            background-color: #e9ecef;
-            font-weight: bold;
-            color: #555;
-        }
-        .player-stats tr:nth-child(even) {
-            background-color: #f9f9f9; /* Leichte Streifen für bessere Lesbarkeit */
-        }
-
-        /* --- Spieler-Notizen --- */
         .player-notes {
-            margin-top: 15px;
-            border-left: 5px solid; /* Dickere Leiste */
-            padding-left: 15px;
-            font-size: 14pt; /* Notizen-Text - deutlich größer */
-            line-height: 1.6;
-            color: #444;
+            margin-top: 10px;
+            border-left: 3px solid;
+            padding-left: 10px;
         }
-        .player-notes strong {
-            color: #003366; /* Fokus-Titel in Notizen */
+        .player-notes div {
+            font-size: 10pt; /* Notizen-Text */
         }
 
-        /* --- Team Statistik Tabelle (separate Tabelle) --- */
-        .team-stats-container h2 {
-            font-size: 20pt;
-            color: #003366;
-            margin-top: 30px;
-        }
+        /* Team Stats Table Adjustments */
         .team-stats-container table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
-            font-size: 12pt; /* Team Statistikwerte in der Tabelle - größer */
+            margin-top: 10px;
         }
         .team-stats-container th, .team-stats-container td {
             border: 1px solid #ddd;
-            padding: 10px; /* Padding erhöht */
+            padding: 5px;
             text-align: left;
+            font-size: 10pt; /* Team Statistikwerte in der Tabelle */
         }
         .team-stats-container th {
-            background-color: #003366;
-            color: white;
-            font-weight: bold;
-        }
-        .team-stats-container tr:nth-child(even) {
-            background-color: #f2f7fc;
+            background-color: #f2f2f2;
         }
 
-        /* --- Custom Sections (Offense, Defense, About) --- */
+        /* Allgemeine Sektionen */
         .custom-section h2 {
-            font-size: 20pt; /* Überschrift der Custom Sections - größer */
-            color: #003366;
-            margin-top: 30px;
+            font-size: 16pt; /* Überschrift der Custom Sections */
         }
         .custom-section ul {
             list-style-type: disc;
-            margin-left: 25px;
-            padding-left: 0;
+            margin-left: 20px;
         }
         .custom-section li {
-            font-size: 14pt; /* Liste Text - größer */
-            margin-bottom: 8px;
-            line-height: 1.5;
-        }
-        .custom-section li strong {
-            color: #0055aa;
-        }
-        .custom-section p {
-            font-size: 14pt; /* Beschreibungstext - größer */
+            font-size: 12pt; /* Liste Text */
+            margin-bottom: 5px;
         }
         
-        /* --- HEADER/FOOTER für den generierten HTML/PDF --- */
-        .report-header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #003366;
+        /* HEADER/FOOTER (falls in html_gen.py genutzt, diese CSS-Klassen können angepasst werden) */
+        .report-header {
+            text-align: center;
             margin-bottom: 20px;
         }
-        .report-header-logo {
-            flex-shrink: 0;
-            margin-right: 15px;
+        .report-header h1 {
+            font-size: 24pt;
         }
-        .report-header-logo img {
-            max-height: 80px; /* Logo-Größe */
+        .report-header h2 {
+            font-size: 18pt;
+        }
+        .report-header img {
+            max-height: 80px;
             vertical-align: middle;
         }
-        .report-header-info {
-            text-align: center;
-            flex-grow: 1;
-        }
-        .report-header-info h1 {
-            font-size: 28pt; /* Haupttitel des Berichts */
-            margin: 0;
-            color: #003366;
-        }
-        .report-header-info h2 {
-            font-size: 20pt; /* Untertitel des Berichts */
-            margin: 0;
-            color: #555;
-        }
-        .report-header-meta {
-            text-align: right;
-            font-size: 12pt;
-            color: #777;
-            flex-shrink: 0;
-            margin-left: 15px;
-        }
-
 
         /* Page Breaks für PDF */
         .page-break-before {
