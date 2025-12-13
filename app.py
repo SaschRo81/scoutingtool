@@ -1,3 +1,5 @@
+# --- START OF FILE app.py ---
+
 import streamlit as st
 import pandas as pd
 import datetime
@@ -14,7 +16,10 @@ except ImportError:
 # Module aus SRC
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url, optimize_image_base64
-from src.api import fetch_team_data, get_player_metadata_cached, fetch_schedule, fetch_game_boxscore, fetch_game_details
+from src.api import (
+    fetch_team_data, get_player_metadata_cached, fetch_schedule, 
+    fetch_game_boxscore, fetch_game_details, fetch_team_info_basic # <-- NEU: fetch_team_info_basic
+)
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
     generate_team_stats_html, generate_custom_sections_html,
@@ -22,11 +27,10 @@ from src.html_gen import (
 )
 from src.state_manager import export_session_state, load_session_state
 
-# HIER WURDEN DIE NEUEN FUNKTIONEN HINZUGEFÜGT (aus analysis_ui):
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
-    generate_complex_ai_prompt, run_openai_generation # <-- WICHTIG: diese importieren!
+    generate_complex_ai_prompt, run_openai_generation 
 )
 
 st.set_page_config(page_title=f"DBBL Scouting Suite {VERSION}", layout="wide", page_icon="🏀")
@@ -66,7 +70,7 @@ for key, default in [
         {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"},
     ])),
     ("selected_game_id", None),
-    ("generated_ai_report", None) # <-- Hinzugefügt, um den AI-Bericht im State zu speichern
+    ("generated_ai_report", None)
 ]:
     if key not in st.session_state: st.session_state[key] = default
 
@@ -76,9 +80,10 @@ def go_scouting(): st.session_state.current_page = "scouting"
 def go_comparison(): st.session_state.current_page = "comparison"
 def go_analysis(): st.session_state.current_page = "analysis"
 def go_player_comparison(): st.session_state.current_page = "player_comparison"
+def go_game_venue(): st.session_state.current_page = "game_venue" # <-- NEUER NAVIGATIONS-HELFER
 
 # ==========================================
-# SEITE 1: HOME
+# SEITE 1: HOME (AKTUALISIERT)
 # ==========================================
 def render_home():
     st.markdown("<h1 style='text-align: center;'>🏀 DBBL Scouting Suite by Sascha Rosanke</h1>", unsafe_allow_html=True)
@@ -91,6 +96,7 @@ def render_home():
         if st.button("🤼 Spielervergleich"): go_player_comparison(); st.rerun()
         if st.button("📝 Scouting Report"): go_scouting(); st.rerun()
         if st.button("🎥 Spielnachbereitung"): go_analysis(); st.rerun()
+        if st.button("📍 Spielorte"): go_game_venue(); st.rerun() # <-- NEUER BUTTON
 
 # ==========================================
 # SEITE 2: TEAMVERGLEICH
@@ -240,7 +246,7 @@ def render_player_comparison_page():
 
 
 # ==========================================
-# SEITE 3: SPIELNACHBEREITUNG (UPDATE)
+# SEITE 3: SPIELNACHBEREITUNG
 # ==========================================
 def render_analysis_page():
     st.button("🏠 Zurück zum Start", on_click=go_home)
@@ -329,7 +335,7 @@ def render_analysis_page():
                                     st.session_state["generated_ai_report"] = result_text
                             
                             # Ergebnis anzeigen
-                            if "generated_ai_report" in st.session_state:
+                            if "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is not None:
                                 st.success("Berichte erfolgreich erstellt!")
                                 st.divider()
                                 st.markdown(st.session_state["generated_ai_report"])
@@ -343,6 +349,9 @@ def render_analysis_page():
                                     file_name=f"Spielbericht_{h_n}_vs_{g_n}.txt",
                                     mime="text/plain"
                                 )
+                            elif "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is None:
+                                st.info("Kein Bericht generiert oder es gab einen Fehler. Bitte erneut versuchen.")
+
 
                         st.write("")
                         st.divider()
@@ -380,6 +389,53 @@ def render_analysis_page():
                         st.error("Konnte Spieldaten nicht laden.")
         else:
             st.warning("Keine Spiele gefunden.")
+
+# ==========================================
+# NEUE SEITE: SPIELORTE
+# ==========================================
+def render_game_venue_page():
+    st.button("🏠 Zurück zum Start", on_click=go_home)
+    st.title("📍 Spielorte der Teams")
+
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="venue_staffel")
+        teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
+        team_options = {v["name"]: k for k, v in teams_filtered.items()}
+
+    with c2:
+        selected_team_name = st.selectbox("Wähle ein Team:", list(team_options.keys()), key="venue_team_select")
+        selected_team_id = team_options[selected_team_name]
+
+    st.divider()
+
+    if selected_team_id:
+        st.subheader(f"Spielort von {selected_team_name}")
+        with st.spinner(f"Lade Spielort-Details für {selected_team_name}..."):
+            team_info = fetch_team_info_basic(selected_team_id)
+            if team_info and team_info.get("venue"):
+                venue_data = team_info.get("venue")
+                venue_name = venue_data.get("name", "Nicht verfügbar")
+                venue_address = venue_data.get("address", "Nicht verfügbar")
+                
+                st.markdown(f"**Halle:** {venue_name}")
+                st.markdown(f"**Adresse:** {venue_address}")
+
+                if venue_address != "Nicht verfügbar":
+                    # Generiere Google Maps Link
+                    # Verwende requests.utils.quote um die Adresse URL-sicher zu machen
+                    from urllib.parse import quote_plus
+                    maps_query = quote_plus(f"{venue_name}, {venue_address}")
+                    maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
+                    st.markdown(f"**Route planen:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
+                
+                # Optional Teamlogo anzeigen
+                logo_url = get_logo_url(selected_team_id, SEASON_ID)
+                if logo_url:
+                    st.image(optimize_image_base64(logo_url), width=100)
+            else:
+                st.warning("Spielort-Details konnten nicht geladen werden oder sind nicht verfügbar.")
+
 
 # ==========================================
 # SEITE 4: SCOUTING REPORT
@@ -544,10 +600,11 @@ def render_scouting_page():
         st.markdown(CSS_STYLES + st.session_state.final_html, unsafe_allow_html=True)
 
 # ==========================================
-# HAUPT STEUERUNG
+# HAUPT STEUERUNG (AKTUALISIERT)
 # ==========================================
 if st.session_state.current_page == "home": render_home()
 elif st.session_state.current_page == "scouting": render_scouting_page()
 elif st.session_state.current_page == "comparison": render_comparison_page()
 elif st.session_state.current_page == "analysis": render_analysis_page()
 elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
+elif st.session_state.current_page == "game_venue": render_game_venue_page() # <-- NEUE SEITE HIER AUFRUFEN
