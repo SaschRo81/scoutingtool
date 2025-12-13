@@ -97,35 +97,43 @@ def fetch_team_data(team_id, season_id):
             final_cols = {}
             for t, p_list in col_map.items():
                 for p in p_list:
-                    m = [c for c in df.columns if p == c] # <-- Hier p == c, um exakte Spaltennamen zu finden
-                    if m: final_cols[t] = m[0]; break # Nimm den ersten exakten Treffer
+                    m = [c for c in df.columns if p == c] 
+                    if m: final_cols[t] = m[0]; break 
             
-            # Überprüfen, ob die Spalten tatsächlich existieren, bevor darauf zugegriffen wird
             fn_col = final_cols.get("firstname")
             ln_col = final_cols.get("lastname")
             sn_col = final_cols.get("shirtnumber")
             id_col = final_cols.get("id")
 
-            df["NAME_FULL"] = ((df[fn_col].fillna("") if fn_col else "") + " " + (df[ln_col].fillna("") if ln_col else "")).str.strip()
-            df["NR"] = df[sn_col].fillna("-").astype(str).str.replace(".0", "", regex=False) if sn_col else "-"
-            df["PLAYER_ID"] = df[id_col].astype(str) if id_col else ""
+            # KORRIGIERTER BEREICH: Sicherstellen, dass immer Series-Objekte verwendet werden
+            firstname_series = df[fn_col].fillna("") if fn_col and fn_col in df.columns else pd.Series([""] * len(df), index=df.index)
+            lastname_series = df[ln_col].fillna("") if ln_col and ln_col in df.columns else pd.Series([""] * len(df), index=df.index)
+
+            df["NAME_FULL"] = (firstname_series + " " + lastname_series).str.strip()
+
+            df["NR"] = df[sn_col].fillna("-").astype(str).str.replace(".0", "", regex=False) if sn_col and sn_col in df.columns else pd.Series(["-"] * len(df), index=df.index)
+            df["PLAYER_ID"] = df[id_col].astype(str) if id_col and id_col in df.columns else pd.Series([""] * len(df), index=df.index)
             
             def get_v(k): 
                 col_name = final_cols.get(k)
                 if col_name and col_name in df.columns:
                     return pd.to_numeric(df[col_name], errors="coerce").fillna(0)
-                return pd.Series([0.0]*len(df))
+                return pd.Series([0.0]*len(df), index=df.index) # Wichtig: Gleicher Index für Series-Operationen
             
             def pct(v): 
-                return round(v*100, 1) if v <= 1 and v > 0 else round(v, 1) # Verbessert: Behandle 0% und Werte > 1
+                return round(v*100, 1) if v <= 1 and v > 0 else round(v, 1) 
             
             df["GP"] = get_v("gp").replace(0,1)
             min_raw = get_v("min_sec"); sec_total = get_v("sec_total")
             
-            # Sicherstellen, dass wir nicht durch Null teilen
             df["MIN_FINAL"] = min_raw
-            mask_zero = (df["MIN_FINAL"] <= 0) & (df["GP"] > 0) # Nur für Spieler, die gespielt haben
-            df.loc[mask_zero, "MIN_FINAL"] = sec_total[mask_zero] / df.loc[mask_zero, "GP"]
+            mask_zero = (df["MIN_FINAL"] <= 0) & (df["GP"] > 0) 
+            # Sicherstellen, dass df.loc eine Series von gleicher Länge zurückgibt
+            if not df.loc[mask_zero, "GP"].empty:
+                df.loc[mask_zero, "MIN_FINAL"] = sec_total[mask_zero] / df.loc[mask_zero, "GP"]
+            else: # Fallback, falls keine Spieler die Bedingung erfüllen
+                 df["MIN_FINAL"] = df["MIN_FINAL"].replace(0,0) # Keine Änderung
+
             df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
             
             df["PPG"] = get_v("ppg"); df["TOT"] = get_v("tot")
@@ -135,7 +143,9 @@ def fetch_team_data(team_id, season_id):
             
             total_made_fg = df["2M"] + df["3M"]
             total_att_fg = df["2A"] + df["3A"]
-            df["FG%"] = (total_made_fg / total_att_fg * 100).fillna(0).round(1) if not total_att_fg.empty else pd.Series([0.0]*len(df))
+            
+            # Vermeide Division durch Null für FG%
+            df["FG%"] = (total_made_fg / total_att_fg * 100).fillna(0).round(1) if not total_att_fg.empty and (total_att_fg != 0).any() else pd.Series([0.0]*len(df), index=df.index)
             
             df["DR"] = get_v("dr"); df["OR"] = get_v("or"); df["AS"] = get_v("as")
             df["TO"] = get_v("to"); df["ST"] = get_v("st"); df["PF"] = get_v("pf"); df["BS"] = get_v("bs")
@@ -156,7 +166,7 @@ def fetch_team_data(team_id, season_id):
     except Exception as e:
         print(f"DEBUG: Unerwarteter Fehler in fetch_team_data für Team {team_id}, Saison {season_id}: {e}")
         import traceback
-        traceback.print_exc() # Dies gibt den vollständigen Stacktrace in die Logs aus
+        traceback.print_exc() 
         st.error(f"Ein unerwarteter Fehler ist aufgetreten: {e}. Bitte kontaktieren Sie den Entwickler.")
         return None, None
 
@@ -186,7 +196,6 @@ def fetch_schedule(team_id, season_id):
                 date_display = raw_date
                 if raw_date:
                     try:
-                        # Achten Sie darauf, dass datetime und pytz korrekt importiert sind
                         dt_utc = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
                         berlin = pytz.timezone("Europe/Berlin")
                         dt_berlin = dt_utc.astimezone(berlin)
@@ -210,8 +219,8 @@ def fetch_schedule(team_id, season_id):
                     "guest": guest_name,
                     "score": score_str,
                     "stage": stage_name,
-                    "homeTeamId": home_val.get("teamId"), # Team-ID des Heimteams hinzufügen
-                    "guestTeamId": guest_val.get("teamId") # Team-ID des Gastteams hinzufügen
+                    "homeTeamId": home_val.get("teamId"), 
+                    "guestTeamId": guest_val.get("teamId") 
                 })
             return clean_games
     except requests.exceptions.RequestException as e:
@@ -306,10 +315,8 @@ def fetch_team_info_basic(team_id):
     all_games = fetch_schedule(team_id, SEASON_ID) 
     
     if all_games:
-        # Filter nach Heimspielen des aktuellen Teams (team_id ist ein String!)
         home_games = [g for g in all_games if str(g.get("homeTeamId")) == str(team_id)]
         
-        # Sortiere nach Datum, um die neuesten Spiele zuerst zu haben
         home_games_sorted = sorted(home_games, 
                                    key=lambda x: datetime.strptime(x['date'], "%Y-%m-%d %H:%M"), 
                                    reverse=True)
