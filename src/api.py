@@ -189,17 +189,35 @@ def fetch_game_details(game_id):
 def fetch_team_info_basic(team_id):
     """
     Lädt grundlegende Teaminformationen inklusive Spielort-Details.
-    Verwendet api-1.dbbl.scb.world, da diese Subdomain oft umfassendere Teamdetails liefert.
+    Verwendet api-s.dbbl.scb.world/teams/{team_id} und extrahiert die Hauptspielstätte.
     """
-    url = f"https://api-1.dbbl.scb.world/teams/{team_id}" 
+    url = f"https://api-s.dbbl.scb.world/teams/{team_id}" 
     
     try:
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
-            return resp.json()
+            team_data = resp.json()
+            # Durchsuche die "venues"-Liste nach der Hauptspielstätte
+            main_venue = None
+            if "venues" in team_data and isinstance(team_data["venues"], list):
+                for venue in team_data["venues"]:
+                    if venue.get("isMain"):
+                        main_venue = venue
+                        break
+                # Wenn keine Hauptspielstätte gefunden, nimm die erste (falls vorhanden)
+                if not main_venue and team_data["venues"]:
+                    main_venue = team_data["venues"][0]
+            
+            # Rückgabe eines dicts, das wie das alte "venue" Objekt aussieht
+            # oder None, wenn keine Spielstätte gefunden wurde
+            if main_venue:
+                return {"id": team_data.get("id"), "venue": main_venue}
+            else:
+                return {"id": team_data.get("id"), "venue": None} # Team-ID zurückgeben, aber keine Venue
         else:
-            st.error(f"Fehler beim Laden der Basis-Teaminformationen für Team-ID {team_id}. Status: {resp.status_code}")
+            # st.error(f"Fehler beim Laden der Basis-Teaminformationen für Team-ID {team_id}. Status: {resp.status_code}") # Kommentar aus, da es auf der UI angezeigt wird
             return None
     except Exception as e:
-        st.error(f"Ausnahme beim Laden der Basis-Teaminformationen für Team-ID {team_id}: {e}")
+        # st.error(f"Ausnahme beim Laden der Basis-Teaminformationen für Team-ID {team_id}: {e}") # Kommentar aus, da es auf der UI angezeigt wird
+        pass
     return None
