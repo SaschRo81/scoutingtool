@@ -5,7 +5,7 @@ import pandas as pd
 import datetime
 import base64
 import altair as alt
-from urllib.parse import quote_plus # <-- Hinzugefügt für Google Maps Link
+from urllib.parse import quote_plus # <-- Hinzugefügt für Google Maps Link, korrekt platziert
 
 # Externe Imports prüfen
 try:
@@ -71,7 +71,7 @@ for key, default in [
         {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"},
     ])),
     ("selected_game_id", None),
-    ("generated_ai_report", None) 
+    ("generated_ai_report", None)
 ]:
     if key not in st.session_state: st.session_state[key] = default
 
@@ -290,7 +290,7 @@ def render_analysis_page():
                         box["referee3"] = details.get("referee3")
                         box["scheduledTime"] = details.get("scheduledTime")
                         box["attendance"] = details.get("result", {}).get("spectators")
-                        box["id"] = details.get("id") # <-- HIER WURDE DIE ZEILE HINZUGEFÜGT!
+                        box["id"] = details.get("id") # <-- Game ID wird hier korrekt übernommen
                         
                         render_game_header(box)
                         
