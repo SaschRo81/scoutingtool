@@ -579,3 +579,37 @@ def run_openai_generation(api_key, prompt):
         return response.choices[0].message.content
     except Exception as e:
         return f"Fehler bei der API-Abfrage: {str(e)}"
+# ... innerhalb von render_analysis_page, nach render_game_header(box) ...
+
+# IMPORTIEREN (falls noch nicht oben geschehen)
+from src.analysis_ui import generate_complex_ai_prompt, generate_game_summary
+
+# --- ANZEIGE BERICHTE ---
+st.markdown("### 📝 Spielberichte & KI-Generator")
+
+tab_simple, tab_ai = st.tabs(["⚡ Kurzbericht (Direkt)", "🤖 Profi-Bericht (KI-Prompt)"])
+
+with tab_simple:
+    # Der einfache, regelbasierte Bericht (wie zuvor)
+    report_text = generate_game_summary(box)
+    st.markdown(report_text)
+    st.caption("Dies ist ein automatisch generierter Kurzbericht basierend auf Regeln.")
+
+with tab_ai:
+    st.info("💡 **Anleitung:** Kopiere den folgenden Textblock und füge ihn in **ChatGPT**, **Claude** oder **DeepSeek** ein. Der Prompt enthält bereits alle Statistiken dieses Spiels und deine detaillierten SEO-Vorgaben.")
+    
+    # Prompt generieren
+    ai_prompt = generate_complex_ai_prompt(box)
+    
+    # Textarea zum Kopieren (st.code macht das Kopieren sehr einfach mit einem Klick oben rechts)
+    st.code(ai_prompt, language="text")
+    
+    st.markdown("""
+    **Vorteil dieser Methode:**
+    * Du erhältst echte journalistische Qualität (3000+ Zeichen).
+    * SEO-Optimierung wird perfekt umgesetzt.
+    * Du musst keine Statistiken abtippen – alles ist im Prompt enthalten.
+    """)
+
+st.write("")
+# ... weiter mit dem Code (h_name = get_team_name...) ...
