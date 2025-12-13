@@ -1,550 +1,581 @@
-# --- START OF FILE app.py ---
-
 import streamlit as st
 import pandas as pd
-import datetime
-import base64
 import altair as alt
-import openai
+from datetime import datetime
+import pytz
+import openai # <-- NEUER IMPORT HIER OBEN HINZUFÜGEN!
 
-# Externe Imports prüfen
-try:
-    import pdfkit
-    HAS_PDFKIT = True
-except ImportError:
-    HAS_PDFKIT = False
+def safe_int(val):
+    if val is None: return 0
+    if isinstance(val, int): return val
+    if isinstance(val, float): return int(val)
+    if isinstance(val, str):
+        if val.strip() == "": return 0
+        try: return int(float(val))
+        except: return 0
+    return 0
 
-# Module aus SRC
-from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-from src.utils import get_logo_url, optimize_image_base64
-from src.api import fetch_team_data, get_player_metadata_cached, fetch_schedule, fetch_game_boxscore, fetch_game_details
-from src.html_gen import (
-    generate_header_html, generate_top3_html, generate_card_html, 
-    generate_team_stats_html, generate_custom_sections_html,
-    generate_comparison_html
-)
-from src.state_manager import export_session_state, load_session_state
+def get_team_name(team_data, default_name="Team"):
+    name = team_data.get("gameStat", {}).get("seasonTeam", {}).get("name")
+    if name: return name
+    name = team_data.get("seasonTeam", {}).get("name")
+    if name: return name
+    name = team_data.get("name")
+    if name: return name
+    return default_name
 
-# HIER WURDEN DIE NEUEN FUNKTIONEN HINZUGEFÜGT:
-from src.analysis_ui import (
-    render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
-    get_team_name, render_game_top_performers, generate_game_summary,
-    generate_complex_ai_prompt, run_openai_generation
-)
+def format_date_time(iso_string):
+    if not iso_string: return "-"
+    try:
+        dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+        berlin = pytz.timezone("Europe/Berlin")
+        dt_berlin = dt.astimezone(berlin)
+        return dt_berlin.strftime("%d.%m.%Y | %H:%M Uhr")
+    except:
+        return iso_string
 
-st.set_page_config(page_title=f"DBBL Scouting Suite {VERSION}", layout="wide", page_icon="🏀")
+def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
+    stats = {
+        "h_lead": 0, "g_lead": 0, "h_run": 0, "g_run": 0,
+        "h_paint": 0, "g_paint": 0, "h_2nd": 0, "g_2nd": 0, "h_fb": 0, "g_fb": 0
+    }
+    if not actions: return stats
 
-# --- SESSION STATE ---
-for key, default in [
-    ("current_page", "home"),
-    ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
-    ("roster_df", None), ("team_stats", None), ("game_meta", {}),
-    ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
-    ("facts_offense", pd.DataFrame([
-        {"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"},
-        {"Fokus": "Spacing", "Beschreibung": "swing or skip the ball to get it inside"},
-        {"Fokus": "Rules", "Beschreibung": "Stick to our offense rules"},
-        {"Fokus": "Automatics", "Beschreibung": "use cuts and shifts to get movement on court"},
-        {"Fokus": "Share", "Beschreibung": "the ball / always look for an extra pass"},
-        {"Fokus": "Set Offense", "Beschreibung": "look inside a lot"},
-        {"Fokus": "Pick´n Roll", "Beschreibung": "watch out for the half rol against the hetch"},
-        {"Fokus": "Pace", "Beschreibung": "Execution over speed, take care of the ball"},
-    ])),
-    ("facts_defense", pd.DataFrame([
-        {"Fokus": "Rebound", "Beschreibung": "box out!"},
-        {"Fokus": "Transition", "Beschreibung": "Slow the ball down! Pick up the ball early!"},
-        {"Fokus": "Communication", "Beschreibung": "Talk on positioning, helpside & on screens"},
-        {"Fokus": "Positioning", "Beschreibung": "close the middle on close outs and drives"},
-        {"Fokus": "Pick´n Roll", "Beschreibung": "red (yellow, last 8 sec. from shot clock)"},
-        {"Fokus": "DHO", "Beschreibung": "aggressive switch - same size / gap - small and big"},
-        {"Fokus": "Offball screens", "Beschreibung": "yellow"},
-    ])),
-    ("facts_about", pd.DataFrame([
-        {"Fokus": "Be ready for wild caotic / a lot of 1-1 and shooting", "Beschreibung": ""},
-        {"Fokus": "Stay ready no matter what happens", "Beschreibung": "Don’t be bothered by calls/no calls"},
-        {"Fokus": "No matter what the score is, we always give 100%.", "Beschreibung": ""},
-        {"Fokus": "Together", "Beschreibung": "Fight for & trust in each other!"},
-        {"Fokus": "Take care of the ball", "Beschreibung": "no easy turnovers to prevent easy fastbreaks!"},
-        {"Fokus": "Halfcourt", "Beschreibung": "Take responsibility! Stop them as a team!"},
-        {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"},
-    ])),
-    ("selected_game_id", None)
-]:
-    if key not in st.session_state: st.session_state[key] = default
+    cur_h = 0; cur_g = 0
+    run_team = None; run_score = 0
+    hid_str = str(home_id)
 
-# --- NAVIGATIONS-HELFER ---
-def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
-def go_scouting(): st.session_state.current_page = "scouting"
-def go_comparison(): st.session_state.current_page = "comparison"
-def go_analysis(): st.session_state.current_page = "analysis"
-def go_player_comparison(): st.session_state.current_page = "player_comparison"
+    for act in actions:
+         new_h = safe_int(act.get("homeTeamPoints"))
+         new_g = safe_int(act.get("guestTeamPoints"))
+         pts_h = new_h - cur_h
+         pts_g = new_g - cur_g
+         
+         if pts_h > 0:
+             if run_team == "home": run_score += pts_h
+             else: run_team = "home"; run_score = pts_h
+             if run_score > stats["h_run"]: stats["h_run"] = run_score
+         elif pts_g > 0:
+             if run_team == "guest": run_score += pts_g
+             else: run_team = "guest"; run_score = pts_g
+             if run_score > stats["g_run"]: stats["g_run"] = run_score
 
-# ==========================================
-# SEITE 1: HOME
-# ==========================================
-def render_home():
-    st.markdown("<h1 style='text-align: center;'>🏀 DBBL Scouting Suite by Sascha Rosanke</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align: center; color: gray;'>Version {VERSION}</p>", unsafe_allow_html=True)
-    st.write(""); st.write("")
-    c1, c2, c3 = st.columns([3, 2, 3])
-    with c2:
-        st.markdown("<style>div.stButton > button:first-child { width: 100%; height: 3em; font-size: 18px; margin-bottom: 10px; }</style>", unsafe_allow_html=True)
-        if st.button("📊 Teamvergleich"): go_comparison(); st.rerun()
-        if st.button("🤼 Spielervergleich"): go_player_comparison(); st.rerun()
-        if st.button("📝 Scouting Report"): go_scouting(); st.rerun()
-        if st.button("🎥 Spielnachbereitung"): go_analysis(); st.rerun()
+         pts_total = pts_h + pts_g
+         if pts_total > 0:
+             act_tid = str(act.get("seasonTeamId", ""))
+             is_home_action = (act_tid == hid_str) if act_tid else (pts_h > 0)
+             qualifiers = act.get("qualifiers", [])
+             if isinstance(qualifiers, str): qualifiers = [qualifiers]
+             q_str = " ".join([str(x).lower() for x in qualifiers])
+             type_str = str(act.get("type", "")).lower()
+             
+             if "fastbreak" in q_str or "fastbreak" in type_str:
+                 if is_home_action: stats["h_fb"] += pts_total
+                 else: stats["g_fb"] += pts_total
+             if "paint" in q_str or "inside" in q_str or "layup" in type_str:
+                 if is_home_action: stats["h_paint"] += pts_total
+                 else: stats["g_paint"] += pts_total
+             if "second" in q_str or "2nd" in q_str:
+                 if is_home_action: stats["h_2nd"] += pts_total
+                 else: stats["g_2nd"] += pts_total
 
-# ==========================================
-# SEITE 2: TEAMVERGLEICH
-# ==========================================
-def render_comparison_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("📊 Head-to-Head Vergleich")
-    c1, c2, c3 = st.columns([1, 2, 2])
-    with c1: 
-        staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="comp_staffel")
-        teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-        team_options = {v["name"]: k for k, v in teams_filtered.items()}
-    with c2:
-        home_name = st.selectbox("Heim:", list(team_options.keys()), 0, key="comp_home")
-        home_id = team_options[home_name]
-        st.image(optimize_image_base64(get_logo_url(home_id, SEASON_ID)), width=60)
-    with c3:
-        guest_name = st.selectbox("Gast:", list(team_options.keys()), 1, key="comp_guest")
-        guest_id = team_options[guest_name]
-        st.image(optimize_image_base64(get_logo_url(guest_id, SEASON_ID)), width=60)
-    st.divider()
-    if st.button("Vergleich starten", type="primary"):
-        with st.spinner("Lade Daten..."):
-            _, ts_home = fetch_team_data(home_id, SEASON_ID)
-            _, ts_guest = fetch_team_data(guest_id, SEASON_ID)
-            if ts_home and ts_guest:
-                comp_html = generate_comparison_html(ts_home, ts_guest, home_name, guest_name)
-                st.markdown(comp_html, unsafe_allow_html=True)
-            else:
-                st.error("Daten nicht verfügbar.")
+         diff = new_h - new_g
+         if diff > 0 and diff > stats["h_lead"]: stats["h_lead"] = diff
+         if diff < 0 and abs(diff) > stats["g_lead"]: stats["g_lead"] = abs(diff)
+         cur_h = new_h; cur_g = new_g
 
-# ==========================================
-# SEITE: SPIELERVERGLEICH
-# ==========================================
-def render_player_comparison_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("🤼 Head-to-Head Spielervergleich")
+    return stats
 
-    # Auswahlbereich
-    col_left, col_mid, col_right = st.columns([1, 0.1, 1])
-
-    # --- LINKE SEITE (SPIELER A) ---
-    with col_left:
-        st.subheader("Spieler A")
-        staffel_a = st.radio("Staffel A", ["Süd", "Nord"], horizontal=True, key="pc_s_a")
-        teams_a = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel_a}
-        t_name_a = st.selectbox("Team", list({v["name"]: k for k, v in teams_a.items()}.keys()), key="pc_t_a")
-        tid_a = {v["name"]: k for k, v in teams_a.items()}[t_name_a]
-        
-        df_a, _ = fetch_team_data(tid_a, SEASON_ID)
-        
-        if df_a is not None:
-            p_opts_a = df_a["NAME_FULL"].tolist()
-            p_name_a = st.selectbox("Spieler", p_opts_a, key="pc_p_a")
-            row_a = df_a[df_a["NAME_FULL"] == p_name_a].iloc[0]
-            
-            meta_a = get_player_metadata_cached(row_a["PLAYER_ID"])
-            if meta_a["img"]:
-                st.image(meta_a["img"], width=150)
-        else:
-            st.error("Daten nicht geladen")
-            row_a = None
-
-    with col_mid:
-        st.write("") 
-
-    # --- RECHTE SEITE (SPIELER B) ---
-    with col_right:
-        st.subheader("Spieler B")
-        staffel_b = st.radio("Staffel B", ["Süd", "Nord"], horizontal=True, key="pc_s_b")
-        teams_b = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel_b}
-        t_name_b = st.selectbox("Team", list({v["name"]: k for k, v in teams_b.items()}.keys()), key="pc_t_b")
-        tid_b = {v["name"]: k for k, v in teams_b.items()}[t_name_b]
-        
-        df_b, _ = fetch_team_data(tid_b, SEASON_ID)
-        
-        if df_b is not None:
-            p_opts_b = df_b["NAME_FULL"].tolist()
-            p_name_b = st.selectbox("Spieler", p_opts_b, key="pc_p_b")
-            row_b = df_b[df_b["NAME_FULL"] == p_name_b].iloc[0]
-            
-            meta_b = get_player_metadata_cached(row_b["PLAYER_ID"])
-            if meta_b["img"]:
-                st.image(meta_b["img"], width=150)
-        else:
-            row_b = None
-
-    st.divider()
-
-    # --- VERGLEICH ---
-    if row_a is not None and row_b is not None:
-        metrics = [
-            ("Spiele (GP)", "GP", int),
-            ("Punkte (PPG)", "PPG", float),
-            ("Minuten", "MIN_DISPLAY", str),
-            ("FG %", "FG%", float),
-            ("3er %", "3PCT", float),
-            ("Freiwurf %", "FTPCT", float),
-            ("Rebounds (RPG)", "TOT", float),
-            ("Assists (APG)", "AS", float),
-            ("Turnovers (TO)", "TO", float),
-            ("Steals (ST)", "ST", float),
-            ("Blocks (BS)", "BS", float),
-            ("Fouls (PF)", "PF", float)
-        ]
-
-        # Header Namen
-        h1, h2, h3 = st.columns([1, 1, 1])
-        h1.markdown(f"<h3 style='text-align: right; color: #333;'>{p_name_a}</h3>", unsafe_allow_html=True)
-        h2.markdown(f"<div style='text-align: center; font-weight: bold; padding-top: 10px; color: #999;'>VS</div>", unsafe_allow_html=True)
-        h3.markdown(f"<h3 style='text-align: left; color: #333;'>{p_name_b}</h3>", unsafe_allow_html=True)
-        st.write("")
-
-        # Zeilenweise Ausgabe
-        for label, col, dtype in metrics:
-            val_a = row_a[col]
-            val_b = row_b[col]
-
-            # Style Logic: Better value gets bold + slightly bigger
-            style_a = "color: #444;"
-            style_b = "color: #444;"
-            
-            if dtype in [int, float]:
-                try:
-                    va = float(val_a)
-                    vb = float(val_b)
-                    # Turnovers und Fouls: Weniger ist besser
-                    if col in ["TO", "PF"]:
-                        if va < vb: style_a = "font-weight: bold; color: #000; font-size: 1.1em;"
-                        elif vb < va: style_b = "font-weight: bold; color: #000; font-size: 1.1em;"
-                    else:
-                        if va > vb: style_a = "font-weight: bold; color: #000; font-size: 1.1em;"
-                        elif vb > va: style_b = "font-weight: bold; color: #000; font-size: 1.1em;"
-                except:
-                    pass
-
-            # Layout: Spalte 1 (Wert A) | Spalte 2 (Label) | Spalte 3 (Wert B)
-            c1, c2, c3 = st.columns([1, 1.5, 1])
-            
-            with c1:
-                st.markdown(f"<div style='text-align: right; padding: 5px; {style_a}'>{val_a}</div>", unsafe_allow_html=True)
-            with c2:
-                # Kategorie zentriert mit leichtem Hintergrund oder Rahmen
-                st.markdown(f"<div style='text-align: center; background-color: #f8f9fa; padding: 5px; border-radius: 5px; color: #666; font-size: 0.9em;'>{label}</div>", unsafe_allow_html=True)
-            with c3:
-                st.markdown(f"<div style='text-align: left; padding: 5px; {style_b}'>{val_b}</div>", unsafe_allow_html=True)
-
-
-# ==========================================
-# SEITE 3: SPIELNACHBEREITUNG (UPDATE)
-# ==========================================
-def render_analysis_page():
-    st.button("🏠 Zurück zum Start", on_click=go_home)
-    st.title("🎥 Spielnachbereitung")
+def render_game_header(details):
+    h_data = details.get("homeTeam", {})
+    g_data = details.get("guestTeam", {})
+    h_name = get_team_name(h_data, "Heim")
+    g_name = get_team_name(g_data, "Gast")
     
-    c1, c2 = st.columns([1, 2])
+    res = details.get("result", {})
+    score_h = res.get("homeTeamFinalScore", 0)
+    score_g = res.get("guestTeamFinalScore", 0)
+    
+    time_str = format_date_time(details.get("scheduledTime"))
+    venue = details.get("venue", {})
+    venue_str = venue.get("name", "-")
+    address = venue.get("address", "")
+    if address and isinstance(address, str):
+        parts = address.split(",")
+        if len(parts) > 1: venue_str += f", {parts[-1].strip()}"
+
+    refs = []
+    for i in range(1, 4):
+        r = details.get(f"referee{i}")
+        if r and isinstance(r, dict):
+             fn = r.get("firstName", ""); ln = r.get("lastName", "")
+             if fn or ln: refs.append(f"{ln} {fn}".strip())
+             elif r.get("refId"): refs.append(f"Ref#{r.get('refId')}")
+    ref_str = ", ".join(refs) if refs else "-"
+    att = res.get("spectators", "-")
+    
+    st.markdown(f"<div style='text-align: center; color: #666; margin-bottom: 10px; font-size: 1.1em;'>📍 {venue_str} | 🕒 {time_str}</div>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([2, 1, 2])
     with c1:
-        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
-        teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-        team_options = {v["name"]: k for k, v in teams_filtered.items()}
+        st.markdown(f"## {h_name}")
     with c2:
-        my_team_name = st.selectbox("Dein Team:", list(team_options.keys()), key="ana_team")
-        my_team_id = team_options[my_team_name]
-
-    if my_team_id:
-        games = fetch_schedule(my_team_id, SEASON_ID)
-        if games:
-            game_opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in games}
-            selected_label = st.selectbox("Wähle ein Spiel:", list(game_opts.keys()), key="ana_game_select")
-            selected_id = game_opts[selected_label]
-            
-            if st.button("Analyse laden", type="primary"):
-                st.session_state.selected_game_id = selected_id
-                
-            if st.session_state.selected_game_id == selected_id:
-                st.divider()
-                
-                with st.spinner("Lade Boxscore & Details..."):
-                    box = fetch_game_boxscore(selected_id)
-                    details = fetch_game_details(selected_id)
-                    
-                    if box and details:
-                        box["venue"] = details.get("venue")
-                        box["result"] = details.get("result")
-                        box["referee1"] = details.get("referee1")
-                        box["referee2"] = details.get("referee2")
-                        box["referee3"] = details.get("referee3")
-                        box["scheduledTime"] = details.get("scheduledTime")
-                        box["attendance"] = details.get("result", {}).get("spectators")
-                        
-                        render_game_header(box)
-                        
-                        # --- NEUE SEKTION: SPIELBERICHTE & KI ---
-                        st.markdown("### 📝 Spielberichte & KI-Generator")
-
-                        tab_simple, tab_prompt, tab_auto = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "🤖 Automatisch (API)"])
-
-                        # TAB 1: Einfacher Regel-Bericht
-                        with tab_simple:
-                            report_text = generate_game_summary(box)
-                            st.markdown(report_text)
-                            st.caption("Regelbasierter Kurzbericht.")
-
-                        # TAB 2: Prompt zum Kopieren (Backup)
-                        with tab_prompt:
-                            st.info("Falls du keinen API Key hast, kopiere diesen Text in ChatGPT:")
-                            ai_prompt = generate_complex_ai_prompt(box)
-                            st.code(ai_prompt, language="text")
-
-                        # TAB 3: Die neue Automatik mit OpenAI API
-                        with tab_auto:
-                            st.write("Generiere die ausführlichen SEO-Artikel direkt hier mit deinem OpenAI Key.")
-                            
-                            # API Key aus Secrets laden oder Eingabefeld nutzen
-                            default_key = st.secrets.get("OPENAI_API_KEY", "")
-                            user_api_key = st.text_input("OpenAI API Key:", value=default_key, type="password", key="openai_key_input")
-                            
-                            col_gen, col_info = st.columns([1, 3])
-                            
-                            if col_gen.button("🚀 Berichte generieren", type="primary"):
-                                if not user_api_key:
-                                    st.error("Bitte API Key eingeben (oder in secrets.toml hinterlegen).")
-                                else:
-                                    # 1. Prompt bauen
-                                    full_prompt = generate_complex_ai_prompt(box)
-                                    
-                                    # 2. API aufrufen (mit Ladebalken)
-                                    with st.spinner("Die KI schreibt gerade die Artikel... (das kann ca. 30-60 Sekunden dauern)"):
-                                        result_text = run_openai_generation(user_api_key, full_prompt)
-                                    
-                                    # 3. Ergebnis speichern
-                                    st.session_state["generated_ai_report"] = result_text
-                            
-                            # Ergebnis anzeigen
-                            if "generated_ai_report" in st.session_state:
-                                st.success("Berichte erfolgreich erstellt!")
-                                st.divider()
-                                st.markdown(st.session_state["generated_ai_report"])
-                                
-                                # Download Button
-                                h_n = get_team_name(box.get("homeTeam", {}), "Heim").replace(" ", "_")
-                                g_n = get_team_name(box.get("guestTeam", {}), "Gast").replace(" ", "_")
-                                st.download_button(
-                                    label="📄 Text herunterladen (.txt)",
-                                    data=st.session_state["generated_ai_report"],
-                                    file_name=f"Spielbericht_{h_n}_vs_{g_n}.txt",
-                                    mime="text/plain"
-                                )
-
-                        st.write("")
-                        st.divider()
-
-                        # Rest der Analyse Seite
-                        h_name = get_team_name(box.get("homeTeam", {}), "Heim")
-                        g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-                        h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
-                        g_coach = box.get("guestTeam", {}).get("headCoachName", "-")
-                        
-                        render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name, h_coach)
-                        st.write("")
-                        render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name, g_coach)
-                        
-                        st.divider()
-                        
-                        render_game_top_performers(box)
-                        st.divider()
-
-                        render_charts_and_stats(box)
-                        
-                    elif box:
-                         render_game_header(box)
-                         st.error("Details (Schiris/Viertel) konnten nicht geladen werden.")
-                         h_name = get_team_name(box.get("homeTeam", {}), "Heim")
-                         g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-                         render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name)
-                         render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name)
-
-                    elif details:
-                         render_game_header(details)
-                         st.info("Noch keine Spieler-Statistiken verfügbar.")
-                    else:
-                        st.error("Konnte Spieldaten nicht laden.")
-        else:
-            st.warning("Keine Spiele gefunden.")
-
-# ==========================================
-# SEITE 4: SCOUTING REPORT
-# ==========================================
-def render_scouting_page():
-    target = None 
-    
-    if not st.session_state.print_mode:
-        c_home, c_head = st.columns([1, 5])
-        with c_home: st.button("🏠 Home", on_click=go_home)
-        with c_head: st.title(f"📝 Scouting")
-
-        with st.sidebar:
-            st.header("💾 Spielstand")
-            uploaded_state = st.file_uploader("Laden (JSON)", type=["json"])
-            if uploaded_state and st.button("Daten wiederherstellen"):
-                success, msg = load_session_state(uploaded_state)
-                if success: st.success("✅ " + msg)
-                else: st.error(msg)
-            st.divider()
-            if st.session_state.roster_df is not None:
-                save_name = f"Save_{datetime.date.today()}.json"
-                st.download_button("💾 Speichern", export_session_state(), save_name, "application/json")
-
-        st.subheader("1. Spieldaten")
-        c1, c2, c3 = st.columns([1, 2, 2])
-        with c1: 
-            staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="scout_staffel")
-            teams_filtered = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-            team_options = {v["name"]: k for k, v in teams_filtered.items()}
-        with c2:
-            home_name = st.selectbox("Heim:", list(team_options.keys()), 0, key="sel_home")
-            home_id = team_options[home_name]
-            if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != home_name:
-                 st.session_state.logo_h = optimize_image_base64(get_logo_url(home_id, SEASON_ID))
-            st.image(st.session_state.logo_h, width=80)
-        with c3:
-            guest_name = st.selectbox("Gast:", list(team_options.keys()), 1, key="sel_guest")
-            guest_id = team_options[guest_name]
-            if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != guest_name:
-                 st.session_state.logo_g = optimize_image_base64(get_logo_url(guest_id, SEASON_ID))
-            st.image(st.session_state.logo_g, width=80)
-
-        st.write("---")
-        target = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, key="sel_target")
-        tid = guest_id if target == "Gastteam (Gegner)" else home_id
-        
-        c_d, c_t = st.columns(2)
-        d_inp = c_d.date_input("Datum", datetime.date.today(), key="scout_date")
-        t_inp = c_t.time_input("Tip-Off", datetime.time(16,0), key="scout_time")
-
-        st.divider()
-        data_ready = st.session_state.roster_df is not None and st.session_state.get("current_tid") == tid
-        
-        if st.button(f"2. Kader von {target} laden", type="primary") or data_ready:
-            if not data_ready:
-                with st.spinner(f"Lade Daten für Team {tid}..."):
-                    df, ts = fetch_team_data(tid, SEASON_ID)
-                    if df is not None:
-                        st.session_state.roster_df = df
-                        st.session_state.team_stats = ts
-                        st.session_state.current_tid = tid 
-                    else: st.error(f"Fehler API.")
-            
-            st.session_state.game_meta = {
-                "home_name": home_name, "home_logo": st.session_state.logo_h,
-                "guest_name": guest_name, "guest_logo": st.session_state.logo_g,
-                "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M")
-            }
-
-    if st.session_state.roster_df is not None:
-        st.subheader("3. Auswahl & Notizen")
-        cols = {
-            "select": st.column_config.CheckboxColumn("Auswahl", default=False, width="small"),
-            "NR": st.column_config.TextColumn("#", width="small"),
-            "NAME_FULL": st.column_config.TextColumn("Name"),
-            "GP": st.column_config.NumberColumn("GP", format="%d"),
-            "PPG": st.column_config.NumberColumn("PPG", format="%.1f"),
-            "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
-            "TOT": st.column_config.NumberColumn("REB", format="%.1f")
+        st.markdown(f"<h1 style='text-align: center;'>{score_h} : {score_g}</h1>", unsafe_allow_html=True)
+        q_data = {
+            "Q1": [res.get("homeTeamQ1Score",0), res.get("guestTeamQ1Score",0)],
+            "Q2": [res.get("homeTeamQ2Score",0), res.get("guestTeamQ2Score",0)],
+            "Q3": [res.get("homeTeamQ3Score",0), res.get("guestTeamQ3Score",0)],
+            "Q4": [res.get("homeTeamQ4Score",0), res.get("guestTeamQ4Score",0)]
         }
-        edited = st.data_editor(st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], 
-            column_config=cols, disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], hide_index=True, key="player_selector")
-        sel_idx = edited[edited["select"]].index
+        if res.get("homeTeamOT1Score", 0) > 0 or res.get("guestTeamOT1Score", 0) > 0:
+             q_data["OT"] = [res.get("homeTeamOT1Score",0), res.get("guestTeamOT1Score",0)]
+        
+        q_html = "<table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 auto; text-align:center;'>"
+        q_html += "<tr style='border-bottom:1px solid #ddd;'><th></th>" + "".join([f"<th>{k}</th>" for k in q_data.keys()]) + "</tr>"
+        q_html += f"<tr><td style='font-weight:bold;'>{h_name[:3].upper()}</td>" + "".join([f"<td>{v[0]}</td>" for v in q_data.values()]) + "</tr>"
+        q_html += f"<tr><td style='font-weight:bold;'>{g_name[:3].upper()}</td>" + "".join([f"<td>{v[1]}</td>" for v in q_data.values()]) + "</tr>"
+        q_html += "</table>"
+        st.markdown(q_html, unsafe_allow_html=True)
 
-        if len(sel_idx) > 0:
-            st.divider()
-            with st.form("scouting_form"):
-                selection = st.session_state.roster_df.loc[sel_idx]
-                form_res = []
-                c_map = {"Grau": "#999999", "Grün": "#5c9c30", "Rot": "#d9534f"}
-                for _, r in selection.iterrows():
-                    pid = r["PLAYER_ID"]
-                    c_h, c_c = st.columns([3, 1])
-                    c_h.markdown(f"**#{r['NR']} {r['NAME_FULL']}**")
-                    saved_c = st.session_state.saved_colors.get(pid, "Grau")
-                    idx = list(c_map.keys()).index(saved_c) if saved_c in c_map else 0
-                    col = c_c.selectbox("Farbe", list(c_map.keys()), key=f"c_{pid}", index=idx, label_visibility="collapsed")
-                    c1, c2 = st.columns(2)
-                    notes = {}
-                    for k in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]:
-                        val = st.session_state.saved_notes.get(f"{k}_{pid}", "")
-                        notes[k] = (c1 if k.startswith("l") else c2).text_input(k, value=val, key=f"{k}_{pid}", label_visibility="collapsed")
-                    st.divider()
-                    form_res.append({"row": r, "pid": pid, "color": col, "notes": notes})
+    with c3:
+        st.markdown(f"## {g_name}")
+    
+    st.write("---")
+    st.markdown(f"""
+    <div style='display: flex; justify-content: space-between; color: #333; font-size: 14px; background-color: #f9f9f9; padding: 10px; border-radius: 5px;'>
+        <span>👥 <b>Zuschauer:</b> {att}</span>
+        <span>⚖️ <b>Schiedsrichter:</b> {ref_str}</span>
+        <span>🆔 <b>Game ID:</b> {details.get('id', '-')}</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-                c1, c2, c3 = st.columns(3)
-                with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo")
-                with c2: st.caption("Defense"); e_def = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True, key="ed")
-                with c3: st.caption("About"); e_abt = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea")
-                up_files = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"])
-                
-                if st.form_submit_button("Speichern & Generieren", type="primary"):
-                    st.session_state.facts_offense = e_off
-                    st.session_state.facts_defense = e_def
-                    st.session_state.facts_about = e_abt
-                    for item in form_res:
-                        st.session_state.saved_colors[item["pid"]] = item["color"]
-                        for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
-                    
-                    t_name = (guest_name if target == "Gastteam (Gegner)" else home_name).replace(" ", "_")
-                    date_str = d_inp.strftime("%d.%m.%Y"); time_str = t_inp.strftime("%H-%M") 
-                    st.session_state.report_filename = f"Scouting_Report_{t_name}_{date_str}_{time_str}.pdf"
-                    
-                    html = generate_header_html(st.session_state.game_meta)
-                    html += generate_top3_html(st.session_state.roster_df)
-                    for item in form_res:
-                        meta = get_player_metadata_cached(item["pid"])
-                        html += generate_card_html(item["row"].to_dict(), meta, item["notes"], c_map[item["color"]])
-                    html += generate_team_stats_html(st.session_state.team_stats)
-                    if up_files:
-                        html += "<div style='page-break-before:always'><h2>Plays</h2>"
-                        for f in up_files:
-                            b64 = base64.b64encode(f.getvalue()).decode()
-                            html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
-                    html += generate_custom_sections_html(e_off, e_def, e_abt)
-                    st.session_state.final_html = html
+def render_boxscore_table_pro(player_stats, team_name, coach_name="-"):
+    if not player_stats: return
 
-                    if HAS_PDFKIT:
-                        try:
-                            full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
-                            opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
-                                    "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
-                                    "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
-                            st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
-                            st.session_state.print_mode = True
-                            st.rerun()
-                        except Exception as e: st.error(f"PDF Error: {e}")
-                    else:
-                        st.warning("PDFKit fehlt")
-                        st.session_state.print_mode = True
-                        st.rerun()
+    data = []
+    t_min=0; t_pts=0; t_fgm=0; t_fga=0; t_3pm=0; t_3pa=0; t_ftm=0; t_fta=0
+    t_or=0; t_dr=0; t_tr=0; t_as=0; t_st=0; t_to=0; t_bs=0; t_pf=0; t_eff=0; t_pm=0
 
+    for p in player_stats:
+        info = p.get("seasonPlayer", {})
+        name = f"{info.get('lastName', '')}, {info.get('firstName', '')}"
+        nr = info.get("shirtNumber", "-")
+        starter = "*" if p.get("isStartingFive") else ""
+        sec = safe_int(p.get("secondsPlayed"))
+        
+        if sec > 0:
+            t_min += sec
+            min_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
+            pts = safe_int(p.get("points")); t_pts += pts
+            m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted"))
+            p2 = safe_int(p.get("twoPointShotSuccessPercent"))
+            m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted"))
+            p3 = safe_int(p.get("threePointShotSuccessPercent")); t_3pm += m3; t_3pa += a3
+            mfg = safe_int(p.get("fieldGoalsMade")); afg = safe_int(p.get("fieldGoalsAttempted"))
+            pfg = safe_int(p.get("fieldGoalsSuccessPercent")); t_fgm += mfg; t_fga += afg
+            mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted"))
+            pft = safe_int(p.get("freeThrowsSuccessPercent")); t_ftm += mft; t_fta += aft
+            oreb = safe_int(p.get("offensiveRebounds")); t_or += oreb
+            dreb = safe_int(p.get("defensiveRebounds")); t_dr += dreb
+            treb = safe_int(p.get("totalRebounds")); t_tr += treb
+            ast = safe_int(p.get("assists")); t_as += ast
+            stl = safe_int(p.get("steals")); t_st += stl
+            tov = safe_int(p.get("turnovers")); t_to += tov
+            blk = safe_int(p.get("blocks")); t_bs += blk
+            pf = safe_int(p.get("foulsCommitted")); t_pf += pf
+            eff = safe_int(p.get("efficiency")); t_eff += eff
+            pm = safe_int(p.get("plusMinus")); t_pm += pm
+
+            s_2p = f"{m2}/{a2} ({int(p2)}%)" if a2 else ""
+            s_3p = f"{m3}/{a3} ({int(p3)}%)" if a3 else ""
+            s_fg = f"{mfg}/{afg} ({int(pfg)}%)"
+            s_ft = f"{mft}/{aft} ({int(pft)}%)" if aft else ""
+        else:
+            min_str = "DNP"
+            pts=0; s_2p=""; s_3p=""; s_fg=""; s_ft=""
+            oreb=0; dreb=0; treb=0; ast=0; stl=0; tov=0; blk=0; pf=0; eff=0; pm=0
+
+        data.append({
+            "No.": f"{starter}{nr}", "Name": name, "Min": min_str, "PTS": pts,
+            "2P": s_2p, "3P": s_3p, "FG": s_fg, "FT": s_ft,
+            "OR": oreb, "DR": dreb, "TR": treb,
+            "AS": ast, "ST": stl, "TO": tov, "BS": blk,
+            "PF": pf, "EFF": eff, "+/-": pm
+        })
+
+    tot_fg_pct = int(t_fgm/t_fga*100) if t_fga else 0
+    tot_3p_pct = int(t_3pm/t_3pa*100) if t_3pa else 0
+    tot_ft_pct = int(t_ftm/t_fta*100) if t_fta else 0
+    
+    totals = {
+        "No.": "", "Name": "TOTALS", "Min": "200:00", "PTS": t_pts,
+        "2P": "", "3P": f"{t_3pm}/{t_3pa} ({tot_3p_pct}%)", "FG": f"{t_fgm}/{t_fga} ({tot_fg_pct}%)", 
+        "FT": f"{t_ftm}/{t_fta} ({tot_ft_pct}%)", "OR": t_or, "DR": t_dr, "TR": t_tr, 
+        "AS": t_as, "ST": t_st, "TO": t_to, "BS": t_bs, "PF": t_pf, "EFF": t_eff, "+/-": t_pm
+    }
+    data.append(totals)
+    df = pd.DataFrame(data)
+    
+    def highlight_totals(row):
+        return ['font-weight: bold; background-color: #f0f0f0' if row['Name'] == 'TOTALS' else '' for _ in row]
+
+    st.markdown(f"#### {team_name}")
+    calc_height = (len(df) + 1) * 35 + 3
+    st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
+    if coach_name and coach_name != "-":
+        st.markdown(f"*Head Coach: {coach_name}*")
+
+def render_game_top_performers(box):
+    h_data = box.get("homeTeam", {})
+    g_data = box.get("guestTeam", {})
+    h_name = get_team_name(h_data, "Heim")
+    g_name = get_team_name(g_data, "Gast")
+
+    def get_top3(stats_list, key="points"):
+        active = [p for p in stats_list if safe_int(p.get("secondsPlayed")) > 0]
+        sorted_p = sorted(active, key=lambda x: safe_int(x.get(key)), reverse=True)
+        return sorted_p[:3]
+
+    def mk_box(players, title, color, val_key="points"):
+        html = f"<div style='flex:1; border:1px solid #ccc; margin:5px;'>"
+        html += f"<div style='background:{color}; color:white; padding:5px; font-weight:bold; text-align:center;'>{title}</div>"
+        html += "<table style='width:100%; border-collapse:collapse;'>"
+        for p in players:
+             info = p.get("seasonPlayer", {})
+             name = f"{info.get('lastName', '')}"
+             val = safe_int(p.get(val_key))
+             html += f"<tr><td style='padding:6px; font-size:16px;'>{name}</td><td style='padding:6px; text-align:right; font-weight:bold; font-size:16px;'>{val}</td></tr>"
+        html += "</table></div>"
+        return html
+
+    h_pts = get_top3(h_data.get("playerStats", []), "points")
+    g_pts = get_top3(g_data.get("playerStats", []), "points")
+    h_reb = get_top3(h_data.get("playerStats", []), "totalRebounds")
+    g_reb = get_top3(g_data.get("playerStats", []), "totalRebounds")
+    h_ast = get_top3(h_data.get("playerStats", []), "assists")
+    g_ast = get_top3(g_data.get("playerStats", []), "assists")
+
+    st.markdown("#### Top Performer")
+    html = f"""
+    <div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">
+        {mk_box(h_pts, f"Points ({h_name})", "#e35b00", "points")}
+        {mk_box(g_pts, f"Points ({g_name})", "#e35b00", "points")}
+    </div>
+    <div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">
+        {mk_box(h_reb, f"Rebounds ({h_name})", "#0055ff", "totalRebounds")}
+        {mk_box(g_reb, f"Rebounds ({g_name})", "#0055ff", "totalRebounds")}
+    </div>
+    <div style="display:flex; flex-direction:row; gap:10px;">
+        {mk_box(h_ast, f"Assists ({h_name})", "#ffc107", "assists")}
+        {mk_box(g_ast, f"Assists ({g_name})", "#ffc107", "assists")}
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+def render_charts_and_stats(box):
+    h_data = box.get("homeTeam", {})
+    g_data = box.get("guestTeam", {})
+    h = h_data.get("gameStat", {})
+    g = g_data.get("gameStat", {})
+    h_name = get_team_name(h_data, "Heim")
+    g_name = get_team_name(g_data, "Gast")
+
+    # --- ADVANCED STATS ---
+    actions = box.get("actions", [])
+    hid = str(h_data.get("seasonTeam", {}).get("seasonTeamId", "0"))
+    gid = str(g_data.get("seasonTeam", {}).get("seasonTeamId", "0"))
+    calc_stats = calculate_advanced_stats_from_actions(actions, hid, gid)
+    
+    h_paint = calc_stats["h_paint"] if calc_stats["h_paint"] > 0 else "-"
+    g_paint = calc_stats["g_paint"] if calc_stats["g_paint"] > 0 else "-"
+    h_fb = calc_stats["h_fb"] if calc_stats["h_fb"] > 0 else "-"
+    g_fb = calc_stats["g_fb"] if calc_stats["g_fb"] > 0 else "-"
+    h_2nd = calc_stats["h_2nd"] if calc_stats["h_2nd"] > 0 else "-"
+    g_2nd = calc_stats["g_2nd"] if calc_stats["g_2nd"] > 0 else "-"
+
+    # --- CHARTS ---
+    def mk_label(pct, made, att): return f"{pct}% ({made}/{att})"
+    categories = ["Field Goals", "2 Points", "3 Points", "Free Throws"]
+    
+    h_vals = [
+        {"Team": h_name, "Cat": "Field Goals", "Pct": safe_int(h.get('fieldGoalsSuccessPercent')), 
+         "Label": mk_label(safe_int(h.get('fieldGoalsSuccessPercent')), safe_int(h.get('fieldGoalsMade')), safe_int(h.get('fieldGoalsAttempted')))},
+        {"Team": h_name, "Cat": "2 Points", "Pct": safe_int(h.get('twoPointShotSuccessPercent')), 
+         "Label": mk_label(safe_int(h.get('twoPointShotSuccessPercent')), safe_int(h.get('twoPointShotsMade')), safe_int(h.get('twoPointShotsAttempted')))},
+        {"Team": h_name, "Cat": "3 Points", "Pct": safe_int(h.get('threePointShotSuccessPercent')), 
+         "Label": mk_label(safe_int(h.get('threePointShotSuccessPercent')), safe_int(h.get('threePointShotsMade')), safe_int(h.get('threePointShotsAttempted')))},
+        {"Team": h_name, "Cat": "Free Throws", "Pct": safe_int(h.get('freeThrowsSuccessPercent')), 
+         "Label": mk_label(safe_int(h.get('freeThrowsSuccessPercent')), safe_int(h.get('freeThrowsMade')), safe_int(h.get('freeThrowsAttempted')))},
+    ]
+    g_vals = [
+        {"Team": g_name, "Cat": "Field Goals", "Pct": safe_int(g.get('fieldGoalsSuccessPercent')), 
+         "Label": mk_label(safe_int(g.get('fieldGoalsSuccessPercent')), safe_int(g.get('fieldGoalsMade')), safe_int(g.get('fieldGoalsAttempted')))},
+        {"Team": g_name, "Cat": "2 Points", "Pct": safe_int(g.get('twoPointShotSuccessPercent')), 
+         "Label": mk_label(safe_int(g.get('twoPointShotSuccessPercent')), safe_int(g.get('twoPointShotsMade')), safe_int(g.get('twoPointShotsAttempted')))},
+        {"Team": g_name, "Cat": "3 Points", "Pct": safe_int(g.get('threePointShotSuccessPercent')), 
+         "Label": mk_label(safe_int(g.get('threePointShotSuccessPercent')), safe_int(g.get('threePointShotsMade')), safe_int(g.get('threePointShotsAttempted')))},
+        {"Team": g_name, "Cat": "Free Throws", "Pct": safe_int(g.get('freeThrowsSuccessPercent')), 
+         "Label": mk_label(safe_int(g.get('freeThrowsSuccessPercent')), safe_int(g.get('freeThrowsMade')), safe_int(g.get('freeThrowsAttempted')))},
+    ]
+    
+    source = pd.DataFrame(h_vals + g_vals)
+    base = alt.Chart(source).encode(x=alt.X('Cat', sort=categories, title=None), xOffset='Team', y=alt.Y('Pct', title=None, axis=None))
+    bar = base.mark_bar().encode(color=alt.Color('Team', legend=alt.Legend(title=None, orient='top')), tooltip=['Team', 'Cat', 'Label'])
+    text = base.mark_text(dy=-10, color='black').encode(text='Label')
+    chart = (bar + text).properties(height=350)
+
+    metrics = [
+        ("Offensive Rebounds", safe_int(h.get('offensiveRebounds')), safe_int(g.get('offensiveRebounds'))),
+        ("Defensive Rebounds", safe_int(h.get('defensiveRebounds')), safe_int(g.get('defensiveRebounds'))),
+        ("Total Rebounds", safe_int(h.get('totalRebounds')), safe_int(g.get('totalRebounds'))),
+        ("Assists", safe_int(h.get("assists")), safe_int(g.get("assists"))),
+        ("Fouls", safe_int(h.get("foulsCommitted")), safe_int(g.get("foulsCommitted"))),
+        ("Turnovers", safe_int(h.get("turnovers")), safe_int(g.get("turnovers"))),
+        ("Steals", safe_int(h.get("steals")), safe_int(g.get("steals"))),
+        ("Blocks", safe_int(h.get("blocks")), safe_int(g.get("blocks"))),
+        ("Points in Paint", h_paint, g_paint),
+        ("2nd Chance Pts", h_2nd, g_2nd),
+        ("Fastbreak Pts", h_fb, g_fb),
+        ("Biggest Lead", calc_stats.get("h_lead", "-"), calc_stats.get("g_lead", "-")),
+        ("Biggest Run", calc_stats.get("h_run", "-"), calc_stats.get("g_run", "-"))
+    ]
+
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.markdown("#### Wurfquoten")
+        st.altair_chart(chart, use_container_width=True)
+    with c2:
+        st.markdown("#### Team Statistik")
+        html = f"""<table style="width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px;">
+<tr style="background-color:#003366; color:white;">
+<th style="padding:8px; text-align:center; width:30%;">{h_name}</th>
+<th style="padding:8px; text-align:center; width:40%;">Kategorie</th>
+<th style="padding:8px; text-align:center; width:30%;">{g_name}</th>
+</tr>"""
+        for label, vh, vg in metrics:
+            html += f"""<tr style="border-bottom:1px solid #eee;">
+<td style="padding:6px; text-align:center;">{vh}</td>
+<td style="padding:6px; text-align:center; font-weight:bold; color:#555;">{label}</td>
+<td style="padding:6px; text-align:center;">{vg}</td>
+</tr>"""
+        html += "</table>"
+        st.markdown(html, unsafe_allow_html=True)
+
+def generate_game_summary(box):
+    """Generiert einen textbasierten Spielbericht."""
+    if not box: return "Keine Daten verfügbar."
+
+    h_data = box.get("homeTeam", {})
+    g_data = box.get("guestTeam", {})
+    h_name = get_team_name(h_data, "Heim")
+    g_name = get_team_name(g_data, "Gast")
+    res = box.get("result", {})
+    
+    s_h = res.get("homeTeamFinalScore", 0)
+    s_g = res.get("guestTeamFinalScore", 0)
+    
+    # 1. Ergebnis
+    winner = h_name if s_h > s_g else g_name
+    diff = abs(s_h - s_g)
+    text = f"**Endergebnis:** {h_name} {s_h} : {s_g} {g_name}\n\n"
+    
+    if diff < 6:
+        text += f"In einem bis zur letzten Sekunde spannenden Krimi setzte sich {winner} knapp durch. "
+    elif diff > 20:
+        text += f"{winner} dominierte das Spiel deutlich und gewann souverän mit {diff} Punkten Vorsprung. "
     else:
-        c1, c2 = st.columns([1, 4])
-        with c1:
-            if st.button("⬅️ Bearbeiten"): st.session_state.print_mode = False; st.rerun()
-        with c2:
-            if st.session_state.pdf_bytes:
-                st.download_button("📄 Download PDF", st.session_state.pdf_bytes, st.session_state.report_filename, "application/pdf")
-        st.divider()
-        st.markdown(CSS_STYLES + st.session_state.final_html, unsafe_allow_html=True)
+        text += f"{winner} konnte das Spiel mit einem soliden {diff}-Punkte-Vorsprung für sich entscheiden. "
 
-# ==========================================
-# HAUPT STEUERUNG
-# ==========================================
-if st.session_state.current_page == "home": render_home()
-elif st.session_state.current_page == "scouting": render_scouting_page()
-elif st.session_state.current_page == "comparison": render_comparison_page()
-elif st.session_state.current_page == "analysis": render_analysis_page()
-elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
+    # 2. Viertel-Analyse
+    q_h_scores = [res.get(f"homeTeamQ{i}Score", 0) for i in range(1, 5)]
+    q_g_scores = [res.get(f"guestTeamQ{i}Score", 0) for i in range(1, 5)]
+    
+    h_q_wins = sum(1 for i in range(4) if q_h_scores[i] > q_g_scores[i])
+    if h_q_wins == 4 and s_h > s_g:
+        text += f"{h_name} gewann dabei jedes einzelne Viertel. "
+    elif h_q_wins == 0 and s_h < s_g:
+        text += f"{g_name} ließ nichts anbrennen und entschied alle vier Viertel für sich. "
+    
+    # 3. Schlüsselstatistiken
+    h_fg = safe_int(h_data.get("gameStat", {}).get("fieldGoalsSuccessPercent"))
+    g_fg = safe_int(g_data.get("gameStat", {}).get("fieldGoalsSuccessPercent"))
+    h_reb = safe_int(h_data.get("gameStat", {}).get("totalRebounds"))
+    g_reb = safe_int(g_data.get("gameStat", {}).get("totalRebounds"))
+    h_to = safe_int(h_data.get("gameStat", {}).get("turnovers"))
+    g_to = safe_int(g_data.get("gameStat", {}).get("turnovers"))
+
+    text += "\n\n**Schlüssel zum Sieg:**\n"
+    if s_h > s_g:
+        if h_fg > g_fg + 5: text += f"- {h_name} traf deutlich besser aus dem Feld ({h_fg}% vs {g_fg}%).\n"
+        if h_reb > g_reb + 5: text += f"- Die Dominanz am Brett war entscheidend ({h_reb} zu {g_reb} Rebounds).\n"
+        if h_to < g_to - 3: text += f"- {h_name} passte besser auf den Ball auf ({h_to} Turnover gegenüber {g_to}).\n"
+    else:
+        if g_fg > h_fg + 5: text += f"- {g_name} hatte die heißeren Hände ({g_fg}% vs {h_fg}% Trefferquote).\n"
+        if g_reb > h_reb + 5: text += f"- {g_name} kontrollierte die Rebounds ({g_reb} zu {h_reb}).\n"
+        if g_to < h_to - 3: text += f"- {g_name} erzwang viele Ballverluste ({h_to} Turnover beim Gegner).\n"
+
+    # 4. Top Performer
+    def get_best(p_list, key):
+        if not p_list: return None, 0
+        s = sorted(p_list, key=lambda x: safe_int(x.get(key)), reverse=True)
+        p = s[0]
+        name = p.get("seasonPlayer", {}).get("lastName", "Unknown")
+        return name, safe_int(p.get(key))
+
+    h_p_name, h_p_val = get_best(h_data.get("playerStats", []), "points")
+    g_p_name, g_p_val = get_best(g_data.get("playerStats", []), "points")
+    
+    text += "\n**Top Performer:**\n"
+    text += f"Auf Seiten von {h_name} war **{h_p_name}** mit {h_p_val} Punkten am erfolgreichsten. "
+    text += f"Bei {g_name} hielt **{g_p_name}** mit {g_p_val} Zählern dagegen."
+
+    return text
+
+def generate_complex_ai_prompt(box):
+    """
+    Erstellt einen fertigen Prompt für ChatGPT basierend auf den Boxscore-Daten
+    und den spezifischen SEO/Journalismus-Anforderungen.
+    """
+    if not box: return "Keine Daten."
+
+    # 1. Datenaufbereitung
+    h_data = box.get("homeTeam", {})
+    g_data = box.get("guestTeam", {})
+    h_name = get_team_name(h_data, "Heim")
+    g_name = get_team_name(g_data, "Gast")
+    res = box.get("result", {})
+    
+    # Identifikation VIMODROM (falls Jena spielt)
+    is_jena_home = ("Jena" in h_name or "VIMODROM" in h_name)
+    is_jena_guest = ("Jena" in g_name or "VIMODROM" in g_name)
+
+    # Korrekte Bestimmung von VIMODROM Name und Gegner
+    vimodrom_name = "VIMODROM Baskets Jena" 
+    opponent = ""
+    jena_score = 0
+    opp_score = 0
+
+    if is_jena_home:
+        opponent = g_name
+        jena_score = res.get("homeTeamFinalScore", 0)
+        opp_score = res.get("guestTeamFinalScore", 0)
+    elif is_jena_guest:
+        opponent = h_name
+        jena_score = res.get("guestTeamFinalScore", 0)
+        opp_score = res.get("homeTeamFinalScore", 0)
+    else: # Wenn Jena nicht spielt, neutral bleiben
+        vimodrom_name = "" 
+        opponent = "" # Kein direkter Gegner aus VIMODROM-Sicht
+        jena_score = res.get("homeTeamFinalScore", 0) # Als Referenz
+        opp_score = res.get("guestTeamFinalScore", 0) # Als Referenz
+
+
+    # Viertel-Ergebnisse für den Kontext (immer Heim vs Gast)
+    q_str = f"Q1: {res.get('homeTeamQ1Score', 0)}:{res.get('guestTeamQ1Score', 0)}, " \
+            f"Q2: {res.get('homeTeamQ2Score', 0)}:{res.get('guestTeamQ2Score', 0)}, " \
+            f"Q3: {res.get('homeTeamQ3Score', 0)}:{res.get('guestTeamQ3Score', 0)}, " \
+            f"Q4: {res.get('homeTeamQ4Score', 0)}:{res.get('guestTeamQ4Score', 0)}"
+
+    # Top Performer extrahieren
+    def get_stats_str(team_data):
+        s = team_data.get("gameStat", {})
+        p_list = team_data.get("playerStats", [])
+        # Top Scorer finden
+        top_p = sorted([p for p in p_list if p.get("points", 0) is not None], key=lambda x: x.get("points", 0), reverse=True)[:2]
+        top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')} Pkt)" for p in top_p])
+        
+        fg = safe_int(s.get("fieldGoalsSuccessPercent", 0))
+        reb = safe_int(s.get("totalRebounds", 0))
+        to = safe_int(s.get("turnovers", 0))
+        ast = safe_int(s.get("assists", 0))
+        
+        return f"FG-Quote: {fg}%, Total Rebounds: {reb}, Turnovers: {to}, Assists: {ast}, Top-Scorer: {top_str}"
+
+    stats_home = get_stats_str(h_data)
+    stats_guest = get_stats_str(g_data)
+
+    # 2. Der Prompt Text (Dein Wunsch-Prompt)
+    prompt_sections = []
+
+    prompt_sections.append("ANWEISUNGEN FÜR KI-GENERIERUNG:")
+    prompt_sections.append("Schreibe immer in Deutsch. Die Texte müssen SEO-optimiert geschrieben werden, mit gezieltem Einsatz relevanter Keywords, semantischer Variationen und organischem Lesefluss. Vermeide Worte wie 'beeindruckend' und wähle präzisere oder neutralere Formulierungen.")
+    
+    if vimodrom_name:
+        prompt_sections.append(f"AUFMERKSAMKEIT: Wenn in den folgenden Berichten die 'VIMODROM Baskets Jena' involviert sind, schreibe den ERSTEN Artikel (für die VIMODROM-Website) aus der Sicht der VIMODROM Baskets Jena (Fan-Brille, emotional). Alle anderen Artikel bleiben neutral.")
+        prompt_sections.append(f"Relevante Keywords für Jena: VIMODROM Baskets Jena, Basketball in Jena, Basketball Training Jena, Basketballspiele Thüringen. Diese Keywords sollen in den Titel, die Meta-Beschreibung und den Textkörper integriert werden.")
+        prompt_sections.append(f"Das Team für die Fan-Perspektive ist: {vimodrom_name}")
+
+    prompt_sections.append("\n\nSPIELDATEN FÜR DIE TEXTE:")
+    prompt_sections.append(f"- Heimteam: {h_name}")
+    prompt_sections.append(f"- Gastteam: {g_name}")
+    prompt_sections.append(f"- Endergebnis: {h_name} {res.get('homeTeamFinalScore', 0)} : {res.get('guestTeamFinalScore', 0)} {g_name}")
+    prompt_sections.append(f"- Viertelverlauf: {q_str}")
+    prompt_sections.append(f"- Statistik {h_name}: {stats_home}")
+    prompt_sections.append(f"- Statistik {g_name}: {stats_guest}")
+    prompt_sections.append(f"- Zuschauer: {res.get('spectators', 'k.A.')}")
+    prompt_sections.append(f"- Halle: {box.get('venue', {}).get('name', 'der Halle')}")
+
+    if is_jena_home or is_jena_guest:
+        prompt_sections.append(f"- VIMODROM Baskets Jena spielte gegen: {opponent}")
+        prompt_sections.append(f"- VIMODROM Ergebnis: {jena_score} : {opp_score} gegen {opponent}")
+    
+    prompt_sections.append("\n\nAUFGABE 1: ERSTELLE DREI JOURNALISTISCHE SPIELBERICHTE")
+    prompt_sections.append("Ziel: Atmosphäre und Dramatik des Basketballspiels einfangen.")
+    prompt_sections.append("Sprache: Klar, prägnant, lebhafte Beschreibungen, emotionale Höhepunkte.")
+    prompt_sections.append("Texte zugänglich für Gelegenheitssportfans, detailliert genug für Experten.")
+    prompt_sections.append("Länge: Texte für Website und 2. DBBL Website jeweils mindestens 3000 Zeichen umfassen. Für das Spieltagsmagazin 1500-2000 Zeichen.")
+    prompt_sections.append("Am Ende jedes Artikels sollen jeweils drei verschiedene Headlines, zehn Keywords (kommagetrennt) und eine Meta-Beschreibung (maximal 150 Zeichen) bereitgestellt werden.")
+
+    prompt_sections.append("\n### ARTIKEL 1: Für die VIMODROM-Website")
+    prompt_sections.append("Perspektive: Aus Sicht der VIMODROM Baskets Jena (fan-nah, emotional, Fokus auf das Jena-Team).")
+    prompt_sections.append("Beginne mit einem überraschenden Moment oder einer besonderen Aussage aus dem Spiel (fiktiv, wenn keine da).")
+    prompt_sections.append("Beschreibe den Spielverlauf mit Fokus auf unerwartete Wendungen, taktische Feinheiten und herausragende Szenen des Jena-Teams.")
+    prompt_sections.append("Integriere Statistiken kreativ und erzähle Geschichten hinter den Zahlen (Fokus Jena-Spieler).")
+    prompt_sections.append("Betone die Leistungen weniger beachteter Jena-Spielerinnen und hebe einzigartige Aspekte des Jena-Spiels hervor.")
+    prompt_sections.append("Gezielt anzusprechende Emotionen: Spannung, Begeisterung, Teamgeist, Stolz, Adrenalin/Nervenkitzel, Hoffnung, Mitfiebern/Identifikation.")
+
+    prompt_sections.append("\n### ARTIKEL 2: Für die 2. DBBL-Website")
+    prompt_sections.append("Perspektive: Neutral, objektiv, journalistisch (keine Fan-Brille).")
+    prompt_sections.append("Der Text soll die Fakten des Spiels präzise darstellen, aber dennoch die Dramatik einfangen.")
+    prompt_sections.append("Struktur: Beginne mit der Einordnung des Spiels in den Saisonkontext, gefolgt von einer Analyse des Gegners, aktuellen Spieler- und Trainerzitaten (fiktiv, wenn nicht vorhanden) sowie relevanten Verletzungsupdates (fiktiv, wenn nicht vorhanden).")
+    prompt_sections.append("Gezielt anzusprechende Emotionen: Spannung, Begeisterung, Adrenalin/Nervenkitzel, Neugierde.")
+
+    prompt_sections.append("\n### ARTIKEL 3: Für das Spieltagsmagazin")
+    prompt_sections.append("Perspektive: Aus heutiger Perspektive als Rückblick, emotional und fesselnd.")
+    prompt_sections.append("Fokus auf die Story des Spiels, die wichtigsten Phasen und Highlights.")
+    prompt_sections.append("Kann etwas freier im Stil sein, weniger formell als die Website-Texte.")
+    prompt_sections.append("Gezielt anzusprechende Emotionen: Erleichterung (wenn gewonnen), Stolz, Begeisterung, Mitfiebern.")
+
+    prompt_sections.append("\n\nAUFGABE 2: ERSTELLE EINEN SEO-OPTIMIERTEN WEBSITE-TEXT ZUM THEMA 'Basketball in Jena'")
+    prompt_sections.append("Ziel: Sport- und Basketballinteressierte aller Altersklassen ansprechen.")
+    prompt_sections.append("Inhalt: Vorstellung des Teams VIMODROM Baskets Jena, Informationen zu anstehenden Spielen, Trainingstipps und Möglichkeiten für neue Spieler, dem Team beizutreten.")
+    prompt_sections.append("Struktur: Klare Struktur ohne Zwischenüberschriften. Absätze kurz und prägnant (max. 3 Sätze pro Absatz).")
+    prompt_sections.append("Länge: Mindestens 600–1.000 Wörter.")
+    prompt_sections.append("Keywords: VIMODROM Baskets Jena, Basketball in Jena, Basketball Training Jena, Basketballspiele Thüringen (in Titel, Meta-Beschreibung und Textkörper integrieren).")
+    prompt_sections.append("Meta-Beschreibung: Maximal 150 Zeichen, spannend und klickstark.")
+    prompt_sections.append("Engagement fördern: Internen Links (fiktiv) zu weiteren Artikeln (z. B. Trainingszeiten, Ticketkauf) und externen Links (fiktiv) zu vertrauenswürdigen Basketballseiten integrieren.")
+    prompt_sections.append("Multimedia: Platzhalter für Bilder oder Videos mit Alt-Tags (z.B. `<img src='bild-url.jpg' alt='Basketball Training VIMODROM Baskets Jena'>`).")
+    prompt_sections.append("Inhalt an Suchintent anpassen, inspiriert für das Team und Basketball in Jena.")
+
+    prompt_sections.append("\n\nZUSAMMENFASSUNG UND META-INFORMATIONEN:")
+    prompt_sections.append("Wenn alle Berichte geschrieben sind, füge zusätzlich EINE Zusammenfassung mit 10 Meta-Tags (kommagetrennt) und EINER Meta-Beschreibung für das GESAMTE SPIEL hinzu.")
+
+    return "\n".join(prompt_sections)
+
+def run_openai_generation(api_key, prompt):
+    """Sendet den Prompt an die OpenAI API und gibt den Text zurück."""
+    client = openai.OpenAI(api_key=api_key)
+    
+    try:
+        # Wir nutzen gpt-4o, da es aktuell das beste Preis-Leistungs-Verhältnis hat
+        # und sehr gut Deutsch schreibt.
+        response = client.chat.completions.create(
+            model="gpt-4o", 
+            messages=[
+                {"role": "system", "content": "Du bist ein professioneller Sportjournalist und SEO-Experte, spezialisiert auf Basketball. Du schreibst fundierte, lebendige und optimierte Artikel für verschiedene Zielgruppen."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0, # Etwas niedriger, da der Prompt schon sehr spezifisch ist
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Fehler bei der API-Abfrage: {str(e)}"
