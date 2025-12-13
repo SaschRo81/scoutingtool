@@ -192,32 +192,38 @@ def fetch_team_info_basic(team_id):
     Verwendet api-s.dbbl.scb.world/teams/{team_id} und extrahiert die Hauptspielstätte.
     """
     url = f"https://api-s.dbbl.scb.world/teams/{team_id}" 
+    st.info(f"DEBUG: Versuche Spielort-Daten für Team-ID {team_id} von {url} zu laden...") # Debugging
     
     try:
         resp = requests.get(url, headers=API_HEADERS)
+        
         if resp.status_code == 200:
             team_data = resp.json()
-            # Durchsuche die "venues"-Liste nach der Hauptspielstätte
+            st.info(f"DEBUG: API-Antwort (Status 200) für Team-ID {team_id}. Hat 'venues' Daten: {'venues' in team_data and len(team_data.get('venues', [])) > 0}") # Debugging
+            
             main_venue = None
-            if "venues" in team_data and isinstance(team_data["venues"], list):
+            
+            # Überprüfe, ob der 'venues'-Schlüssel existiert und eine Liste ist
+            if "venues" in team_data and isinstance(team_data["venues"], list) and len(team_data["venues"]) > 0:
                 for venue in team_data["venues"]:
                     if venue.get("isMain"):
                         main_venue = venue
                         break
                 # Wenn keine Hauptspielstätte gefunden, nimm die erste (falls vorhanden)
-                if not main_venue and team_data["venues"]:
+                if not main_venue:
                     main_venue = team_data["venues"][0]
             
-            # Rückgabe eines dicts, das wie das alte "venue" Objekt aussieht
-            # oder None, wenn keine Spielstätte gefunden wurde
             if main_venue:
+                st.info(f"DEBUG: Hauptspielstätte gefunden: {main_venue.get('name', 'k.A.')}") # Debugging
                 return {"id": team_data.get("id"), "venue": main_venue}
             else:
+                st.warning(f"DEBUG: Keine Hauptspielstätte oder andere Spielstätten in der API-Antwort für Team-ID {team_id} gefunden.") # Debugging
                 return {"id": team_data.get("id"), "venue": None} # Team-ID zurückgeben, aber keine Venue
         else:
-            # st.error(f"Fehler beim Laden der Basis-Teaminformationen für Team-ID {team_id}. Status: {resp.status_code}") # Kommentar aus, da es auf der UI angezeigt wird
+            st.warning(f"DEBUG: Fehler beim Laden der Basis-Teaminformationen für Team-ID {team_id}. HTTP Status: {resp.status_code}. Antwort: {resp.text[:200]}") # Debugging
             return None
+    except requests.exceptions.RequestException as req_e:
+        st.error(f"DEBUG: Netzwerkfehler beim Laden der Team-Info für {team_id}: {req_e}") # Debugging
     except Exception as e:
-        # st.error(f"Ausnahme beim Laden der Basis-Teaminformationen für Team-ID {team_id}: {e}") # Kommentar aus, da es auf der UI angezeigt wird
-        pass
-    return None
+        st.error(f"DEBUG: Unerwarteter Fehler beim Parsen der Team-Info für {team_id}: {e}") # Debugging
+    return None```
