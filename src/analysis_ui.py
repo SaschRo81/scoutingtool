@@ -579,3 +579,94 @@ def run_openai_generation(api_key, prompt):
         return response.choices[0].message.content
     except Exception as e:
         return f"Fehler bei der API-Abfrage: {str(e)}"
+
+# --- Fügen Sie dies am Ende von src/analysis_ui.py hinzu ---
+
+def generate_complex_ai_prompt(box):
+    """
+    Erstellt einen fertigen Prompt für ChatGPT basierend auf den Boxscore-Daten
+    und den spezifischen SEO/Journalismus-Anforderungen.
+    """
+    if not box: return "Keine Daten."
+
+    # 1. Datenaufbereitung
+    h_data = box.get("homeTeam", {})
+    g_data = box.get("guestTeam", {})
+    h_name = get_team_name(h_data, "Heim")
+    g_name = get_team_name(g_data, "Gast")
+    res = box.get("result", {})
+    
+    # Identifikation VIMODROM (falls Jena spielt)
+    is_jena_home = "Jena" in h_name or "VIMODROM" in h_name
+    opponent = g_name if is_jena_home else h_name
+    jena_score = res.get("homeTeamFinalScore", 0) if is_jena_home else res.get("guestTeamFinalScore", 0)
+    opp_score = res.get("guestTeamFinalScore", 0) if is_jena_home else res.get("homeTeamFinalScore", 0)
+    
+    # Viertel-Ergebnisse für den Kontext
+    q_str = f"Q1: {res.get('homeTeamQ1Score')}:{res.get('guestTeamQ1Score')}, " \
+            f"Q2: {res.get('homeTeamQ2Score')}:{res.get('guestTeamQ2Score')}, " \
+            f"Q3: {res.get('homeTeamQ3Score')}:{res.get('guestTeamQ3Score')}, " \
+            f"Q4: {res.get('homeTeamQ4Score')}:{res.get('guestTeamQ4Score')}"
+
+    # Top Performer extrahieren
+    def get_stats_str(team_data):
+        s = team_data.get("gameStat", {})
+        p_list = team_data.get("playerStats", [])
+        # Top Scorer finden
+        top_p = sorted([p for p in p_list if p.get("points", 0) is not None], key=lambda x: x.get("points", 0), reverse=True)[:2]
+        top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')} Pkt)" for p in top_p])
+        
+        fg = s.get("fieldGoalsSuccessPercent", 0)
+        reb = s.get("totalRebounds", 0)
+        to = s.get("turnovers", 0)
+        return f"FG: {fg}%, Reb: {reb}, TO: {to}, Top-Scorer: {top_str}"
+
+    stats_home = get_stats_str(h_data)
+    stats_guest = get_stats_str(g_data)
+
+    # 2. Der Prompt Text (Dein Wunsch-Prompt)
+    prompt = f"""
+Ich habe hier die Daten eines Basketballspiels. Bitte schreibe basierend auf diesen Daten und den folgenden Anweisungen die Berichte.
+
+DATEN DES SPIELS:
+- Heimteam: {h_name}
+- Gastteam: {g_name}
+- Endergebnis: {res.get("homeTeamFinalScore")} : {res.get("guestTeamFinalScore")}
+- Viertelverlauf: {q_str}
+- Statistik {h_name}: {stats_home}
+- Statistik {g_name}: {stats_guest}
+- Zuschauer: {res.get("spectators", "k.A.")}
+- Halle: {box.get("venue", {}).get("name", "Halle")}
+
+ANWEISUNGEN:
+Schreibe immer in Deutsch und aus der Sicht der VIMODROM Baskets Jena (falls sie gespielt haben, sonst neutral) für die Website-Texte. 
+Gegner ist: {opponent}.
+
+AUFGABE 1: Schreibe drei dynamische, SEO-optimierte, journalistische Artikel.
+1. Artikel: Für die VIMODROM-Website (Fan-Brille, emotional).
+2. Artikel: Für die 2. DBBL-Website (Neutral, journalistisch).
+3. Artikel: Für das Spieltagsmagazin (Rückblick aus heutiger Perspektive).
+
+Anforderungen:
+- Ziel: Atmosphäre und Dramatik einfangen.
+- Sprache: Klar, prägnant, lebhafte Beschreibungen, emotionale Höhepunkte.
+- Länge: Website und DBBL Texte mind. 3000 Zeichen (bitte ausführlich schreiben!).
+- Footer pro Artikel: 3 Headlines, 10 Keywords, 1 Meta-Beschreibung.
+- Ganz am Ende: Zusammenfassung mit 10 Meta-Tags.
+
+AUFGABE 2: Erstelle einen SEO-optimierten Text "Basketball in Jena".
+- Keywords: VIMODROM Baskets Jena, Basketball in Jena, Basketball Training Jena.
+- Struktur: Keine Zwischenüberschriften, kurze Absätze.
+- Inhalt: Mehrwert, Teamvorstellung, Trainingstipps.
+- Länge: 600-1000 Wörter.
+
+STIL-GUIDE & EMOTIONEN:
+- Vermeide das Wort "beeindruckend".
+- Nutze Emotionen: Spannung (bei engem Spiel), Begeisterung (Dunks/Plays), Teamgeist, Stolz.
+- Wenn das Spiel eng war ({abs(jena_score - opp_score)} Punkte Differenz), betone die Spannung und den "Nervenkitzel".
+- Wenn es deutlich war, betone die "Dominanz" oder den "Kampfgeist trotz Niederlage".
+- Integriere die Statistiken kreativ in den Fließtext (erzähle die Geschichte hinter den Zahlen).
+
+Bitte starte jetzt mit der Erstellung der Texte.
+"""
+    return prompt
