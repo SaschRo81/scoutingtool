@@ -56,114 +56,127 @@ TEAMS_DB = {
 }
 
 # Zentrales CSS
-# ... andere Konfigurationen in src/config.py
-
-# Beispiel CSS_STYLES - PASSEN SIE DIESEN BEREICH IN IHRER DATEI AN!
 CSS_STYLES = """
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 14pt; /* GRUNDSCHRIFTGRÖSSE FÜR PDF ANPASSEN */
-        }
-        h1, h2, h3, h4 {
-            color: #333;
-            margin-bottom: 0.5em;
-        }
-        /* Player Card Adjustments */
-        .player-card {
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: flex-start;
-            page-break-inside: avoid;
-        }
-        .player-card-image {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            object-fit: cover;
-            margin-right: 15px;
-            flex-shrink: 0;
-        }
-        .player-info h3 {
-            margin-top: 0;
-            margin-bottom: 5px;
-            font-size: 18pt; /* Überschrift Spielername */
-        }
-        .player-info p {
-            margin: 0;
-            font-size: 12pt; /* Spieler Details wie Größe, Position */
-        }
-        .player-stats table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        .player-stats th, .player-stats td {
-            border: 1px solid #ddd;
-            padding: 5px;
-            text-align: left;
-            font-size: 10pt; /* Spieler Statistikwerte in der Tabelle */
-        }
-        .player-notes {
-            margin-top: 10px;
-            border-left: 3px solid;
-            padding-left: 10px;
-        }
-        .player-notes div {
-            font-size: 10pt; /* Notizen-Text */
-        }
+<style>
+    body { font-family: 'Arial', sans-serif; font-size: 12px; }
+    
+    /* --- HEADER BEREICH --- */
+    .report-header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+    
+    /* Scouting Report Titel größer (H1) */
+    .report-title { font-size: 32px; font-weight: bold; margin: 0 0 10px 0; color: #000; }
+    
+    .matchup-container { display: flex; align-items: center; justify-content: center; gap: 50px; margin-top: 15px; }
+    .team-logo-box { text-align: center; }
+    
+    /* Logos größer */
+    .team-logo-img { height: 90px; max-width: 200px; object-fit: contain; }
+    
+    /* Teamnamen größer */
+    .team-name-text { font-size: 18px; font-weight: bold; margin-top: 8px; }
+    
+    .vs-text { font-size: 30px; font-weight: bold; color: #333; }
 
-        /* Team Stats Table Adjustments */
-        .team-stats-container table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        .team-stats-container th, .team-stats-container td {
-            border: 1px solid #ddd;
-            padding: 5px;
-            text-align: left;
-            font-size: 10pt; /* Team Statistikwerte in der Tabelle */
-        }
-        .team-stats-container th {
-            background-color: #f2f2f2;
-        }
+    /* --- TOP 3 BOXEN --- */
+    .top3-container { display: flex; flex-direction: row; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; }
+    .stat-box { flex: 1; border: 1px solid #ccc; }
+    .top3-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
+    .top3-table td { text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
 
-        /* Allgemeine Sektionen */
-        .custom-section h2 {
-            font-size: 16pt; /* Überschrift der Custom Sections */
-        }
-        .custom-section ul {
-            list-style-type: disc;
-            margin-left: 20px;
-        }
-        .custom-section li {
-            font-size: 12pt; /* Liste Text */
-            margin-bottom: 5px;
-        }
-        
-        /* HEADER/FOOTER (falls in html_gen.py genutzt, diese CSS-Klassen können angepasst werden) */
-        .report-header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .report-header h1 {
-            font-size: 24pt;
-        }
-        .report-header h2 {
-            font-size: 18pt;
-        }
-        .report-header img {
-            max-height: 80px;
-            vertical-align: middle;
-        }
+    /* --- SPIELER KARTE --- */
+    .player-card { 
+        border: 1px solid #ccc; margin-bottom: 15px; 
+        background-color: white; page-break-inside: avoid; 
+        font-family: Arial, sans-serif;
+    }
+    
+    /* Header (Farb-Balken): Text größer & vertikal zentriert */
+    .card-header { 
+        color: white; 
+        padding: 5px 12px; /* Mehr Padding */
+        font-weight: bold; 
+        font-size: 18px;   /* Größere Schrift */
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; /* Vertikal zentrieren */
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        line-height: 1.2;
+    }
 
-        /* Page Breaks für PDF */
-        .page-break-before {
-            page-break-before: always;
-        }
-    </style>
+    .card-body { width: 100%; }
+    
+    /* Layout Tabelle (Bild links, Stats rechts) */
+    .layout-table {
+        width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;
+    }
+    .layout-img-cell {
+        width: 160px;
+        min-width: 160px;
+        max-width: 160px;
+        vertical-align: top;
+        padding: 0;
+        border-right: 1px solid #ccc;
+    }
+    .layout-stats-cell {
+        vertical-align: top;
+        padding: 0;
+        width: auto;
+    }
+    /* Das Bild selbst */
+    .player-img { 
+        width: 100%; 
+        height: 100%;      /* <--- HIER ERHÖHEN (z.B. auf 160px oder 180px) */
+        object-fit: cover; 
+        display: block; 
+    }
+    
+    /* Stats Tabelle */
+    .stats-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        font-size: 16px; 
+        text-align: center; 
+        color: black; 
+    }
+    
+    /* HIER GEÄNDERT: Mehr Platz und vertikale Zentrierung */
+    .stats-table th, .stats-table td { 
+        border: 1px solid #ccc; 
+        padding: 5px 0px;       /* Vorher 2px -> Jetzt 5px für mehr Luft oben/unten */
+        vertical-align: middle; /* Zwingt den Text in die vertikale Mitte */
+        letter-spacing: -0.5px;
+    }
+
+    .bg-gray { 
+        background-color: #e6e6e6; 
+        -webkit-print-color-adjust: exact; 
+    }
+    
+    .font-bold { font-weight: bold; }
+    
+    /* HIER GEÄNDERT: Schriftgröße für die manuellen Notizen (asdf...) */
+    .note-row td { 
+        height: 24px;           /* Zeile etwas höher machen */
+        text-align: left; 
+        padding-left: 5px;
+        font-size: 20px;        /* Schriftgröße explizit erhöht (wie Header) */
+        vertical-align: middle; /* Auch hier schön mittig */
+    }
+    
+    .note-left { font-weight: normal; }
+    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; }
+
+    .font-bold { font-weight: bold; }
+    .note-row td { height: 20px; text-align: left; padding-left: 5px; }
+    .note-left { font-weight: normal; }
+    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; }
+
+    .team-stats-container { margin-top: 30px; page-break-inside: avoid; }
+    
+    @media print {
+        body { -webkit-print-color-adjust: exact; zoom: 0.44; }
+        .no-print { display: none; }
+    }
+</style>
 """
