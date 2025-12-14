@@ -23,6 +23,9 @@ ACTION_TRANSLATION = {
     "JUMP_BALL": "Sprungball",
     "START": "Start",
     "END": "Ende",
+    "TWO_POINT_THROW": "2-Punkt Wurf", 
+    "THREE_POINT_THROW": "3-Punkt Wurf",
+    "FREE_THROW": "Freiwurf",
     "layup": "Korbleger",
     "jump_shot": "Sprungwurf",
     "dunk": "Dunking",
@@ -30,17 +33,20 @@ ACTION_TRANSLATION = {
     "defensive": "Defensiv",
     "personal_foul": "Persönlich",
     "technical_foul": "Technisch",
-    "unsportsmanlike_foul": "Unsportlich"
+    "unsportsmanlike_foul": "Unsportlich",
+    "half_or_far_distance": "Mitteldistanz/Fern",
+    "close_distance": "Nahdistanz"
 }
 
 def translate_text(text):
     """Hilfsfunktion für einfache Übersetzungen."""
     if not text: return ""
     text_upper = str(text).upper()
-    # Versuche direkten Match, sonst ersetze Unterstriche
+    # Versuche direkten Match
     if text_upper in ACTION_TRANSLATION:
         return ACTION_TRANSLATION[text_upper]
     
+    # Teilweise Matches ersetzen
     clean_text = text.replace("_", " ").lower()
     for eng, ger in ACTION_TRANSLATION.items():
         if eng.lower() in clean_text:
@@ -89,8 +95,7 @@ def get_player_lookup(box):
 
 def get_player_team_lookup(box):
     """
-    Erstellt ein Dictionary {player_id: 'TeamName'}, um Aktionen einem Team zuzuordnen,
-    auch wenn die Action selbst keine TeamID hat.
+    Erstellt ein Dictionary {player_id: 'TeamName'}, um Aktionen einem Team zuzuordnen.
     """
     lookup = {}
     h_name = get_team_name(box.get("homeTeam", {}), "Heim")
@@ -137,16 +142,24 @@ def render_full_play_by_play(box):
         
         score_str = f"{running_h} : {running_g}"
         
-        # Zeit formatieren: API liefert oft PT00M23S oder ähnlich, oder gar nichts.
-        # Fallback auf Period
-        time_raw = act.get("timeInGame", "")
+        # --- ZEIT FORMATIERUNG (NEU: gameTime nutzen) ---
         period = act.get("period", "")
+        game_time = act.get("gameTime", "") # Das Feld, das Sie gefunden haben (z.B. "00:09:25")
+        time_in_game = act.get("timeInGame", "") # Fallback (ISO Format)
+        
         time_display = f"Q{period}" if period else "-"
         
-        if time_raw and "M" in time_raw:
+        if game_time:
+            # Format "00:09:25" zu "09:25" machen
+            display_time = game_time
+            if display_time.startswith("00:"):
+                display_time = display_time[3:]
+            time_display = f"Q{period} {display_time}"
+            
+        elif time_in_game and "M" in time_in_game:
+            # Fallback Parsing für PTxxMxxS
             try:
-                # Einfaches Parsing für PTxxMxxS
-                t = time_raw.replace("PT", "").replace("S", "")
+                t = time_in_game.replace("PT", "").replace("S", "")
                 m, s = t.split("M")
                 time_display = f"Q{period} {m}:{s.zfill(2)}"
             except:
@@ -166,19 +179,31 @@ def render_full_play_by_play(box):
         elif pid in player_team_map: # Fallback: Team über Spieler finden
             team_display = player_team_map[pid]
         else:
-            team_display = "-" # Weder ID noch Spieler zuordenbar
+            team_display = "-" 
 
         # Beschreibung & Übersetzung
         raw_type = act.get("type", "")
         action_german = translate_text(raw_type)
         
+        # Erfolg/Misserfolg bei Würfen
+        is_successful = act.get("isSuccessful")
+        if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
+             # Wenn der Typ nicht schon explizit "Treffer" oder "Fehlwurf" sagt (wie bei TWO_POINT_THROW)
+             if "Treffer" not in action_german and "Fehlwurf" not in action_german:
+                 if is_successful is True:
+                     action_german += " (Treffer)"
+                 elif is_successful is False:
+                     action_german += " (Fehlwurf)"
+
         qualifiers = act.get("qualifiers", [])
         if qualifiers:
             qual_german = [translate_text(q) for q in qualifiers]
             action_german += f" ({', '.join(qual_german)})"
         
-        if act.get("points"):
-            action_german += f" (+{act.get('points')})"
+        # Punkte hinzufügen, wenn vorhanden (und > 0)
+        points = act.get("points")
+        if points and points > 0:
+            action_german += f" (+{points})"
 
         data.append({
             "Zeit": time_display,
@@ -190,10 +215,9 @@ def render_full_play_by_play(box):
 
     df = pd.DataFrame(data)
     
-    # Dynamische Höhe berechnen, um Scrollbalken IM Container zu vermeiden
-    # Ca. 35px pro Zeile + Header Buffer
+    # Dynamische Höhe berechnen
     rows = len(df)
-    height = min((rows + 1) * 35 + 10, 1500) # Max 1500px, sonst wird die Seite zu lang
+    height = min((rows + 1) * 35 + 10, 1500) 
     
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
@@ -212,6 +236,7 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
          new_h = safe_int(act.get("homeTeamPoints"))
          new_g = safe_int(act.get("guestTeamPoints"))
          
+         # Fix für None values in Actions
          if new_h == 0 and new_g == 0 and act.get("homeTeamPoints") is None:
              new_h = cur_h
              new_g = cur_g
