@@ -291,7 +291,6 @@ def render_analysis_page():
                         
                         render_game_header(box)
                         
-                        # --- NEUE TAB STRUKTUR ---
                         st.markdown("### 📝 Spielberichte & PBP")
 
                         tab_simple, tab_prompt, tab_pbp = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
@@ -300,6 +299,33 @@ def render_analysis_page():
                             report_text = generate_game_summary(box)
                             st.markdown(report_text)
                             st.caption("Regelbasierter Kurzbericht.")
+                            
+                            # HIER WURDEN DIE STATS HINVERSCHOBEN
+                            st.divider()
+                            h_name = get_team_name(box.get("homeTeam", {}), "Heim")
+                            g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+                            h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
+                            g_coach = box.get("guestTeam", {}).get("headCoachName", "-")
+                            
+                            render_boxscore_table_pro(
+                                box.get("homeTeam", {}).get("playerStats", []), 
+                                box.get("homeTeam", {}).get("gameStat", {}), 
+                                h_name, 
+                                h_coach
+                            )
+                            st.write("")
+                            render_boxscore_table_pro(
+                                box.get("guestTeam", {}).get("playerStats", []), 
+                                box.get("guestTeam", {}).get("gameStat", {}), 
+                                g_name, 
+                                g_coach
+                            )
+                            
+                            st.divider()
+                            render_game_top_performers(box)
+                            st.divider()
+                            render_charts_and_stats(box)
+
 
                         with tab_prompt:
                             st.info("Kopiere diesen Text in ChatGPT für einen detaillierten Bericht:")
@@ -307,35 +333,9 @@ def render_analysis_page():
                             st.code(ai_prompt, language="text")
 
                         with tab_pbp:
-                            st.info("Vollständiges Play-by-Play Protokoll:")
+                            # Play-by-Play ist hier isoliert und sauber
                             render_full_play_by_play(box)
 
-                        st.write("")
-                        st.divider()
-
-                        h_name = get_team_name(box.get("homeTeam", {}), "Heim")
-                        g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-                        h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
-                        g_coach = box.get("guestTeam", {}).get("headCoachName", "-")
-                        
-                        render_boxscore_table_pro(
-                            box.get("homeTeam", {}).get("playerStats", []), 
-                            box.get("homeTeam", {}).get("gameStat", {}), 
-                            h_name, 
-                            h_coach
-                        )
-                        st.write("")
-                        render_boxscore_table_pro(
-                            box.get("guestTeam", {}).get("playerStats", []), 
-                            box.get("guestTeam", {}).get("gameStat", {}), 
-                            g_name, 
-                            g_coach
-                        )
-                        
-                        st.divider()
-                        render_game_top_performers(box)
-                        st.divider()
-                        render_charts_and_stats(box)
                         
                     elif box:
                          render_game_header(box)
