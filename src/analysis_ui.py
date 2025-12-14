@@ -7,6 +7,7 @@ import pytz
 import openai 
 from src.api import get_player_metadata_cached 
 
+# --- KONSTANTEN & HELPERS ---
 ACTION_TRANSLATION = {
     "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
     "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
@@ -47,7 +48,8 @@ def format_date_time(iso_string):
     if not iso_string: return "-"
     try:
         dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
-        return dt.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y | %H:%M Uhr")
+        berlin = pytz.timezone("Europe/Berlin")
+        return dt.astimezone(berlin).strftime("%d.%m.%Y | %H:%M Uhr")
     except: return iso_string
 
 def get_player_lookup(box):
@@ -362,10 +364,13 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
             def parse_date(d_str):
                 try: return datetime.strptime(d_str, "%d.%m.%Y %H:%M")
                 except: return datetime.min
+            
             games_sorted = sorted(played_games, key=lambda x: parse_date(x['date']), reverse=True)[:5]
             if games_sorted:
-                for g in games_sorted:
-                    # Win/Loss Logik
+                # Kompakte Badges-Anzeige
+                st.write("") # Spacer
+                cols_form = st.columns(len(games_sorted))
+                for idx, g in enumerate(games_sorted):
                     h_score = g.get('home_score', 0)
                     g_score = g.get('guest_score', 0)
                     is_home = (g.get('homeTeamId') == str(team_id))
@@ -374,13 +379,11 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                     if is_home and h_score > g_score: win = True
                     elif not is_home and g_score > h_score: win = True
                     
-                    color = "green" if win else "red"
-                    result_char = "W" if win else "L"
+                    color = "#28a745" if win else "#dc3545" # Grün/Rot
+                    char = "W" if win else "L"
                     
-                    st.markdown(f":{color}[**{result_char}**] {g['date']}")
-                    st.markdown(f"{g['home']} vs {g['guest']}")
-                    st.markdown(f"**{g['score']}**")
-                    st.divider()
+                    with cols_form[idx]:
+                        st.markdown(f"<div style='background-color:{color};color:white;text-align:center;padding:10px;border-radius:5px;font-weight:bold;'>{char}</div>", unsafe_allow_html=True)
             else: st.info("Keine gespielten Spiele.")
         else: st.info("Keine Spiele.")
 
