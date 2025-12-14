@@ -71,75 +71,31 @@ def render_page_header(page_title):
 # SEITE 1: HOME
 # ==========================================
 def render_home():
-    # CSS Update: Wir nutzen den Hauptcontainer-Selector spezifischer
-    st.markdown(
-        """
-        <style>
-        .stApp {
-            background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
-            background-attachment: fixed;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-size: cover;
-        }
-        /* Overlay um Bild blasser zu machen (auf dem Main Content Bereich) */
-        .main .block-container {
-            background-color: rgba(255, 255, 255, 0.85); /* Weiß mit 85% Deckkraft */
-            padding: 2rem;
-            border-radius: 15px;
-            margin-top: 50px;
-        }
-
-        div.stButton > button {
-            width: 100%;
-            height: 4em;
-            font-size: 18px;
-            font-weight: bold;
-            border-radius: 10px;
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-        }
-        div.stButton > button:hover {
-            transform: scale(1.02);
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown("<div style='text-align: center; margin-top: 0px;'><h1>🏀 DBBL Scouting Suite</h1></div>", unsafe_allow_html=True)
-    st.markdown(f"<div style='text-align: center; color: #444; font-weight: bold; margin-bottom: 40px;'>Version {VERSION} | by Sascha Rosanke</div>", unsafe_allow_html=True)
-    
+    st.markdown("""<style>[data-testid="stAppViewContainer"]::before {content:"";position:fixed;top:0;left:0;width:100%;height:100%;background-image:url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");background-size:cover;opacity:0.3;z-index:-1;} div.stButton>button{width:100%;height:4em;font-size:18px;font-weight:bold;border-radius:10px;box-shadow:0px 4px 6px rgba(0,0,0,0.1);}</style>""", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; margin-top: 50px;'><h1>🏀 DBBL Scouting Suite</h1></div>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #333; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p>", unsafe_allow_html=True)
+    st.write(""); st.write("")
     _, col_center, _ = st.columns([1, 2, 1])
-    
     with col_center:
-        r1_c1, r1_c2 = st.columns(2)
-        with r1_c1:
+        c1, c2 = st.columns(2)
+        with c1: 
             if st.button("📊 Teamvergleich", use_container_width=True): go_comparison(); st.rerun()
-        with r1_c2:
+        with c2: 
             if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
-        
-        st.write("") 
-
-        r2_c1, r2_c2 = st.columns(2)
-        with r2_c1:
-            if st.button("📝 Scouting Report", use_container_width=True): go_scouting(); st.rerun()
-        with r2_c2:
-            if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
-            
-        st.write("") 
-
-        r3_c1, r3_c2 = st.columns(2)
-        with r3_c1:
-            if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
-        with r3_c2:
-             if st.button("🔴 Live Game", use_container_width=True): go_live(); st.rerun()
-
         st.write("")
-
-        _, c5, _ = st.columns([1, 2, 1])
+        c3, c4 = st.columns(2)
+        with c3: 
+            if st.button("📝 Scouting Report", use_container_width=True): go_scouting(); st.rerun()
+        with c4: 
+            if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
+        st.write("")
+        c5, c6 = st.columns(2)
         with c5:
-             if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun() 
+             if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
+        with c6:
+             if st.button("🔴 Live Game", use_container_width=True): go_live(); st.rerun()
+        st.write("")
+        if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun() 
 
 # ==========================================
 # SEITE 2: TEAMVERGLEICH
@@ -464,6 +420,57 @@ def render_scouting_page():
                                 st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts); st.session_state.print_mode = True; st.rerun()
                             except Exception as e: st.error(f"PDF Error: {e}"); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
                         else: st.warning("PDFKit fehlt."); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
+
+def render_prep_page():
+    render_page_header("🔮 Spielvorbereitung")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="prep_staffel")
+        teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
+    with c2:
+        opp_name = st.selectbox("Gegner-Team:", list({v["name"]: k for k, v in teams.items()}.keys()), key="prep_team")
+        opp_id = {v["name"]: k for k, v in teams.items()}[opp_name]
+
+    if st.button("Vorbereitung starten", type="primary"):
+        with st.spinner("Analysiere..."):
+            df, _ = fetch_team_data(opp_id, SEASON_ID)
+            sched = fetch_schedule(opp_id, SEASON_ID)
+            if df is not None: 
+                render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
+            else: st.error("Fehler beim Laden.")
+
+def render_live_page():
+    render_page_header("🔴 Live Game Center")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="live_staffel")
+        teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
+    with c2:
+        my_team = st.selectbox("Dein Team:", list({v["name"]: k for k, v in teams.items()}.keys()), key="live_team")
+        tid = {v["name"]: k for k, v in teams.items()}[my_team]
+    
+    auto = st.checkbox("🔄 Auto-Refresh (15s)", value=False)
+
+    if tid:
+        games = fetch_schedule(tid, SEASON_ID)
+        if games:
+            games.sort(key=lambda x: x['date'], reverse=True)
+            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in games}
+            sel = st.selectbox("Spiel:", list(opts.keys()), key="live_sel")
+            gid = opts[sel]
+            
+            if st.button("Laden", key="live_load"): st.session_state.live_game_id = gid
+            
+            if st.session_state.live_game_id == gid:
+                st.divider()
+                box = fetch_game_boxscore(gid)
+                det = fetch_game_details(gid)
+                if box and det:
+                    box["gameTime"] = det.get("gameTime")
+                    box["period"] = det.get("period")
+                    render_live_view(box)
+                    if auto: time_module.sleep(15); st.rerun()
+                else: st.info("Warte auf Daten...")
 
 if st.session_state.current_page == "home": render_home()
 elif st.session_state.current_page == "scouting": render_scouting_page()
