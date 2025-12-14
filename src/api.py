@@ -329,7 +329,6 @@ def fetch_team_info_basic(team_id):
             det = fetch_game_details(g['id'])
             if det and det.get("venue"): return {"id": team_id, "venue": det["venue"]}
     return {"id": team_id, "venue": None}
-# --- IN src/api.py HINZUFÜGEN ---
 
 @st.cache_data(ttl=60)
 def fetch_season_games(season_id):
@@ -358,8 +357,6 @@ def fetch_season_games(season_id):
                     if h_score is not None and g_score is not None:
                         score = f"{h_score} : {g_score}"
                         if h_score > 0 or g_score > 0: has_res = True
-                
-                # Check live Score from Actions if available (optional, here simplified)
                 
                 raw_d = g.get("scheduledTime", "")
                 d_disp = raw_d
