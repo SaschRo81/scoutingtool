@@ -17,6 +17,7 @@ from src.utils import get_logo_url, optimize_image_base64
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic 
+    fetch_season_games
 )
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
@@ -70,8 +71,69 @@ def render_page_header(page_title):
 # ==========================================
 # SEITE 1: HOME
 # ==========================================
+# ==========================================
+# SEITE 1: HOME
+# ==========================================
 def render_home():
-    st.markdown("""<style>[data-testid="stAppViewContainer"]::before {content:"";position:fixed;top:0;left:0;width:100%;height:100%;background-image:url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");background-size:cover;opacity:0.25;z-index:-1;} .title-container {background-color: white; padding: 20px; border-radius: 15px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto; border: 1px solid #f0f0f0;} div.stButton > button {width: 100%; height: 4em; font-size: 18px; font-weight: bold; border-radius: 10px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s; background-color: white;} div.stButton > button:hover {transform: scale(1.02); border-color: #ff4b4b;}</style>""", unsafe_allow_html=True)
+    # CSS für Hintergrundbild und Styling
+    st.markdown(
+        """
+        <style>
+        /* Hintergrundbild auf dem Hauptcontainer */
+        [data-testid="stAppViewContainer"]::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            opacity: 0.25; 
+            z-index: -1;
+        }
+        
+        /* Buttons Stylen - Deckend Weiß */
+        div.stButton > button {
+            width: 100%;
+            height: 4em;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+            background-color: #ffffff !important; /* Wichtig: Überschreibt Theme */
+            color: #333333 !important;
+            border: 1px solid #ddd;
+            opacity: 1 !important; /* Keine Transparenz */
+        }
+        div.stButton > button:hover {
+            transform: scale(1.02);
+            border-color: #ff4b4b;
+            background-color: #ffffff !important;
+            color: #ff4b4b !important;
+        }
+        
+        /* Titel Box */
+        .title-container {
+            background-color: #ffffff; /* Deckend Weiß */
+            padding: 20px; 
+            border-radius: 15px; 
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); 
+            text-align: center; 
+            margin-bottom: 40px; 
+            max-width: 800px; 
+            margin-left: auto; 
+            margin-right: auto; 
+            border: 1px solid #f0f0f0;
+            opacity: 1 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True
+    )
+    
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>🏀 DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
@@ -91,11 +153,11 @@ def render_home():
         with r3_c1:
             if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
         with r3_c2:
-             if st.button("🔴 Live Game", use_container_width=True): go_live(); st.rerun()
+             if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
         st.write("")
         _, c5, _ = st.columns([1, 2, 1])
         with c5:
-             if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun() 
+             if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
 
 def render_comparison_page():
     render_page_header("📊 Head-to-Head Vergleich") 
