@@ -329,3 +329,59 @@ def fetch_team_info_basic(team_id):
             det = fetch_game_details(g['id'])
             if det and det.get("venue"): return {"id": team_id, "venue": det["venue"]}
     return {"id": team_id, "venue": None}
+# --- IN src/api.py HINZUFÜGEN ---
+
+@st.cache_data(ttl=60)
+def fetch_season_games(season_id):
+    """Lädt ALLE Spiele einer Saison (für die Live-Übersicht)."""
+    # URL ohne teamId Filter
+    url = f"https://api-s.dbbl.scb.world/games?currentPage=1&pageSize=2000&gameType=all&seasonId={season_id}"
+    try:
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("items", [])
+            clean = []
+            for g in items:
+                # Result parsing
+                res = g.get("result")
+                score = "0 : 0"
+                has_res = False
+                h_score = 0
+                g_score = 0
+                
+                # Prüfen ob Spiel läuft (Result Objekt existiert oft schon, aber leer)
+                if res and isinstance(res, dict):
+                    h_score = res.get('homeTeamFinalScore', 0)
+                    g_score = res.get('guestTeamFinalScore', 0)
+                    # Wenn Punkte da sind, nehmen wir sie
+                    if h_score is not None and g_score is not None:
+                        score = f"{h_score} : {g_score}"
+                        if h_score > 0 or g_score > 0: has_res = True
+                
+                # Check live Score from Actions if available (optional, here simplified)
+                
+                raw_d = g.get("scheduledTime", "")
+                d_disp = raw_d
+                date_only = ""
+                if raw_d:
+                    try: 
+                        dt = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
+                        d_disp = dt.strftime("%d.%m.%Y %H:%M")
+                        date_only = dt.strftime("%d.%m.%Y")
+                    except: pass
+                
+                clean.append({
+                    "id": g.get("id"), 
+                    "date": d_disp, 
+                    "date_only": date_only,
+                    "score": score, 
+                    "has_result": has_res,
+                    "home": g.get("homeTeam", {}).get("name", "?"), 
+                    "guest": g.get("guestTeam", {}).get("name", "?"),
+                    "home_logo_id": str(g.get("homeTeam", {}).get("teamId")),
+                    "guest_logo_id": str(g.get("guestTeam", {}).get("teamId"))
+                })
+            return clean
+    except: pass
+    return []
