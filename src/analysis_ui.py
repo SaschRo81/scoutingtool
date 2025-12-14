@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 # Übersetzungswörterbuch für API-Begriffe
@@ -42,11 +42,9 @@ def translate_text(text):
     """Hilfsfunktion für einfache Übersetzungen."""
     if not text: return ""
     text_upper = str(text).upper()
-    # Versuche direkten Match
     if text_upper in ACTION_TRANSLATION:
         return ACTION_TRANSLATION[text_upper]
     
-    # Teilweise Matches ersetzen
     clean_text = text.replace("_", " ").lower()
     for eng, ger in ACTION_TRANSLATION.items():
         if eng.lower() in clean_text:
@@ -111,6 +109,50 @@ def get_player_team_lookup(box):
         
     return lookup
 
+def convert_elapsed_to_remaining(time_str, period):
+    """
+    Wandelt vergangene Zeit (Elapsed) in verbleibende Zeit (Remaining) um.
+    Q1-Q4: Basis 10 Minuten. OT: Basis 5 Minuten.
+    """
+    if not time_str:
+        return "-"
+    
+    # Standard: 10 Minuten pro Viertel
+    base_minutes = 10
+    # Wenn Period > 4, dann ist es Overtime -> 5 Minuten
+    try:
+        if int(period) > 4:
+            base_minutes = 5
+    except:
+        pass # Fallback auf 10
+
+    try:
+        # Erwartetes Format: "00:09:25" (HH:MM:SS) oder "09:25"
+        parts = time_str.split(":")
+        elapsed_seconds = 0
+        
+        if len(parts) == 3: # HH:MM:SS
+            elapsed_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        elif len(parts) == 2: # MM:SS
+            elapsed_seconds = int(parts[0]) * 60 + int(parts[1])
+        else:
+            return time_str # Unbekanntes Format
+
+        total_seconds = base_minutes * 60
+        remaining_seconds = total_seconds - elapsed_seconds
+        
+        # Sicherstellen, dass wir nicht negativ werden (sollte nicht passieren, aber sicher ist sicher)
+        if remaining_seconds < 0: remaining_seconds = 0
+        
+        # Zurück zu MM:SS
+        rem_min = remaining_seconds // 60
+        rem_sec = remaining_seconds % 60
+        
+        return f"{rem_min:02d}:{rem_sec:02d}"
+
+    except Exception:
+        return time_str # Bei Fehler Original zurückgeben
+
 def render_full_play_by_play(box):
     """Rendert eine detaillierte Play-by-Play Tabelle auf Deutsch."""
     actions = box.get("actions", [])
@@ -142,41 +184,30 @@ def render_full_play_by_play(box):
         
         score_str = f"{running_h} : {running_g}"
         
-        # --- ZEIT FORMATIERUNG (NEU: gameTime nutzen) ---
+        # --- ZEIT LOGIK ---
         period = act.get("period", "")
-        game_time = act.get("gameTime", "") # Das Feld, das Sie gefunden haben (z.B. "00:09:25")
-        time_in_game = act.get("timeInGame", "") # Fallback (ISO Format)
+        game_time = act.get("gameTime", "") # Format oft "00:01:23" (Elapsed)
         
-        time_display = f"Q{period}" if period else "-"
-        
+        # Zeit umrechnen von Elapsed -> Remaining
         if game_time:
-            # Format "00:09:25" zu "09:25" machen
-            display_time = game_time
-            if display_time.startswith("00:"):
-                display_time = display_time[3:]
-            time_display = f"Q{period} {display_time}"
-            
-        elif time_in_game and "M" in time_in_game:
-            # Fallback Parsing für PTxxMxxS
-            try:
-                t = time_in_game.replace("PT", "").replace("S", "")
-                m, s = t.split("M")
-                time_display = f"Q{period} {m}:{s.zfill(2)}"
-            except:
-                pass
+            display_time = convert_elapsed_to_remaining(game_time, period)
+        else:
+            display_time = "-"
+
+        time_label = f"Q{period} {display_time}" if period else "-"
         
         # Akteur bestimmen
         pid = str(act.get("seasonPlayerId"))
         actor = player_map.get(pid, "")
         
-        # Team bestimmen (Intelligente Logik)
+        # Team bestimmen
         tid = str(act.get("seasonTeamId"))
         
         if tid == home_id:
             team_display = home_name
         elif tid == guest_id:
             team_display = guest_name
-        elif pid in player_team_map: # Fallback: Team über Spieler finden
+        elif pid in player_team_map: 
             team_display = player_team_map[pid]
         else:
             team_display = "-" 
@@ -185,10 +216,8 @@ def render_full_play_by_play(box):
         raw_type = act.get("type", "")
         action_german = translate_text(raw_type)
         
-        # Erfolg/Misserfolg bei Würfen
         is_successful = act.get("isSuccessful")
         if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
-             # Wenn der Typ nicht schon explizit "Treffer" oder "Fehlwurf" sagt (wie bei TWO_POINT_THROW)
              if "Treffer" not in action_german and "Fehlwurf" not in action_german:
                  if is_successful is True:
                      action_german += " (Treffer)"
@@ -200,13 +229,11 @@ def render_full_play_by_play(box):
             qual_german = [translate_text(q) for q in qualifiers]
             action_german += f" ({', '.join(qual_german)})"
         
-        # Punkte hinzufügen, wenn vorhanden (und > 0)
-        points = act.get("points")
-        if points and points > 0:
-            action_german += f" (+{points})"
+        if act.get("points"):
+            action_german += f" (+{act.get('points')})"
 
         data.append({
-            "Zeit": time_display,
+            "Zeit": time_label,
             "Score": score_str,
             "Team": team_display,
             "Spieler": actor,
@@ -215,7 +242,6 @@ def render_full_play_by_play(box):
 
     df = pd.DataFrame(data)
     
-    # Dynamische Höhe berechnen
     rows = len(df)
     height = min((rows + 1) * 35 + 10, 1500) 
     
@@ -236,7 +262,6 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
          new_h = safe_int(act.get("homeTeamPoints"))
          new_g = safe_int(act.get("guestTeamPoints"))
          
-         # Fix für None values in Actions
          if new_h == 0 and new_g == 0 and act.get("homeTeamPoints") is None:
              new_h = cur_h
              new_g = cur_g
@@ -601,223 +626,3 @@ def render_charts_and_stats(box):
 </tr>"""
         html += "</table>"
         st.markdown(html, unsafe_allow_html=True)
-
-def generate_game_summary(box):
-    """Generiert einen textbasierten Spielbericht."""
-    if not box: return "Keine Daten verfügbar."
-
-    h_data = box.get("homeTeam", {})
-    g_data = box.get("guestTeam", {})
-    h_name = get_team_name(h_data, "Heim")
-    g_name = get_team_name(g_data, "Gast")
-    res = box.get("result", {})
-    
-    s_h = res.get("homeTeamFinalScore", 0)
-    s_g = res.get("guestTeamFinalScore", 0)
-    
-    # 1. Ergebnis
-    winner = h_name if s_h > s_g else g_name
-    diff = abs(s_h - s_g)
-    text = f"**Endergebnis:** {h_name} {s_h} : {s_g} {g_name}\n\n"
-    
-    if diff < 6:
-        text += f"In einem bis zur letzten Sekunde spannenden Krimi setzte sich {winner} knapp durch. "
-    elif diff > 20:
-        text += f"{winner} dominierte das Spiel deutlich und gewann souverän mit {diff} Punkten Vorsprung. "
-    else:
-        text += f"{winner} konnte das Spiel mit einem soliden {diff}-Punkte-Vorsprung für sich entscheiden. "
-
-    # 2. Viertel-Analyse
-    q_h_scores = [res.get(f"homeTeamQ{i}Score", 0) for i in range(1, 5)]
-    q_g_scores = [res.get(f"guestTeamQ{i}Score", 0) for i in range(1, 5)]
-    
-    h_q_wins = sum(1 for i in range(4) if q_h_scores[i] > q_g_scores[i])
-    if h_q_wins == 4 and s_h > s_g:
-        text += f"{h_name} gewann dabei jedes einzelne Viertel. "
-    elif h_q_wins == 0 and s_h < s_g:
-        text += f"{g_name} ließ nichts anbrennen und entschied alle vier Viertel für sich. "
-    
-    # 3. Schlüsselstatistiken
-    h_fg = safe_int(h_data.get("gameStat", {}).get("fieldGoalsSuccessPercent"))
-    g_fg = safe_int(g_data.get("gameStat", {}).get("fieldGoalsSuccessPercent"))
-    h_reb = safe_int(h_data.get("gameStat", {}).get("totalRebounds"))
-    g_reb = safe_int(g_data.get("gameStat", {}).get("totalRebounds"))
-    h_to = safe_int(h_data.get("gameStat", {}).get("turnovers"))
-    g_to = safe_int(g_data.get("gameStat", {}).get("turnovers"))
-
-    text += "\n\n**Schlüssel zum Sieg:**\n"
-    if s_h > s_g:
-        if h_fg > g_fg + 5: text += f"- {h_name} traf deutlich besser aus dem Feld ({h_fg}% vs {g_fg}%).\n"
-        if h_reb > g_reb + 5: text += f"- Die Dominanz am Brett war entscheidend ({h_reb} zu {g_reb} Rebounds).\n"
-        if h_to < g_to - 3: text += f"- {h_name} passte besser auf den Ball auf ({h_to} Turnover gegenüber {g_to}).\n"
-    else:
-        if g_fg > h_fg + 5: text += f"- {g_name} hatte die heißeren Hände ({g_fg}% vs {h_fg}% Trefferquote).\n"
-        if g_reb > h_reb + 5: text += f"- {g_name} kontrollierte die Rebounds ({g_reb} zu {h_reb}).\n"
-        if g_to < h_to - 3: text += f"- {g_name} erzwang viele Ballverluste ({h_to} Turnover beim Gegner).\n"
-
-    # 4. Top Performer
-    def get_best(p_list, key):
-        if not p_list: return None, 0
-        s = sorted(p_list, key=lambda x: safe_int(x.get(key)), reverse=True)
-        p = s[0]
-        name = p.get("seasonPlayer", {}).get("lastName", "Unknown")
-        return name, safe_int(p.get(key))
-
-    h_p_name, h_p_val = get_best(h_data.get("playerStats", []), "points")
-    g_p_name, g_p_val = get_best(g_data.get("playerStats", []), "points")
-    
-    text += "\n**Top Performer:**\n"
-    text += f"Auf Seiten von {h_name} war **{h_p_name}** mit {h_p_val} Punkten am erfolgreichsten. "
-    text += f"Bei {g_name} hielt **{g_p_name}** mit {g_p_val} Zählern dagegen."
-
-    return text
-
-def generate_complex_ai_prompt(box):
-    """
-    Erstellt einen fertigen Prompt für ChatGPT basierend auf den Boxscore-Daten
-    und den spezifischen SEO/Journalismus-Anforderungen.
-    """
-    if not box: return "Keine Daten."
-
-    # 1. Datenaufbereitung
-    h_data = box.get("homeTeam", {})
-    g_data = box.get("guestTeam", {})
-    h_name = get_team_name(h_data, "Heim")
-    g_name = get_team_name(g_data, "Gast")
-    res = box.get("result", {})
-    
-    # Identifikation VIMODROM (falls Jena spielt)
-    is_jena_home = ("Jena" in h_name or "VIMODROM" in h_name)
-    is_jena_guest = ("Jena" in g_name or "VIMODROM" in g_name)
-
-    # Korrekte Bestimmung von VIMODROM Name und Gegner
-    vimodrom_name = "VIMODROM Baskets Jena" 
-    opponent = ""
-    jena_score = 0
-    opp_score = 0
-
-    if is_jena_home:
-        opponent = g_name
-        jena_score = res.get("homeTeamFinalScore", 0)
-        opp_score = res.get("guestTeamFinalScore", 0)
-    elif is_jena_guest:
-        opponent = h_name
-        jena_score = res.get("guestTeamFinalScore", 0)
-        opp_score = res.get("homeTeamFinalScore", 0)
-    else: # Wenn Jena nicht spielt, neutral bleiben
-        vimodrom_name = "" 
-        opponent = "" # Kein direkter Gegner aus VIMODROM-Sicht
-        jena_score = res.get("homeTeamFinalScore", 0) # Als Referenz
-        opp_score = res.get("guestTeamFinalScore", 0) # Als Referenz
-
-
-    # Viertel-Ergebnisse für den Kontext (immer Heim vs Gast)
-    q_str = f"Q1: {res.get('homeTeamQ1Score', 0)}:{res.get('guestTeamQ1Score', 0)}, " \
-            f"Q2: {res.get('homeTeamQ2Score', 0)}:{res.get('guestTeamQ2Score', 0)}, " \
-            f"Q3: {res.get('homeTeamQ3Score', 0)}:{res.get('guestTeamQ3Score', 0)}, " \
-            f"Q4: {res.get('homeTeamQ4Score', 0)}:{res.get('guestTeamQ4Score', 0)}"
-
-    # Top Performer extrahieren
-    def get_stats_str(team_data):
-        s = team_data.get("gameStat", {})
-        p_list = team_data.get("playerStats", [])
-        # Top Scorer finden
-        top_p = sorted([p for p in p_list if p.get("points", 0) is not None], key=lambda x: x.get("points", 0), reverse=True)[:2]
-        top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')} Pkt)" for p in top_p])
-        
-        fg = safe_int(s.get("fieldGoalsSuccessPercent", 0))
-        reb = safe_int(s.get("totalRebounds", 0))
-        to = safe_int(s.get("turnovers", 0))
-        ast = safe_int(s.get("assists", 0))
-        
-        return f"FG-Quote: {fg}%, Total Rebounds: {reb}, Turnovers: {to}, Assists: {ast}, Top-Scorer: {top_str}"
-
-    stats_home = get_stats_str(h_data)
-    stats_guest = get_stats_str(g_data)
-
-    # 2. Der Prompt Text (Dein Wunsch-Prompt)
-    prompt_sections = []
-
-    prompt_sections.append("ANWEISUNGEN FÜR KI-GENERIERUNG:")
-    prompt_sections.append("Schreibe immer in Deutsch. Die Texte müssen SEO-optimiert geschrieben werden, mit gezieltem Einsatz relevanter Keywords, semantischer Variationen und organischem Lesefluss. Vermeide Worte wie 'beeindruckend' und wähle präzisere oder neutralere Formulierungen.")
-    
-    if vimodrom_name:
-        prompt_sections.append(f"AUFMERKSAMKEIT: Wenn in den folgenden Berichten die 'VIMODROM Baskets Jena' involviert sind, schreibe den ERSTEN Artikel (für die VIMODROM-Website) aus der Sicht der VIMODROM Baskets Jena (Fan-Brille, emotional). Alle anderen Artikel bleiben neutral.")
-        prompt_sections.append(f"Relevante Keywords für Jena: VIMODROM Baskets Jena, Basketball in Jena, Basketball Training Jena, Basketballspiele Thüringen. Diese Keywords sollen in den Titel, die Meta-Beschreibung und den Textkörper integriert werden.")
-        prompt_sections.append(f"Das Team für die Fan-Perspektive ist: {vimodrom_name}")
-
-    prompt_sections.append("\n\nSPIELDATEN FÜR DIE TEXTE:")
-    prompt_sections.append(f"- Heimteam: {h_name}")
-    prompt_sections.append(f"- Gastteam: {g_name}")
-    prompt_sections.append(f"- Endergebnis: {h_name} {res.get('homeTeamFinalScore', 0)} : {res.get('guestTeamFinalScore', 0)} {g_name}")
-    prompt_sections.append(f"- Viertelverlauf: {q_str}")
-    prompt_sections.append(f"- Statistik {h_name}: {stats_home}")
-    prompt_sections.append(f"- Statistik {g_name}: {stats_guest}")
-    prompt_sections.append(f"- Zuschauer: {res.get('spectators', 'k.A.')}")
-    prompt_sections.append(f"- Halle: {box.get('venue', {}).get('name', 'der Halle')}")
-
-    if is_jena_home or is_jena_guest:
-        prompt_sections.append(f"- VIMODROM Baskets Jena spielte gegen: {opponent}")
-        prompt_sections.append(f"- VIMODROM Ergebnis: {jena_score} : {opp_score} gegen {opponent}")
-    
-    prompt_sections.append("\n\nAUFGABE 1: ERSTELLE DREI JOURNALISTISCHE SPIELBERICHTE")
-    prompt_sections.append("Ziel: Atmosphäre und Dramatik des Basketballspiels einfangen.")
-    prompt_sections.append("Sprache: Klar, prägnant, lebhafte Beschreibungen, emotionale Höhepunkte.")
-    prompt_sections.append("Texte zugänglich für Gelegenheitssportfans, detailliert genug für Experten.")
-    prompt_sections.append("Länge: Texte für Website und 2. DBBL Website jeweils mindestens 3000 Zeichen umfassen. Für das Spieltagsmagazin 1500-2000 Zeichen.")
-    prompt_sections.append("Am Ende jedes Artikels sollen jeweils drei verschiedene Headlines, zehn Keywords (kommagetrennt) und eine Meta-Beschreibung (maximal 150 Zeichen) bereitgestellt werden.")
-
-    prompt_sections.append("\n### ARTIKEL 1: Für die VIMODROM-Website")
-    prompt_sections.append("Perspektive: Aus Sicht der VIMODROM Baskets Jena (fan-nah, emotional, Fokus auf das Jena-Team).")
-    prompt_sections.append("Beginne mit einem überraschenden Moment oder einer besonderen Aussage aus dem Spiel (fiktiv, wenn keine da).")
-    prompt_sections.append("Beschreibe den Spielverlauf mit Fokus auf unerwartete Wendungen, taktische Feinheiten und herausragende Szenen des Jena-Teams.")
-    prompt_sections.append("Integriere Statistiken kreativ und erzähle Geschichten hinter den Zahlen (Fokus Jena-Spieler).")
-    prompt_sections.append("Betone die Leistungen weniger beachteter Jena-Spielerinnen und hebe einzigartige Aspekte des Jena-Spiels hervor.")
-    prompt_sections.append("Gezielt anzusprechende Emotionen: Spannung, Begeisterung, Teamgeist, Stolz, Adrenalin/Nervenkitzel, Hoffnung, Mitfiebern/Identifikation.")
-
-    prompt_sections.append("\n### ARTIKEL 2: Für die 2. DBBL-Website")
-    prompt_sections.append("Perspektive: Neutral, objektiv, journalistisch (keine Fan-Brille).")
-    prompt_sections.append("Der Text soll die Fakten des Spiels präzise darstellen, aber dennoch die Dramatik einfangen.")
-    prompt_sections.append("Struktur: Beginne mit der Einordnung des Spiels in den Saisonkontext, gefolgt von einer Analyse des Gegners, aktuellen Spieler- und Trainerzitaten (fiktiv, wenn nicht vorhanden) sowie relevanten Verletzungsupdates (fiktiv, wenn nicht vorhanden).")
-    prompt_sections.append("Gezielt anzusprechende Emotionen: Spannung, Begeisterung, Adrenalin/Nervenkitzel, Neugierde.")
-
-    prompt_sections.append("\n### ARTIKEL 3: Für das Spieltagsmagazin")
-    prompt_sections.append("Perspektive: Aus heutiger Perspektive als Rückblick, emotional und fesselnd.")
-    prompt_sections.append("Fokus auf die Story des Spiels, die wichtigsten Phasen und Highlights.")
-    prompt_sections.append("Kann etwas freier im Stil sein, weniger formell als die Website-Texte.")
-    prompt_sections.append("Gezielt anzusprechende Emotionen: Erleichterung (wenn gewonnen), Stolz, Begeisterung, Mitfiebern.")
-
-    prompt_sections.append("\n\nAUFGABE 2: ERSTELLE EINEN SEO-OPTIMIERTEN WEBSITE-TEXT ZUM THEMA 'Basketball in Jena'")
-    prompt_sections.append("Ziel: Sport- und Basketballinteressierte aller Altersklassen ansprechen.")
-    prompt_sections.append("Inhalt: Vorstellung des Teams VIMODROM Baskets Jena, Informationen zu anstehenden Spielen, Trainingstipps und Möglichkeiten für neue Spieler, dem Team beizutreten.")
-    prompt_sections.append("Struktur: Klare Struktur ohne Zwischenüberschriften. Absätze kurz und prägnant (max. 3 Sätze pro Absatz).")
-    prompt_sections.append("Länge: Mindestens 600–1.000 Wörter.")
-    prompt_sections.append("Keywords: VIMODROM Baskets Jena, Basketball in Jena, Basketball Training Jena, Basketballspiele Thüringen (in Titel, Meta-Beschreibung und Textkörper integrieren).")
-    prompt_sections.append("Meta-Beschreibung: Maximal 150 Zeichen, spannend und klickstark.")
-    prompt_sections.append("Engagement fördern: Internen Links (fiktiv) zu weiteren Artikeln (z. B. Trainingszeiten, Ticketkauf) und externen Links (fiktiv) zu vertrauenswürdigen Basketballseiten integrieren.")
-    prompt_sections.append("Multimedia: Platzhalter für Bilder oder Videos mit Alt-Tags (z.B. `<img src='bild-url.jpg' alt='Basketball Training VIMODROM Baskets Jena'>`).")
-    prompt_sections.append("Inhalt an Suchintent anpassen, inspiriert für das Team und Basketball in Jena.")
-
-    prompt_sections.append("\n\nZUSAMMENFASSUNG UND META-INFORMATIONEN:")
-    prompt_sections.append("Wenn alle Berichte geschrieben sind, füge zusätzlich EINE Zusammenfassung mit 10 Meta-Tags (kommagetrennt) und EINER Meta-Beschreibung für das GESAMTE SPIEL hinzu.")
-
-    return "\n".join(prompt_sections)
-
-def run_openai_generation(api_key, prompt):
-    """Sendet den Prompt an die OpenAI API und gibt den Text zurück."""
-    client = openai.OpenAI(api_key=api_key)
-    
-    try:
-        # Wir nutzen gpt-4o, da es aktuell das beste Preis-Leistungs-Verhältnis hat
-        # und sehr gut Deutsch schreibt.
-        response = client.chat.completions.create(
-            model="gpt-4o", 
-            messages=[
-                {"role": "system", "content": "Du bist ein professioneller Sportjournalist und SEO-Experte, spezialisiert auf Basketball. Du schreibst fundierte, lebendige und optimierte Artikel für verschiedene Zielgruppen."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.0, # Etwas niedriger, da der Prompt schon sehr spezifisch ist
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Fehler bei der API-Abfrage: {str(e)}"
