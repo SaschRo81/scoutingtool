@@ -5,9 +5,9 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
-from src.api import get_player_metadata_cached 
 
 # --- KONSTANTEN & HELPERS ---
+
 ACTION_TRANSLATION = {
     "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
     "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
@@ -80,12 +80,14 @@ def convert_elapsed_to_remaining(time_str, period):
     try:
         if int(period) > 4: base_minutes = 5
     except: pass
+    
     try:
         parts = time_str.split(":")
         sec = 0
         if len(parts) == 3: sec = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
         elif len(parts) == 2: sec = int(parts[0])*60 + int(parts[1])
         else: return time_str
+        
         rem = (base_minutes * 60) - sec
         if rem < 0: rem = 0
         return f"{rem // 60:02d}:{rem % 60:02d}"
@@ -157,47 +159,96 @@ def analyze_game_flow(actions, home_name, guest_name):
     summary += "\n".join(crunch_log)
     return summary
 
+# --- RENDERING FUNKTIONEN ---
+
 def render_full_play_by_play(box, height=600):
+    """Rendert eine detaillierte Play-by-Play Tabelle auf Deutsch."""
     actions = box.get("actions", [])
     if not actions:
         st.info("Keine Play-by-Play Daten verfügbar.")
         return
+
     player_map = get_player_lookup(box)
     home_name = get_team_name(box.get("homeTeam", {}), "Heim")
     guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
     home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
     guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
-    data = []; running_h = 0; running_g = 0
+
+    data = []
+    
+    running_h = 0
+    running_g = 0
+
     for act in actions:
-        h_pts = act.get("homeTeamPoints"); g_pts = act.get("guestTeamPoints")
+        h_pts = act.get("homeTeamPoints")
+        g_pts = act.get("guestTeamPoints")
+        
         if h_pts is not None: running_h = safe_int(h_pts)
         if g_pts is not None: running_g = safe_int(g_pts)
+        
         score_str = f"{running_h} : {running_g}"
-        period = act.get("period", ""); game_time = act.get("gameTime", ""); time_in_game = act.get("timeInGame", "") 
-        if game_time: display_time = convert_elapsed_to_remaining(game_time, period)
+        
+        period = act.get("period", "")
+        game_time = act.get("gameTime", "") 
+        time_in_game = act.get("timeInGame", "") 
+        
+        if game_time:
+            display_time = convert_elapsed_to_remaining(game_time, period)
         else:
             display_time = "-"
             if time_in_game and "M" in time_in_game:
-                try: t = time_in_game.replace("PT", "").replace("S", ""); m, s = t.split("M"); display_time = f"{m}:{s.zfill(2)}"
+                try:
+                    t = time_in_game.replace("PT", "").replace("S", "")
+                    m, s = t.split("M")
+                    display_time = f"{m}:{s.zfill(2)}"
                 except: pass
+
         time_label = f"Q{period} {display_time}" if period else "-"
-        pid = str(act.get("seasonPlayerId")); actor = player_map.get(pid, "")
+        
+        pid = str(act.get("seasonPlayerId"))
+        actor = player_map.get(pid, "")
+        
         tid = str(act.get("seasonTeamId"))
-        if tid == home_id: team_display = home_name
-        elif tid == guest_id: team_display = guest_name
-        else: team_display = "-" 
-        raw_type = act.get("type", ""); action_german = translate_text(raw_type)
+        if tid == home_id:
+            team_display = home_name
+        elif tid == guest_id:
+            team_display = guest_name
+        elif pid in player_team_map: 
+            team_display = player_team_map[pid]
+        else:
+            team_display = "-" 
+
+        raw_type = act.get("type", "")
+        action_german = translate_text(raw_type)
+        
         is_successful = act.get("isSuccessful")
         if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
              if "Treffer" not in action_german and "Fehlwurf" not in action_german:
-                 if is_successful is True: action_german += " (Treffer)"
-                 elif is_successful is False: action_german += " (Fehlwurf)"
+                 if is_successful is True:
+                     action_german += " (Treffer)"
+                 elif is_successful is False:
+                     action_german += " (Fehlwurf)"
+
         qualifiers = act.get("qualifiers", [])
-        if qualifiers: qual_german = [translate_text(q) for q in qualifiers]; action_german += f" ({', '.join(qual_german)})"
-        if act.get("points"): action_german += f" (+{act.get('points')})"
-        data.append({"Zeit": time_label, "Score": score_str, "Team": team_display, "Spieler": actor, "Aktion": action_german})
+        if qualifiers:
+            qual_german = [translate_text(q) for q in qualifiers]
+            action_german += f" ({', '.join(qual_german)})"
+        
+        if act.get("points"):
+            action_german += f" (+{act.get('points')})"
+
+        data.append({
+            "Zeit": time_label,
+            "Score": score_str,
+            "Team": team_display,
+            "Spieler": actor,
+            "Aktion": action_german
+        })
+
     df = pd.DataFrame(data)
-    if height == 400: df = df.iloc[::-1]
+    if height == 400:
+        df = df.iloc[::-1]
+
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def render_game_header(details):
