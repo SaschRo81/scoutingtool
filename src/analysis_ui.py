@@ -5,9 +5,9 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
+from src.api import get_player_metadata_cached 
 
 # --- KONSTANTEN & HELPERS ---
-
 ACTION_TRANSLATION = {
     "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
     "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
@@ -80,14 +80,12 @@ def convert_elapsed_to_remaining(time_str, period):
     try:
         if int(period) > 4: base_minutes = 5
     except: pass
-    
     try:
         parts = time_str.split(":")
         sec = 0
         if len(parts) == 3: sec = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
         elif len(parts) == 2: sec = int(parts[0])*60 + int(parts[1])
         else: return time_str
-        
         rem = (base_minutes * 60) - sec
         if rem < 0: rem = 0
         return f"{rem // 60:02d}:{rem % 60:02d}"
@@ -402,7 +400,21 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
 
                     with col_stats:
                         st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
-                        st.caption(f"Alter: {row.get('AGE', '-')} | Nat: {row.get('NATIONALITY', '-')}")
+                        # Fallback für Age/Nat, falls im DataFrame leer
+                        age = row.get('AGE', '-')
+                        nat = row.get('NATIONALITY', '-')
+                        height = row.get('HEIGHT', '-')
+                        pos = row.get('POS', '-')
+
+                        # Wenn leer, versuche Metadaten nachzuladen
+                        if (age == '-' or nat == '-') and metadata_callback:
+                             meta = metadata_callback(row["PLAYER_ID"])
+                             if age == '-': age = meta.get('age', '-')
+                             if nat == '-': nat = meta.get('nationality', '-')
+                             if height == '-': height = meta.get('height', '-')
+                             if pos == '-': pos = meta.get('pos', '-')
+
+                        st.caption(f"Alter: {age} | Nat: {nat} | Größe: {height} | Pos: {pos}")
                         st.markdown(f"**PPG: {row['PPG']}** | FG%: {row['FG%']} | 3P%: {row['3PCT']}% | REB: {row['TOT']} | AST: {row['AS']}")
                     st.divider()
         else: st.warning("Keine Kaderdaten.")
@@ -434,7 +446,7 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                     char = "W" if win else "L"
                     
                     with cols_form[idx]:
-                        st.markdown(f"<div style='background-color:{color};color:white;text-align:center;padding:10px;border-radius:5px;font-weight:bold;'>{char}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background-color:{color};color:white;text-align:center;padding:10px;border-radius:5px;font-weight:bold;' title='{g['date']}\n{g['home']} vs {g['guest']}\n{g['score']}'>{char}</div>", unsafe_allow_html=True)
             else: st.info("Keine gespielten Spiele.")
         else: st.info("Keine Spiele.")
 
