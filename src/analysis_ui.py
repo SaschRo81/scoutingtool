@@ -1,5 +1,3 @@
-# --- START OF FILE src/analysis_ui.py ---
-
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -154,7 +152,7 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
     if not player_stats: return
 
     data = []
-    # Summen-Variablen für Spieler (um später die Team/Coach Zeile zu berechnen)
+    # Summen-Variablen für Spieler
     sum_pts=0; sum_3pm=0; sum_3pa=0; sum_fgm=0; sum_fga=0; sum_ftm=0; sum_fta=0
     sum_or=0; sum_dr=0; sum_tr=0; sum_as=0; sum_st=0; sum_to=0; sum_bs=0; sum_pf=0; sum_eff=0; sum_pm=0
 
@@ -206,9 +204,6 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         })
 
     # --- TEAM / COACH ROW BERECHNUNG ---
-    # Wir nehmen die offiziellen Total Stats des Teams und ziehen die Summe der Spieler ab.
-    # Der Rest sind die "Team/Coach" Statistiken (z.B. Team-Rebounds, Deadball-Turnovers, Coach-Fouls)
-    
     if team_stats_official:
         t_off = team_stats_official
         team_pts = safe_int(t_off.get("points")) - sum_pts
@@ -221,7 +216,6 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         team_bs = safe_int(t_off.get("blocks")) - sum_bs
         team_pf = safe_int(t_off.get("foulsCommitted")) - sum_pf
         
-        # Zeige die Zeile nur an, wenn es relevante Werte gibt (Rebounds, TOs oder Fouls sind typisch)
         if (team_or != 0 or team_dr != 0 or team_tr != 0 or team_to != 0 or team_pf != 0 or team_pts != 0):
             data.append({
                 "No.": "", "Name": "Team / Coach", "Min": "", "PTS": team_pts if team_pts != 0 else 0,
@@ -231,10 +225,9 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
                 "PF": team_pf, "EFF": "", "+/-": ""
             })
 
-    # --- TOTALS ROW (Verwende offizielle Stats für Genauigkeit) ---
+    # --- TOTALS ROW ---
     t_off = team_stats_official if team_stats_official else {}
     
-    # Fallback auf Summen, falls offiziell nichts da ist
     final_pts = safe_int(t_off.get("points")) if t_off else sum_pts
     final_fgm = safe_int(t_off.get("fieldGoalsMade")) if t_off else sum_fgm
     final_fga = safe_int(t_off.get("fieldGoalsAttempted")) if t_off else sum_fga
@@ -262,7 +255,7 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         "BS": safe_int(t_off.get("blocks")) if t_off else sum_bs, 
         "PF": safe_int(t_off.get("foulsCommitted")) if t_off else sum_pf, 
         "EFF": safe_int(t_off.get("efficiency")) if t_off else sum_eff, 
-        "+/-": "" # PlusMinus macht für Team Total wenig Sinn, da es 0 ist oder Score Diff
+        "+/-": ""
     }
     data.append(totals)
     df = pd.DataFrame(data)
@@ -486,6 +479,80 @@ def generate_game_summary(box):
 
     return text
 
+def analyze_game_flow(actions, home_name, guest_name):
+    """
+    Analysiert den Spielverlauf aus den Play-by-Play Aktionen.
+    Extrahiert Führungswechsel, Unentschieden und eine Crunchtime-Zusammenfassung.
+    """
+    if not actions: 
+        return "Keine Play-by-Play Daten verfügbar."
+
+    lead_changes = 0
+    ties = 0
+    last_leader = None # 'home', 'guest', or 'tie'
+    current_h_score = 0
+    current_g_score = 0
+    
+    # Crunchtime Log: Aktionen der letzten 5 Minuten (Zeit < 05:00 in Q4 oder OT)
+    crunch_log = []
+    
+    # Sortiere Aktionen nach Zeit (falls nicht schon sortiert) - normalerweise kommen sie chronologisch
+    # Da API Zeit oft als String "MM:SS" ist und rückwärts läuft (40:00 -> 00:00 ist falsch, oft läuft es 10:00 -> 00:00 pro Viertel)
+    # Wir iterieren einfach durch.
+    
+    for act in actions:
+        h_score = safe_int(act.get("homeTeamPoints"))
+        g_score = safe_int(act.get("guestTeamPoints"))
+        
+        # Ignoriere 0-0 Start
+        if h_score == 0 and g_score == 0: continue
+
+        # Leader check
+        if h_score > g_score:
+            current_leader = 'home'
+        elif g_score > h_score:
+            current_leader = 'guest'
+        else:
+            current_leader = 'tie'
+
+        if last_leader is not None:
+            if current_leader != last_leader:
+                if current_leader == 'tie':
+                    ties += 1
+                elif last_leader != 'tie': # Echter Führungswechsel (nicht von/zu Tie)
+                    lead_changes += 1
+                elif last_leader == 'tie': # Aus Tie heraus Führung übernommen -> wird oft als LC gezählt
+                    lead_changes += 1
+
+        last_leader = current_leader
+
+        # Crunchtime Extraction
+        # Wir suchen Aktionen im 4. Viertel oder OT, bei denen die Zeit unter 3 Minuten ist
+        # Das Format von 'timeInGame' ist oft knifflig, wir prüfen einfach, ob es das Ende der Liste ist.
+        # Alternativ: Wir nehmen einfach die letzten 15 relevanten Aktionen (Scores, TOs, Fouls)
+        
+    # Extrahieren der letzten X Aktionen für die narrative Beschreibung
+    relevant_actions = [a for a in actions if a.get("type") in ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL"]]
+    last_events = relevant_actions[-12:] # Die letzten 12 Aktionen
+    
+    crunch_log.append("\n**Die Schlussphase (Chronologie der letzten Ereignisse):**")
+    for ev in last_events:
+        score_str = f"{ev.get('homeTeamPoints')}:{ev.get('guestTeamPoints')}"
+        # Versuch den Spielernamen zu finden, oft aber nicht direkt im Action-Objekt lesbar
+        # Wir nutzen den 'type' und 'qualifiers'
+        desc = ev.get("type", "").replace("_", " ")
+        qual = ", ".join(ev.get("qualifiers", []))
+        if qual: desc += f" ({qual})"
+        
+        # Welches Team?
+        # seasonTeamId ist in der Action. Wir müssten es mappen, aber einfacher ist Kontext aus Score
+        crunch_log.append(f"- {score_str}: {desc}")
+
+    summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
+    summary += "\n".join(crunch_log)
+    
+    return summary
+
 def generate_complex_ai_prompt(box):
     """
     Erstellt einen fertigen Prompt für ChatGPT basierend auf den Boxscore-Daten
@@ -549,6 +616,10 @@ def generate_complex_ai_prompt(box):
     stats_home = get_stats_str(h_data)
     stats_guest = get_stats_str(g_data)
 
+    # --- NEU: PBP Analyse ---
+    pbp_summary = analyze_game_flow(box.get("actions", []), h_name, g_name)
+
+
     # 2. Der Prompt Text (Dein Wunsch-Prompt)
     prompt_sections = []
 
@@ -569,13 +640,17 @@ def generate_complex_ai_prompt(box):
     prompt_sections.append(f"- Statistik {g_name}: {stats_guest}")
     prompt_sections.append(f"- Zuschauer: {res.get('spectators', 'k.A.')}")
     prompt_sections.append(f"- Halle: {box.get('venue', {}).get('name', 'der Halle')}")
+    
+    # Hier fügen wir den Spielverlauf ein
+    prompt_sections.append("\nDETAILS ZUM SPIELVERLAUF (Play-by-Play):")
+    prompt_sections.append(pbp_summary)
 
     if is_jena_home or is_jena_guest:
         prompt_sections.append(f"- VIMODROM Baskets Jena spielte gegen: {opponent}")
         prompt_sections.append(f"- VIMODROM Ergebnis: {jena_score} : {opp_score} gegen {opponent}")
     
     prompt_sections.append("\n\nAUFGABE 1: ERSTELLE DREI JOURNALISTISCHE SPIELBERICHTE")
-    prompt_sections.append("Ziel: Atmosphäre und Dramatik des Basketballspiels einfangen.")
+    prompt_sections.append("Ziel: Atmosphäre und Dramatik des Basketballspiels einfangen. Nutze die PBP-Daten für eine detaillierte Beschreibung der Schlussphase.")
     prompt_sections.append("Sprache: Klar, prägnant, lebhafte Beschreibungen, emotionale Höhepunkte.")
     prompt_sections.append("Texte zugänglich für Gelegenheitssportfans, detailliert genug für Experten.")
     prompt_sections.append("Länge: Texte für Website und 2. DBBL Website jeweils mindestens 3000 Zeichen umfassen. Für das Spieltagsmagazin 1500-2000 Zeichen.")
