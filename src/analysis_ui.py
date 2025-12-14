@@ -1,9 +1,11 @@
+# --- START OF FILE src/analysis_ui.py ---
+
 import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
 import pytz
-import openai # <-- Dieser Import MUSS hier oben stehen
+import openai 
 
 def safe_int(val):
     if val is None: return 0
@@ -148,12 +150,13 @@ def render_game_header(details):
     </div>
     """, unsafe_allow_html=True)
 
-def render_boxscore_table_pro(player_stats, team_name, coach_name="-"):
+def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coach_name="-"):
     if not player_stats: return
 
     data = []
-    t_min=0; t_pts=0; t_fgm=0; t_fga=0; t_3pm=0; t_3pa=0; t_ftm=0; t_fta=0
-    t_or=0; t_dr=0; t_tr=0; t_as=0; t_st=0; t_to=0; t_bs=0; t_pf=0; t_eff=0; t_pm=0
+    # Summen-Variablen für Spieler (um später die Team/Coach Zeile zu berechnen)
+    sum_pts=0; sum_3pm=0; sum_3pa=0; sum_fgm=0; sum_fga=0; sum_ftm=0; sum_fta=0
+    sum_or=0; sum_dr=0; sum_tr=0; sum_as=0; sum_st=0; sum_to=0; sum_bs=0; sum_pf=0; sum_eff=0; sum_pm=0
 
     for p in player_stats:
         info = p.get("seasonPlayer", {})
@@ -162,29 +165,29 @@ def render_boxscore_table_pro(player_stats, team_name, coach_name="-"):
         starter = "*" if p.get("isStartingFive") else ""
         sec = safe_int(p.get("secondsPlayed"))
         
-        if sec > 0:
-            t_min += sec
-            min_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
-            pts = safe_int(p.get("points")); t_pts += pts
-            m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted"))
-            p2 = safe_int(p.get("twoPointShotSuccessPercent"))
-            m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted"))
-            p3 = safe_int(p.get("threePointShotSuccessPercent")); t_3pm += m3; t_3pa += a3
-            mfg = safe_int(p.get("fieldGoalsMade")); afg = safe_int(p.get("fieldGoalsAttempted"))
-            pfg = safe_int(p.get("fieldGoalsSuccessPercent")); t_fgm += mfg; t_fga += afg
-            mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted"))
-            pft = safe_int(p.get("freeThrowsSuccessPercent")); t_ftm += mft; t_fta += aft
-            oreb = safe_int(p.get("offensiveRebounds")); t_or += oreb
-            dreb = safe_int(p.get("defensiveRebounds")); t_dr += dreb
-            treb = safe_int(p.get("totalRebounds")); t_tr += treb
-            ast = safe_int(p.get("assists")); t_as += ast
-            stl = safe_int(p.get("steals")); t_st += stl
-            tov = safe_int(p.get("turnovers")); t_to += tov
-            blk = safe_int(p.get("blocks")); t_bs += blk
-            pf = safe_int(p.get("foulsCommitted")); t_pf += pf
-            eff = safe_int(p.get("efficiency")); t_eff += eff
-            pm = safe_int(p.get("plusMinus")); t_pm += pm
+        # Werte holen
+        pts = safe_int(p.get("points")); sum_pts += pts
+        m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted"))
+        p2 = safe_int(p.get("twoPointShotSuccessPercent"))
+        m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted"))
+        p3 = safe_int(p.get("threePointShotSuccessPercent")); sum_3pm += m3; sum_3pa += a3
+        mfg = safe_int(p.get("fieldGoalsMade")); afg = safe_int(p.get("fieldGoalsAttempted"))
+        pfg = safe_int(p.get("fieldGoalsSuccessPercent")); sum_fgm += mfg; sum_fga += afg
+        mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted"))
+        pft = safe_int(p.get("freeThrowsSuccessPercent")); sum_ftm += mft; sum_fta += aft
+        oreb = safe_int(p.get("offensiveRebounds")); sum_or += oreb
+        dreb = safe_int(p.get("defensiveRebounds")); sum_dr += dreb
+        treb = safe_int(p.get("totalRebounds")); sum_tr += treb
+        ast = safe_int(p.get("assists")); sum_as += ast
+        stl = safe_int(p.get("steals")); sum_st += stl
+        tov = safe_int(p.get("turnovers")); sum_to += tov
+        blk = safe_int(p.get("blocks")); sum_bs += blk
+        pf = safe_int(p.get("foulsCommitted")); sum_pf += pf
+        eff = safe_int(p.get("efficiency")); sum_eff += eff
+        pm = safe_int(p.get("plusMinus")); sum_pm += pm
 
+        if sec > 0:
+            min_str = f"{int(sec//60):02d}:{int(sec%60):02d}"
             s_2p = f"{m2}/{a2} ({int(p2)}%)" if a2 else ""
             s_3p = f"{m3}/{a3} ({int(p3)}%)" if a3 else ""
             s_fg = f"{mfg}/{afg} ({int(pfg)}%)"
@@ -202,21 +205,74 @@ def render_boxscore_table_pro(player_stats, team_name, coach_name="-"):
             "PF": pf, "EFF": eff, "+/-": pm
         })
 
-    tot_fg_pct = int(t_fgm/t_fga*100) if t_fga else 0
-    tot_3p_pct = int(t_3pm/t_3pa*100) if t_3pa else 0
-    tot_ft_pct = int(t_ftm/t_fta*100) if t_fta else 0
+    # --- TEAM / COACH ROW BERECHNUNG ---
+    # Wir nehmen die offiziellen Total Stats des Teams und ziehen die Summe der Spieler ab.
+    # Der Rest sind die "Team/Coach" Statistiken (z.B. Team-Rebounds, Deadball-Turnovers, Coach-Fouls)
+    
+    if team_stats_official:
+        t_off = team_stats_official
+        team_pts = safe_int(t_off.get("points")) - sum_pts
+        team_or = safe_int(t_off.get("offensiveRebounds")) - sum_or
+        team_dr = safe_int(t_off.get("defensiveRebounds")) - sum_dr
+        team_tr = safe_int(t_off.get("totalRebounds")) - sum_tr
+        team_as = safe_int(t_off.get("assists")) - sum_as
+        team_st = safe_int(t_off.get("steals")) - sum_st
+        team_to = safe_int(t_off.get("turnovers")) - sum_to
+        team_bs = safe_int(t_off.get("blocks")) - sum_bs
+        team_pf = safe_int(t_off.get("foulsCommitted")) - sum_pf
+        
+        # Zeige die Zeile nur an, wenn es relevante Werte gibt (Rebounds, TOs oder Fouls sind typisch)
+        if (team_or != 0 or team_dr != 0 or team_tr != 0 or team_to != 0 or team_pf != 0 or team_pts != 0):
+            data.append({
+                "No.": "", "Name": "Team / Coach", "Min": "", "PTS": team_pts if team_pts != 0 else 0,
+                "2P": "", "3P": "", "FG": "", "FT": "",
+                "OR": team_or, "DR": team_dr, "TR": team_tr,
+                "AS": team_as, "ST": team_st, "TO": team_to, "BS": team_bs,
+                "PF": team_pf, "EFF": "", "+/-": ""
+            })
+
+    # --- TOTALS ROW (Verwende offizielle Stats für Genauigkeit) ---
+    t_off = team_stats_official if team_stats_official else {}
+    
+    # Fallback auf Summen, falls offiziell nichts da ist
+    final_pts = safe_int(t_off.get("points")) if t_off else sum_pts
+    final_fgm = safe_int(t_off.get("fieldGoalsMade")) if t_off else sum_fgm
+    final_fga = safe_int(t_off.get("fieldGoalsAttempted")) if t_off else sum_fga
+    final_3pm = safe_int(t_off.get("threePointShotsMade")) if t_off else sum_3pm
+    final_3pa = safe_int(t_off.get("threePointShotsAttempted")) if t_off else sum_3pa
+    final_ftm = safe_int(t_off.get("freeThrowsMade")) if t_off else sum_ftm
+    final_fta = safe_int(t_off.get("freeThrowsAttempted")) if t_off else sum_fta
+    
+    tot_fg_pct = int(final_fgm/final_fga*100) if final_fga else 0
+    tot_3p_pct = int(final_3pm/final_3pa*100) if final_3pa else 0
+    tot_ft_pct = int(final_ftm/final_fta*100) if final_fta else 0
     
     totals = {
-        "No.": "", "Name": "TOTALS", "Min": "200:00", "PTS": t_pts,
-        "2P": "", "3P": f"{t_3pm}/{t_3pa} ({tot_3p_pct}%)", "FG": f"{t_fgm}/{t_fga} ({tot_fg_pct}%)", 
-        "FT": f"{t_ftm}/{t_fta} ({tot_ft_pct}%)", "OR": t_or, "DR": t_dr, "TR": t_tr, 
-        "AS": t_as, "ST": t_st, "TO": t_to, "BS": t_bs, "PF": t_pf, "EFF": t_eff, "+/-": t_pm
+        "No.": "", "Name": "TOTALS", "Min": "200:00", "PTS": final_pts,
+        "2P": "", 
+        "3P": f"{final_3pm}/{final_3pa} ({tot_3p_pct}%)", 
+        "FG": f"{final_fgm}/{final_fga} ({tot_fg_pct}%)", 
+        "FT": f"{final_ftm}/{final_fta} ({tot_ft_pct}%)", 
+        "OR": safe_int(t_off.get("offensiveRebounds")) if t_off else sum_or, 
+        "DR": safe_int(t_off.get("defensiveRebounds")) if t_off else sum_dr, 
+        "TR": safe_int(t_off.get("totalRebounds")) if t_off else sum_tr, 
+        "AS": safe_int(t_off.get("assists")) if t_off else sum_as, 
+        "ST": safe_int(t_off.get("steals")) if t_off else sum_st, 
+        "TO": safe_int(t_off.get("turnovers")) if t_off else sum_to, 
+        "BS": safe_int(t_off.get("blocks")) if t_off else sum_bs, 
+        "PF": safe_int(t_off.get("foulsCommitted")) if t_off else sum_pf, 
+        "EFF": safe_int(t_off.get("efficiency")) if t_off else sum_eff, 
+        "+/-": "" # PlusMinus macht für Team Total wenig Sinn, da es 0 ist oder Score Diff
     }
     data.append(totals)
     df = pd.DataFrame(data)
     
     def highlight_totals(row):
-        return ['font-weight: bold; background-color: #f0f0f0' if row['Name'] == 'TOTALS' else '' for _ in row]
+        if row['Name'] == 'TOTALS':
+            return ['font-weight: bold; background-color: #f0f0f0' for _ in row]
+        if row['Name'] == 'Team / Coach':
+            return ['font-style: italic; color: #555;' for _ in row]
+        return ['' for _ in row]
 
     st.markdown(f"#### {team_name}")
     calc_height = (len(df) + 1) * 35 + 3
@@ -579,94 +635,3 @@ def run_openai_generation(api_key, prompt):
         return response.choices[0].message.content
     except Exception as e:
         return f"Fehler bei der API-Abfrage: {str(e)}"
-
-# --- Fügen Sie dies am Ende von src/analysis_ui.py hinzu ---
-
-def generate_complex_ai_prompt(box):
-    """
-    Erstellt einen fertigen Prompt für ChatGPT basierend auf den Boxscore-Daten
-    und den spezifischen SEO/Journalismus-Anforderungen.
-    """
-    if not box: return "Keine Daten."
-
-    # 1. Datenaufbereitung
-    h_data = box.get("homeTeam", {})
-    g_data = box.get("guestTeam", {})
-    h_name = get_team_name(h_data, "Heim")
-    g_name = get_team_name(g_data, "Gast")
-    res = box.get("result", {})
-    
-    # Identifikation VIMODROM (falls Jena spielt)
-    is_jena_home = "Jena" in h_name or "VIMODROM" in h_name
-    opponent = g_name if is_jena_home else h_name
-    jena_score = res.get("homeTeamFinalScore", 0) if is_jena_home else res.get("guestTeamFinalScore", 0)
-    opp_score = res.get("guestTeamFinalScore", 0) if is_jena_home else res.get("homeTeamFinalScore", 0)
-    
-    # Viertel-Ergebnisse für den Kontext
-    q_str = f"Q1: {res.get('homeTeamQ1Score')}:{res.get('guestTeamQ1Score')}, " \
-            f"Q2: {res.get('homeTeamQ2Score')}:{res.get('guestTeamQ2Score')}, " \
-            f"Q3: {res.get('homeTeamQ3Score')}:{res.get('guestTeamQ3Score')}, " \
-            f"Q4: {res.get('homeTeamQ4Score')}:{res.get('guestTeamQ4Score')}"
-
-    # Top Performer extrahieren
-    def get_stats_str(team_data):
-        s = team_data.get("gameStat", {})
-        p_list = team_data.get("playerStats", [])
-        # Top Scorer finden
-        top_p = sorted([p for p in p_list if p.get("points", 0) is not None], key=lambda x: x.get("points", 0), reverse=True)[:2]
-        top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')} Pkt)" for p in top_p])
-        
-        fg = s.get("fieldGoalsSuccessPercent", 0)
-        reb = s.get("totalRebounds", 0)
-        to = s.get("turnovers", 0)
-        return f"FG: {fg}%, Reb: {reb}, TO: {to}, Top-Scorer: {top_str}"
-
-    stats_home = get_stats_str(h_data)
-    stats_guest = get_stats_str(g_data)
-
-    # 2. Der Prompt Text (Dein Wunsch-Prompt)
-    prompt = f"""
-Ich habe hier die Daten eines Basketballspiels. Bitte schreibe basierend auf diesen Daten und den folgenden Anweisungen die Berichte.
-
-DATEN DES SPIELS:
-- Heimteam: {h_name}
-- Gastteam: {g_name}
-- Endergebnis: {res.get("homeTeamFinalScore")} : {res.get("guestTeamFinalScore")}
-- Viertelverlauf: {q_str}
-- Statistik {h_name}: {stats_home}
-- Statistik {g_name}: {stats_guest}
-- Zuschauer: {res.get("spectators", "k.A.")}
-- Halle: {box.get("venue", {}).get("name", "Halle")}
-
-ANWEISUNGEN:
-Schreibe immer in Deutsch und aus der Sicht der VIMODROM Baskets Jena (falls sie gespielt haben, sonst neutral) für die Website-Texte. 
-Gegner ist: {opponent}.
-
-AUFGABE 1: Schreibe drei dynamische, SEO-optimierte, journalistische Artikel.
-1. Artikel: Für die VIMODROM-Website (Fan-Brille, emotional).
-2. Artikel: Für die 2. DBBL-Website (Neutral, journalistisch).
-3. Artikel: Für das Spieltagsmagazin (Rückblick aus heutiger Perspektive).
-
-Anforderungen:
-- Ziel: Atmosphäre und Dramatik einfangen.
-- Sprache: Klar, prägnant, lebhafte Beschreibungen, emotionale Höhepunkte.
-- Länge: Website und DBBL Texte mind. 3000 Zeichen (bitte ausführlich schreiben!).
-- Footer pro Artikel: 3 Headlines, 10 Keywords, 1 Meta-Beschreibung.
-- Ganz am Ende: Zusammenfassung mit 10 Meta-Tags.
-
-AUFGABE 2: Erstelle einen SEO-optimierten Text "Basketball in Jena".
-- Keywords: VIMODROM Baskets Jena, Basketball in Jena, Basketball Training Jena.
-- Struktur: Keine Zwischenüberschriften, kurze Absätze.
-- Inhalt: Mehrwert, Teamvorstellung, Trainingstipps.
-- Länge: 600-1000 Wörter.
-
-STIL-GUIDE & EMOTIONEN:
-- Vermeide das Wort "beeindruckend".
-- Nutze Emotionen: Spannung (bei engem Spiel), Begeisterung (Dunks/Plays), Teamgeist, Stolz.
-- Wenn das Spiel eng war ({abs(jena_score - opp_score)} Punkte Differenz), betone die Spannung und den "Nervenkitzel".
-- Wenn es deutlich war, betone die "Dominanz" oder den "Kampfgeist trotz Niederlage".
-- Integriere die Statistiken kreativ in den Fließtext (erzähle die Geschichte hinter den Zahlen).
-
-Bitte starte jetzt mit der Erstellung der Texte.
-"""
-    return prompt
