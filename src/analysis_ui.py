@@ -5,9 +5,8 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
-# WICHTIG: Importieren der Metadaten-Funktion für Bilder
-from src.api import get_player_metadata_cached 
 
+# --- KONSTANTEN & HELPERS ---
 ACTION_TRANSLATION = {
     "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
     "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
@@ -141,6 +140,7 @@ def analyze_game_flow(actions, home_name, guest_name):
                 elif last_leader != 'tie': lead_changes += 1
                 elif last_leader == 'tie': lead_changes += 1
         last_leader = current_leader
+
     relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
     filtered_actions = [a for a in actions if a.get("type") in relevant_types]
     last_events = filtered_actions[-12:] 
@@ -150,52 +150,10 @@ def analyze_game_flow(actions, home_name, guest_name):
         action_desc = translate_text(ev.get("type", ""))
         if ev.get("points"): action_desc += f" (+{ev.get('points')})"
         crunch_log.append(f"- {score_str}: {action_desc}")
+
     summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
     summary += "\n".join(crunch_log)
     return summary
-
-def render_full_play_by_play(box, height=600):
-    actions = box.get("actions", [])
-    if not actions:
-        st.info("Keine Play-by-Play Daten verfügbar.")
-        return
-    player_map = get_player_lookup(box)
-    home_name = get_team_name(box.get("homeTeam", {}), "Heim")
-    guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
-    home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
-    guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
-    data = []; running_h = 0; running_g = 0
-    for act in actions:
-        h_pts = act.get("homeTeamPoints"); g_pts = act.get("guestTeamPoints")
-        if h_pts is not None: running_h = safe_int(h_pts)
-        if g_pts is not None: running_g = safe_int(g_pts)
-        score_str = f"{running_h} : {running_g}"
-        period = act.get("period", ""); game_time = act.get("gameTime", ""); time_in_game = act.get("timeInGame", "") 
-        if game_time: display_time = convert_elapsed_to_remaining(game_time, period)
-        else:
-            display_time = "-"
-            if time_in_game and "M" in time_in_game:
-                try: t = time_in_game.replace("PT", "").replace("S", ""); m, s = t.split("M"); display_time = f"{m}:{s.zfill(2)}"
-                except: pass
-        time_label = f"Q{period} {display_time}" if period else "-"
-        pid = str(act.get("seasonPlayerId")); actor = player_map.get(pid, "")
-        tid = str(act.get("seasonTeamId"))
-        if tid == home_id: team_display = home_name
-        elif tid == guest_id: team_display = guest_name
-        else: team_display = "-" 
-        raw_type = act.get("type", ""); action_german = translate_text(raw_type)
-        is_successful = act.get("isSuccessful")
-        if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
-             if "Treffer" not in action_german and "Fehlwurf" not in action_german:
-                 if is_successful is True: action_german += " (Treffer)"
-                 elif is_successful is False: action_german += " (Fehlwurf)"
-        qualifiers = act.get("qualifiers", [])
-        if qualifiers: qual_german = [translate_text(q) for q in qualifiers]; action_german += f" ({', '.join(qual_german)})"
-        if act.get("points"): action_german += f" (+{act.get('points')})"
-        data.append({"Zeit": time_label, "Score": score_str, "Team": team_display, "Spieler": actor, "Aktion": action_german})
-    df = pd.DataFrame(data)
-    if height == 400: df = df.iloc[::-1]
-    st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def render_game_header(details):
     h_data = details.get("homeTeam", {}); g_data = details.get("guestTeam", {})
@@ -225,7 +183,8 @@ def render_game_header(details):
 
 def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coach_name="-"):
     if not player_stats: return
-    data = []; sum_pts=0; sum_3pm=0; sum_3pa=0; sum_fgm=0; sum_fga=0; sum_ftm=0; sum_fta=0; sum_or=0; sum_dr=0; sum_tr=0; sum_as=0; sum_st=0; sum_to=0; sum_bs=0; sum_pf=0; sum_eff=0; sum_pm=0
+    data = []
+    sum_pts=0; sum_3pm=0; sum_3pa=0; sum_fgm=0; sum_fga=0; sum_ftm=0; sum_fta=0; sum_or=0; sum_dr=0; sum_tr=0; sum_as=0; sum_st=0; sum_to=0; sum_bs=0; sum_pf=0; sum_eff=0; sum_pm=0
     for p in player_stats:
         info = p.get("seasonPlayer", {}); name = f"{info.get('lastName', '')}, {info.get('firstName', '')}"; nr = info.get("shirtNumber", "-"); starter = "*" if p.get("isStartingFive") else ""; sec = safe_int(p.get("secondsPlayed"))
         pts = safe_int(p.get("points")); sum_pts += pts; m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted")); p2 = safe_int(p.get("twoPointShotSuccessPercent"))
@@ -324,7 +283,7 @@ def run_openai_generation(api_key, prompt):
 
 # --- NEUE FUNKTIONEN FÜR PREP & LIVE ---
 
-def render_prep_dashboard(team_id, team_name, df_roster, last_games):
+def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
     st.subheader(f"Analyse: {team_name}")
     c1, c2 = st.columns([2, 1])
     
@@ -338,11 +297,13 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games):
                     with col_img:
                         if "img" in row.index and row["img"]:
                             st.image(row["img"], width=100)
-                        else:
-                            # Versuch Bild via Metadata Cache zu laden falls nicht in DF
-                            meta = get_player_metadata_cached(row["PLAYER_ID"])
+                        elif metadata_callback:
+                            # Callback nutzen um Bild zu laden
+                            meta = metadata_callback(row["PLAYER_ID"])
                             if meta["img"]: st.image(meta["img"], width=100)
                             else: st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
 
                     with col_stats:
                         st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
@@ -358,7 +319,6 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games):
             games_sorted = sorted(played_games, key=lambda x: x['date'], reverse=True)[:5]
             if games_sorted:
                 for g in games_sorted:
-                    # Win/Loss Logik
                     h_score = g.get('home_score', 0)
                     g_score = g.get('guest_score', 0)
                     is_home = (g.get('homeTeamId') == str(team_id))
