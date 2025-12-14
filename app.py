@@ -25,7 +25,7 @@ from src.html_gen import (
 )
 from src.state_manager import export_session_state, load_session_state
 
-# HIER IMPORTIERT: ALLE FUNKTIONEN AUS analysis_ui
+# HIER WIRD ALLES IMPORTIERT
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
@@ -57,8 +57,8 @@ def go_live(): st.session_state.current_page = "live"
 
 def render_page_header(title):
     c1, c2 = st.columns([1, 4])
-    with c1: st.button("🏠 Home", on_click=go_home, key=f"home_{st.session_state.current_page}")
-    with c2: st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro</h3>", unsafe_allow_html=True)
+    with c1: st.button("🏠 Home", on_click=go_home, key=f"home_button_header_{st.session_state.current_page}")
+    with c2: st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro by Sascha Rosanke</h3>", unsafe_allow_html=True)
     st.title(title); st.divider()
 
 def render_home():
@@ -136,12 +136,7 @@ def render_live_page():
                     if auto: time_module.sleep(15); st.rerun()
                 else: st.info("Warte auf Daten...")
 
-# ... (Andere Render Funktionen bleiben gleich, hier nur Placeholder Aufrufe der Vollständigkeit halber)
-# Da der Platz begrenzt ist, kopiere ich die Standard-Funktionen von vorhin nicht nochmal komplett rein,
-# SONDERN verweise darauf, dass Sie die render_comparison_page, render_player_comparison_page,
-# render_analysis_page, render_game_venue_page, render_scouting_page aus dem VORHERIGEN Schritt 
-# 1:1 übernehmen sollen, da sich dort nichts geändert hat.
-# ICH FÜGE SIE ABER HIER EIN DAMIT DIE DATEI KOMPLETT IST:
+# ... (Hier folgen die Standard-Funktionen render_comparison_page etc. WIE GEHABT - KEINE ÄNDERUNG)
 
 def render_comparison_page():
     render_page_header("📊 Head-to-Head Vergleich") 
@@ -256,14 +251,7 @@ def render_analysis_page():
                     box = fetch_game_boxscore(selected_id)
                     details = fetch_game_details(selected_id)
                     if box and details: 
-                        box["venue"] = details.get("venue")
-                        box["result"] = details.get("result")
-                        box["referee1"] = details.get("referee1")
-                        box["referee2"] = details.get("referee2")
-                        box["referee3"] = details.get("referee3")
-                        box["scheduledTime"] = details.get("scheduledTime")
-                        box["attendance"] = details.get("result", {}).get("spectators")
-                        box["id"] = details.get("id") 
+                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("referee1"); box["referee2"] = details.get("referee2"); box["referee3"] = details.get("referee3"); box["scheduledTime"] = details.get("scheduledTime"); box["attendance"] = details.get("result", {}).get("spectators"); box["id"] = details.get("id") 
                         render_game_header(box)
                         st.markdown("### 📝 Spielberichte & PBP")
                         tab_simple, tab_prompt, tab_pbp = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
@@ -317,7 +305,7 @@ def render_game_venue_page():
                     maps_query = quote_plus(f"{main_venue_name}, {main_venue_address}")
                     maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
                     st.markdown(f"**Route planen:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
-            else: st.warning(f"Standard-Heimspielort konnte nicht geladen werden.")
+            else: st.warning(f"Standard-Heimspielort für {selected_team_name} konnte nicht geladen werden oder ist nicht verfügbar.")
         st.divider()
         st.subheader(f"Alle Spiele von {selected_team_name} und deren Spielorte")
         all_games = fetch_schedule(selected_team_id, SEASON_ID)
@@ -342,6 +330,7 @@ def render_game_venue_page():
                                     maps_query = quote_plus(f"{game_venue_name}, {game_venue_address}")
                                     maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
                                     st.markdown(f"**Route planen für dieses Spiel:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
+                            else: st.info(f"Spielort-Details für dieses Heimspiel (ID: {game_id}) nicht verfügbar.")
                         else: st.info(f"Keine Game ID für dieses Heimspiel vorhanden.")
                 else: 
                     with st.expander(f"🚌 Auswärtsspiel: {game.get('date')} bei {game.get('home')} ({game.get('score')})"):
@@ -349,8 +338,17 @@ def render_game_venue_page():
                             game_details = fetch_game_details(game_id)
                             if game_details and game_details.get("venue"):
                                 game_venue_data = game_details.get("venue")
-                                st.markdown(f"**Spielort:** {game_venue_data.get('name', '-')}")
-                                st.markdown(f"**Adresse:** {game_venue_data.get('address', '-')}")
+                                game_venue_name = game_venue_data.get("name", "Nicht verfügbar")
+                                game_venue_address = game_venue_data.get("address", "Nicht verfügbar")
+                                st.markdown(f"**Spielort:** {game_venue_name}")
+                                st.markdown(f"**Adresse:** {game_venue_address}")
+                                if game_venue_address != "Nicht verfügbar":
+                                    maps_query = quote_plus(f"{game_venue_name}, {game_venue_address}")
+                                    maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
+                                    st.markdown(f"**Route planen für dieses Spiel:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
+                            else: st.info(f"Spielort-Details für dieses Auswärtsspiel (ID: {game_id}) nicht verfügbar.")
+                        else: st.info(f"Keine Game ID für dieses Auswärtsspiel vorhanden.")
+        else: st.info(f"Keine Spiele für {selected_team_name} in der Saison {SEASON_ID} gefunden.")
 
 def render_scouting_page():
     render_page_header("📝 Scouting") 
@@ -438,9 +436,7 @@ def render_scouting_page():
                         pid = r["PLAYER_ID"]; c_h, c_c = st.columns([3, 1]); c_h.markdown(f"**#{r['NR']} {r['NAME_FULL']}**"); saved_c = st.session_state.saved_colors.get(pid, "Grau"); idx = list(c_map.keys()).index(saved_c) if saved_c in c_map else 0
                         col = c_c.selectbox("Farbe", list(c_map.keys()), key=f"color_select_{pid}_{i}_scouting", index=idx, label_visibility="collapsed") 
                         c1, c2 = st.columns(2); notes = {}
-                        for k_note in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: 
-                            val = st.session_state.saved_notes.get(f"{k_note}_{pid}", "")
-                            notes[k_note] = (c1 if k_note.startswith("l") else c2).text_input(k_note, value=val, key=f"note_input_{k_note}_{pid}_{i}_scouting", label_visibility="collapsed")
+                        for k_note in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: val = st.session_state.saved_notes.get(f"{k_note}_{pid}", ""); notes[k_note] = (c1 if k_note.startswith("l") else c2).text_input(k_note, value=val, key=f"note_input_{k_note}_{pid}_{i}_scouting", label_visibility="collapsed")
                         st.divider(); form_res.append({"row": r, "pid": pid, "color": col, "notes": notes})
                     c1, c2, c3 = st.columns(3)
                     with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo_facts_scouting")
