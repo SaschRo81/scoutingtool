@@ -31,7 +31,7 @@ from src.state_manager import export_session_state, load_session_state
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
-    generate_complex_ai_prompt, render_full_play_by_play # NEUE FUNKTION IMPORTIERT
+    generate_complex_ai_prompt, render_full_play_by_play 
 )
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
@@ -97,16 +97,61 @@ def render_page_header(page_title):
 # SEITE 1: HOME
 # ==========================================
 def render_home():
-    st.markdown("<h1 style='text-align: center;'>🏀 DBBL Scouting Suite by Sascha Rosanke</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align: center; color: gray;'>Version {VERSION}</p>", unsafe_allow_html=True)
+    # CSS für Hintergrundbild mit Transparenz via Overlay
+    # Wir nutzen data-testid="stAppViewContainer" als Ziel
+    st.markdown(
+        """
+        <style>
+        [data-testid="stAppViewContainer"]::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
+            background-size: cover;
+            background-position: center;
+            opacity: 0.3; /* 30% Deckkraft (70% transparent) */
+            z-index: -1; /* Hinter dem Inhalt */
+        }
+        /* Buttons etwas größer machen */
+        div.stButton > button:first-child {
+            width: 100%;
+            height: 4em;
+            font-size: 20px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<h1 style='text-align: center; color: #111;'>🏀 DBBL Scouting Suite</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #333; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p>", unsafe_allow_html=True)
     st.write(""); st.write("")
-    c1, c2, c3 = st.columns([3, 2, 3])
-    with c2:
-        st.markdown("<style>div.stButton > button:first-child { width: 100%; height: 3em; font-size: 18px; margin-bottom: 10px; }</style>", unsafe_allow_html=True)
+    
+    # Layout Grid: Zentriert
+    # Wir nutzen Spalten, um das Layout zu zentrieren: [Spacer, Btn1, Btn2, Spacer]
+    
+    # Zeile 1
+    _, c1, c2, _ = st.columns([1, 2, 2, 1])
+    with c1:
         if st.button("📊 Teamvergleich"): go_comparison(); st.rerun()
+    with c2:
         if st.button("🤼 Spielervergleich"): go_player_comparison(); st.rerun()
+    
+    # Zeile 2
+    _, c3, c4, _ = st.columns([1, 2, 2, 1])
+    with c3:
         if st.button("📝 Scouting Report"): go_scouting(); st.rerun()
+    with c4:
         if st.button("🎥 Spielnachbereitung"): go_analysis(); st.rerun()
+        
+    # Zeile 3 (Einzelner Button mittig)
+    _, c5, _ = st.columns([1.5, 2, 1.5]) # Mittlere Spalte gleich breit wie oben (2 Einheiten)
+    with c5:
         if st.button("📍 Spielorte"): go_game_venue(); st.rerun() 
 
 # ==========================================
@@ -300,7 +345,6 @@ def render_analysis_page():
                             st.markdown(report_text)
                             st.caption("Regelbasierter Kurzbericht.")
                             
-                            # HIER WURDEN DIE STATS HINVERSCHOBEN
                             st.divider()
                             h_name = get_team_name(box.get("homeTeam", {}), "Heim")
                             g_name = get_team_name(box.get("guestTeam", {}), "Gast")
@@ -333,7 +377,6 @@ def render_analysis_page():
                             st.code(ai_prompt, language="text")
 
                         with tab_pbp:
-                            # Play-by-Play ist hier isoliert und sauber
                             render_full_play_by_play(box)
 
                         
