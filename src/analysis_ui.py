@@ -5,9 +5,9 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
+from src.api import get_player_metadata_cached 
 
 # --- KONSTANTEN & HELPERS ---
-
 ACTION_TRANSLATION = {
     "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
     "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
@@ -34,8 +34,6 @@ def translate_text(text):
 
 def safe_int(val):
     if val is None: return 0
-    if isinstance(val, int): return val
-    if isinstance(val, float): return int(val)
     try: return int(float(val))
     except: return 0
 
@@ -82,14 +80,12 @@ def convert_elapsed_to_remaining(time_str, period):
     try:
         if int(period) > 4: base_minutes = 5
     except: pass
-    
     try:
         parts = time_str.split(":")
         sec = 0
         if len(parts) == 3: sec = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
         elif len(parts) == 2: sec = int(parts[0])*60 + int(parts[1])
         else: return time_str
-        
         rem = (base_minutes * 60) - sec
         if rem < 0: rem = 0
         return f"{rem // 60:02d}:{rem % 60:02d}"
@@ -163,7 +159,7 @@ def analyze_game_flow(actions, home_name, guest_name):
 
 # --- RENDERING FUNKTIONEN ---
 
-def render_full_play_by_play(box, height=600):
+def render_full_play_by_play(box, height=600, reverse=False):
     """Rendert eine detaillierte Play-by-Play Tabelle auf Deutsch."""
     actions = box.get("actions", [])
     if not actions:
@@ -201,10 +197,7 @@ def render_full_play_by_play(box, height=600):
         else:
             display_time = "-"
             if time_in_game and "M" in time_in_game:
-                try:
-                    t = time_in_game.replace("PT", "").replace("S", "")
-                    m, s = t.split("M")
-                    display_time = f"{m}:{s.zfill(2)}"
+                try: t = time_in_game.replace("PT", "").replace("S", ""); m, s = t.split("M"); display_time = f"{m}:{s.zfill(2)}"
                 except: pass
 
         time_label = f"Q{period} {display_time}" if period else "-"
@@ -213,14 +206,10 @@ def render_full_play_by_play(box, height=600):
         actor = player_map.get(pid, "")
         
         tid = str(act.get("seasonTeamId"))
-        if tid == home_id:
-            team_display = home_name
-        elif tid == guest_id:
-            team_display = guest_name
-        elif pid in player_team_map: 
-            team_display = player_team_map[pid]
-        else:
-            team_display = "-" 
+        if tid == home_id: team_display = home_name
+        elif tid == guest_id: team_display = guest_name
+        elif pid in player_team_map: team_display = player_team_map[pid]
+        else: team_display = "-" 
 
         raw_type = act.get("type", "")
         action_german = translate_text(raw_type)
@@ -228,29 +217,16 @@ def render_full_play_by_play(box, height=600):
         is_successful = act.get("isSuccessful")
         if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
              if "Treffer" not in action_german and "Fehlwurf" not in action_german:
-                 if is_successful is True:
-                     action_german += " (Treffer)"
-                 elif is_successful is False:
-                     action_german += " (Fehlwurf)"
-
+                 if is_successful is True: action_german += " (Treffer)"
+                 elif is_successful is False: action_german += " (Fehlwurf)"
         qualifiers = act.get("qualifiers", [])
-        if qualifiers:
-            qual_german = [translate_text(q) for q in qualifiers]
-            action_german += f" ({', '.join(qual_german)})"
-        
-        if act.get("points"):
-            action_german += f" (+{act.get('points')})"
-
-        data.append({
-            "Zeit": time_label,
-            "Score": score_str,
-            "Team": team_display,
-            "Spieler": actor,
-            "Aktion": action_german
-        })
-
+        if qualifiers: qual_german = [translate_text(q) for q in qualifiers]; action_german += f" ({', '.join(qual_german)})"
+        if act.get("points"): action_german += f" (+{act.get('points')})"
+        data.append({"Zeit": time_label, "Score": score_str, "Team": team_display, "Spieler": actor, "Aktion": action_german})
+    
     df = pd.DataFrame(data)
-    if height == 400:
+    
+    if reverse:
         df = df.iloc[::-1]
 
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
@@ -382,7 +358,7 @@ def run_openai_generation(api_key, prompt):
 
 # --- NEUE FUNKTIONEN FÜR PREP & LIVE ---
 
-def render_prep_dashboard(team_name, df_roster, last_games):
+def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
     st.subheader(f"Analyse: {team_name}")
     c1, c2 = st.columns([2, 1])
     
@@ -443,90 +419,76 @@ def render_prep_dashboard(team_name, df_roster, last_games):
         else: st.info("Keine Spiele.")
 
 def render_live_view(box):
-    """Zeigt Live Stats und PBP nebeneinander für Mobile optimiert."""
     if not box: return
-
-    # Header mit Score (Groß)
     h_name = get_team_name(box.get("homeTeam", {}), "Heim")
     g_name = get_team_name(box.get("guestTeam", {}), "Gast")
     res = box.get("result", {})
-    s_h = res.get("homeTeamFinalScore", 0)
-    s_g = res.get("guestTeamFinalScore", 0)
     
-    # Check ob Score in Result 0:0, dann Fallback auf Actions
+    # 1. Score Fix: Wenn Result 0:0, letzte Aktion suchen
+    s_h = res.get('homeTeamFinalScore', 0)
+    s_g = res.get('guestTeamFinalScore', 0)
     actions = box.get("actions", [])
-    period = res.get("period") or box.get("period", 1)
     
     if s_h == 0 and s_g == 0 and actions:
-        # Finde letzte gültige Score-Aktion
+        # Rückwärts suchen nach gültigem Score
         for act in reversed(actions):
-            if act.get("homeTeamPoints") is not None and act.get("guestTeamPoints") is not None:
-                s_h = act.get("homeTeamPoints")
-                s_g = act.get("guestTeamPoints")
-                if not period: period = act.get("period")
+            if act.get('homeTeamPoints') is not None and act.get('guestTeamPoints') is not None:
+                s_h = act.get('homeTeamPoints')
+                s_g = act.get('guestTeamPoints')
                 break
-    
-    # Mapping Period
-    p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
-    if safe_int(period) > 4: p_str = f"OT{safe_int(period)-4}"
-    else: p_str = p_map.get(safe_int(period), f"Q{period}") if period else "-"
-    
-    time_str = convert_elapsed_to_remaining(box.get('gameTime', ''), period)
 
-    # Scoreboard
-    st.markdown(f"""
-    <div style='text-align: center; background-color: #222; color: #fff; padding: 10px; border-radius: 10px; margin-bottom: 20px;'>
-        <div style='font-size: 1.2em;'>{h_name} vs {g_name}</div>
-        <div style='font-size: 3em; font-weight: bold;'>{s_h} : {s_g}</div>
-        <div style='font-size: 0.9em; color: #ccc;'>{p_str} | {time_str}</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div style='text-align:center;background:#222;color:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'>
+    <div>{h_name} vs {g_name}</div><div style='font-size:2.5em;font-weight:bold;'>{s_h} : {s_g}</div>
+    <div style='color:#ccc;'>Q{res.get('period', '-')} | {convert_elapsed_to_remaining(box.get('gameTime', ''), res.get('period', ''))}</div></div>""", unsafe_allow_html=True)
 
-    c1, c2 = st.columns([1, 1])
+    # 2. Layout & Tabellen: Stats jetzt links, schön nebeneinander
+    # Verhältnis: Stats nehmen mehr Platz ein als der Ticker
+    c_stats, c_ticker = st.columns([2.5, 1]) 
     
-    with c1:
+    with c_stats:
         st.subheader("📊 Live Stats")
         
-        # Funktion zum Erstellen der Spieler-Tabelle
+        # Funktion für saubere Tabelle
         def create_live_player_table(team_data):
             players = team_data.get("playerStats", [])
             data = []
             for p in players:
-                # Stats extrahieren
-                # Min formatieren
                 sec = safe_int(p.get("secondsPlayed"))
                 min_s = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "00:00"
                 
                 data.append({
-                    "Nr": p.get('seasonPlayer', {}).get('shirtNumber', '-'),
+                    "#": p.get('seasonPlayer', {}).get('shirtNumber', '-'),
                     "Name": p.get('seasonPlayer', {}).get('lastName', 'Unk'),
                     "Min": min_s,
-                    "PTS": safe_int(p.get("points")),
-                    "AS": safe_int(p.get("assists")),
+                    "P": safe_int(p.get("points")),
+                    "A": safe_int(p.get("assists")),
                     "TO": safe_int(p.get("turnovers")),
-                    "ST": safe_int(p.get("steals")),
-                    "PF": safe_int(p.get("foulsCommitted"))
+                    "S": safe_int(p.get("steals")),
+                    "B": safe_int(p.get("blocks")),
+                    "F": safe_int(p.get("foulsCommitted"))
                 })
             
-            # DataFrame erstellen und sortieren nach PTS
+            # Alle Spieler, sortiert nach Punkten
             df = pd.DataFrame(data)
             if not df.empty:
-                df = df.sort_values(by="PTS", ascending=False)
+                df = df.sort_values(by="P", ascending=False)
             return df
 
         # Tabellen erstellen
-        df_home = create_live_player_table(box.get("homeTeam", {}))
-        df_guest = create_live_player_table(box.get("guestTeam", {}))
+        df_h = create_live_player_table(box.get("homeTeam", {}))
+        df_g = create_live_player_table(box.get("guestTeam", {}))
 
-        # Anzeigen (in Tabs für Mobile besser, oder untereinander)
-        # Hier nebeneinander in Columns, wenn Platz, sonst wrap
-        st.markdown(f"**{h_name}**")
-        st.dataframe(df_home, hide_index=True, use_container_width=True)
+        # Nebeneinander darstellen
+        col_h, col_g = st.columns(2)
+        with col_h:
+            st.markdown(f"**{h_name}**")
+            st.dataframe(df_h, hide_index=True, use_container_width=True, height=500) # Feste Höhe für Scrollen
         
-        st.write("")
-        st.markdown(f"**{g_name}**")
-        st.dataframe(df_guest, hide_index=True, use_container_width=True)
+        with col_g:
+            st.markdown(f"**{g_name}**")
+            st.dataframe(df_g, hide_index=True, use_container_width=True, height=500)
 
-    with c2:
+    with c_ticker:
         st.subheader("📜 Live Ticker")
-        render_full_play_by_play(box, height=800) # Höhe angepasst für mehr Übersicht
+        # Reverse=True sorgt dafür, dass das Neueste oben ist
+        render_full_play_by_play(box, height=600, reverse=True)
