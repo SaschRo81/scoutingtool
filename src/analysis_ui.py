@@ -157,8 +157,6 @@ def analyze_game_flow(actions, home_name, guest_name):
     summary += "\n".join(crunch_log)
     return summary
 
-# --- RENDERING FUNKTIONEN ---
-
 def render_full_play_by_play(box, height=600):
     """Rendert eine detaillierte Play-by-Play Tabelle auf Deutsch."""
     actions = box.get("actions", [])
@@ -167,6 +165,9 @@ def render_full_play_by_play(box, height=600):
         return
 
     player_map = get_player_lookup(box)
+    # HIER WURDE DIE FEHLENDE ZEILE HINZUGEFÜGT:
+    player_team_map = get_player_team_lookup(box)
+    
     home_name = get_team_name(box.get("homeTeam", {}), "Heim")
     guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
     home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
@@ -195,10 +196,7 @@ def render_full_play_by_play(box, height=600):
         else:
             display_time = "-"
             if time_in_game and "M" in time_in_game:
-                try:
-                    t = time_in_game.replace("PT", "").replace("S", "")
-                    m, s = t.split("M")
-                    display_time = f"{m}:{s.zfill(2)}"
+                try: t = time_in_game.replace("PT", "").replace("S", ""); m, s = t.split("M"); display_time = f"{m}:{s.zfill(2)}"
                 except: pass
 
         time_label = f"Q{period} {display_time}" if period else "-"
@@ -376,7 +374,7 @@ def run_openai_generation(api_key, prompt):
 
 # --- NEUE FUNKTIONEN FÜR PREP & LIVE ---
 
-def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
+def render_prep_dashboard(team_name, df_roster, last_games, metadata_callback=None):
     st.subheader(f"Analyse: {team_name}")
     c1, c2 = st.columns([2, 1])
     
@@ -422,31 +420,26 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
     with c2:
         st.markdown("#### Formkurve")
         if last_games:
-            played_games = [g for g in last_games if g.get('has_result')]
             # Sortierlogik für DD.MM.YYYY
             def parse_date(d_str):
                 try: return datetime.strptime(d_str, "%d.%m.%Y %H:%M")
                 except: return datetime.min
             
+            played_games = [g for g in last_games if g.get('has_result')]
             games_sorted = sorted(played_games, key=lambda x: parse_date(x['date']), reverse=True)[:5]
             if games_sorted:
                 # Kompakte Badges-Anzeige
                 st.write("") # Spacer
                 cols_form = st.columns(len(games_sorted))
                 for idx, g in enumerate(games_sorted):
-                    h_score = g.get('home_score', 0)
-                    g_score = g.get('guest_score', 0)
-                    is_home = (g.get('homeTeamId') == str(team_id))
-                    
-                    win = False
-                    if is_home and h_score > g_score: win = True
-                    elif not is_home and g_score > h_score: win = True
-                    
-                    color = "#28a745" if win else "#dc3545" # Grün/Rot
-                    char = "W" if win else "L"
-                    
-                    with cols_form[idx]:
-                        st.markdown(f"<div style='background-color:{color};color:white;text-align:center;padding:10px;border-radius:5px;font-weight:bold;' title='{g['date']}\n{g['home']} vs {g['guest']}\n{g['score']}'>{char}</div>", unsafe_allow_html=True)
+                    # Win/Loss Logik benötigt homeTeamId und guestTeamId aus den Spielen, 
+                    # aber wir haben hier keine "meine Team ID".
+                    # Wir müssen raten oder einfach nur das Ergebnis anzeigen.
+                    # Besser: Wir zeigen einfach den Score.
+                    st.markdown(f"**{g['date']}**")
+                    st.markdown(f"{g['home']} vs {g['guest']}")
+                    st.markdown(f"**{g['score']}**")
+                    st.divider()
             else: st.info("Keine gespielten Spiele.")
         else: st.info("Keine Spiele.")
 
@@ -463,15 +456,36 @@ def render_live_view(box):
     c1, c2 = st.columns([1, 1])
     with c1:
         st.subheader("📊 Live Top Scorer")
-        def get_top(t): return sorted([p for p in t.get("playerStats", []) if safe_int(p.get("points")) > 0], key=lambda x: safe_int(x.get("points")), reverse=True)[:5]
         
-        c_h, c_g = st.columns(2)
-        with c_h: 
+        # Helper für formatierte Stats
+        def get_top_stats_formatted(t): 
+            players = t.get("playerStats", [])
+            # Sort by Points
+            sorted_p = sorted([p for p in players if safe_int(p.get("points")) > 0], key=lambda x: safe_int(x.get("points")), reverse=True)[:5]
+            return sorted_p
+
+        h_top = get_top_stats_formatted(box.get("homeTeam", {}))
+        g_top = get_top_stats_formatted(box.get("guestTeam", {}))
+        
+        col_h, col_g = st.columns(2)
+        with col_h: 
             st.caption("Heim")
-            for p in get_top(box.get("homeTeam", {})): st.write(f"{p.get('seasonPlayer', {}).get('lastName')}: **{p.get('points')}**")
-        with c_g: 
+            for p in h_top: 
+                n = p.get('seasonPlayer', {}).get('lastName', '')
+                pts = p.get('points')
+                reb = p.get('totalRebounds')
+                ast = p.get('assists')
+                pf = p.get('foulsCommitted')
+                st.write(f"{n}: **{pts}** (R:{reb} A:{ast} F:{pf})")
+        with col_g: 
             st.caption("Gast")
-            for p in get_top(box.get("guestTeam", {})): st.write(f"{p.get('seasonPlayer', {}).get('lastName')}: **{p.get('points')}**")
+            for p in g_top: 
+                n = p.get('seasonPlayer', {}).get('lastName', '')
+                pts = p.get('points')
+                reb = p.get('totalRebounds')
+                ast = p.get('assists')
+                pf = p.get('foulsCommitted')
+                st.write(f"{n}: **{pts}** (R:{reb} A:{ast} F:{pf})")
             
     with c2:
         st.subheader("📜 Live Ticker")
