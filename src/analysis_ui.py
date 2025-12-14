@@ -3,7 +3,6 @@ import pandas as pd
 import altair as alt
 from datetime import datetime
 import pytz
-import openai 
 
 def safe_int(val):
     if val is None: return 0
@@ -34,6 +33,83 @@ def format_date_time(iso_string):
     except:
         return iso_string
 
+def get_player_lookup(box):
+    """Erstellt ein Dictionary {id: 'Name'} für alle Spieler."""
+    lookup = {}
+    for team_key in ['homeTeam', 'guestTeam']:
+        for p in box.get(team_key, {}).get('playerStats', []):
+            pid = str(p.get('seasonPlayer', {}).get('id'))
+            name = f"{p.get('seasonPlayer', {}).get('firstName', '')} {p.get('seasonPlayer', {}).get('lastName', '')}".strip()
+            nr = p.get('seasonPlayer', {}).get('shirtNumber', '')
+            lookup[pid] = f"#{nr} {name}"
+    return lookup
+
+def render_full_play_by_play(box):
+    """Rendert eine detaillierte Play-by-Play Tabelle."""
+    actions = box.get("actions", [])
+    if not actions:
+        st.info("Keine Play-by-Play Daten verfügbar.")
+        return
+
+    # Spieler-Namen Lookup erstellen
+    player_map = get_player_lookup(box)
+    
+    home_name = get_team_name(box.get("homeTeam", {}), "Heim")
+    guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
+
+    data = []
+    
+    # Laufenden Score tracken, falls API None liefert
+    running_h = 0
+    running_g = 0
+
+    # Aktionen umdrehen, damit das Neueste oben ist (optional, hier chronologisch)
+    # Wir machen es chronologisch (1. Viertel zuerst)
+    
+    for act in actions:
+        # Score update
+        h_pts = act.get("homeTeamPoints")
+        g_pts = act.get("guestTeamPoints")
+        
+        if h_pts is not None: running_h = safe_int(h_pts)
+        if g_pts is not None: running_g = safe_int(g_pts)
+        
+        score_str = f"{running_h} : {running_g}"
+        
+        # Zeit formatieren (oft PT04M23S format oder ähnlich, hier vereinfacht)
+        time_str = act.get("timeInGame", "-")
+        
+        # Akteur bestimmen
+        pid = str(act.get("seasonPlayerId"))
+        actor = player_map.get(pid, "-")
+        
+        # Team bestimmen
+        tid = str(act.get("seasonTeamId"))
+        team_display = home_name if tid == home_id else guest_name
+        if tid == "None": team_display = "-"
+
+        # Beschreibung hübsch machen
+        action_type = act.get("type", "").replace("_", " ")
+        qualifiers = act.get("qualifiers", [])
+        if qualifiers:
+            action_type += f" ({', '.join(qualifiers).lower()})"
+        
+        # Subtype (z.B. Punkteanzahl)
+        if act.get("points"):
+            action_type += f" (+{act.get('points')})"
+
+        data.append({
+            "Zeit": time_str,
+            "Score": score_str,
+            "Team": team_display,
+            "Spieler": actor,
+            "Aktion": action_type
+        })
+
+    df = pd.DataFrame(data)
+    st.dataframe(df, use_container_width=True, hide_index=True, height=600)
+
 def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
     stats = {
         "h_lead": 0, "g_lead": 0, "h_run": 0, "g_run": 0,
@@ -48,6 +124,12 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
     for act in actions:
          new_h = safe_int(act.get("homeTeamPoints"))
          new_g = safe_int(act.get("guestTeamPoints"))
+         
+         # Fix für None values in Actions
+         if new_h == 0 and new_g == 0 and act.get("homeTeamPoints") is None:
+             new_h = cur_h
+             new_g = cur_g
+         
          pts_h = new_h - cur_h
          pts_g = new_g - cur_g
          
@@ -479,80 +561,6 @@ def generate_game_summary(box):
 
     return text
 
-def analyze_game_flow(actions, home_name, guest_name):
-    """
-    Analysiert den Spielverlauf aus den Play-by-Play Aktionen.
-    Extrahiert Führungswechsel, Unentschieden und eine Crunchtime-Zusammenfassung.
-    """
-    if not actions: 
-        return "Keine Play-by-Play Daten verfügbar."
-
-    lead_changes = 0
-    ties = 0
-    last_leader = None # 'home', 'guest', or 'tie'
-    current_h_score = 0
-    current_g_score = 0
-    
-    # Crunchtime Log: Aktionen der letzten 5 Minuten (Zeit < 05:00 in Q4 oder OT)
-    crunch_log = []
-    
-    # Sortiere Aktionen nach Zeit (falls nicht schon sortiert) - normalerweise kommen sie chronologisch
-    # Da API Zeit oft als String "MM:SS" ist und rückwärts läuft (40:00 -> 00:00 ist falsch, oft läuft es 10:00 -> 00:00 pro Viertel)
-    # Wir iterieren einfach durch.
-    
-    for act in actions:
-        h_score = safe_int(act.get("homeTeamPoints"))
-        g_score = safe_int(act.get("guestTeamPoints"))
-        
-        # Ignoriere 0-0 Start
-        if h_score == 0 and g_score == 0: continue
-
-        # Leader check
-        if h_score > g_score:
-            current_leader = 'home'
-        elif g_score > h_score:
-            current_leader = 'guest'
-        else:
-            current_leader = 'tie'
-
-        if last_leader is not None:
-            if current_leader != last_leader:
-                if current_leader == 'tie':
-                    ties += 1
-                elif last_leader != 'tie': # Echter Führungswechsel (nicht von/zu Tie)
-                    lead_changes += 1
-                elif last_leader == 'tie': # Aus Tie heraus Führung übernommen -> wird oft als LC gezählt
-                    lead_changes += 1
-
-        last_leader = current_leader
-
-        # Crunchtime Extraction
-        # Wir suchen Aktionen im 4. Viertel oder OT, bei denen die Zeit unter 3 Minuten ist
-        # Das Format von 'timeInGame' ist oft knifflig, wir prüfen einfach, ob es das Ende der Liste ist.
-        # Alternativ: Wir nehmen einfach die letzten 15 relevanten Aktionen (Scores, TOs, Fouls)
-        
-    # Extrahieren der letzten X Aktionen für die narrative Beschreibung
-    relevant_actions = [a for a in actions if a.get("type") in ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL"]]
-    last_events = relevant_actions[-12:] # Die letzten 12 Aktionen
-    
-    crunch_log.append("\n**Die Schlussphase (Chronologie der letzten Ereignisse):**")
-    for ev in last_events:
-        score_str = f"{ev.get('homeTeamPoints')}:{ev.get('guestTeamPoints')}"
-        # Versuch den Spielernamen zu finden, oft aber nicht direkt im Action-Objekt lesbar
-        # Wir nutzen den 'type' und 'qualifiers'
-        desc = ev.get("type", "").replace("_", " ")
-        qual = ", ".join(ev.get("qualifiers", []))
-        if qual: desc += f" ({qual})"
-        
-        # Welches Team?
-        # seasonTeamId ist in der Action. Wir müssten es mappen, aber einfacher ist Kontext aus Score
-        crunch_log.append(f"- {score_str}: {desc}")
-
-    summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
-    summary += "\n".join(crunch_log)
-    
-    return summary
-
 def generate_complex_ai_prompt(box):
     """
     Erstellt einen fertigen Prompt für ChatGPT basierend auf den Boxscore-Daten
@@ -616,10 +624,6 @@ def generate_complex_ai_prompt(box):
     stats_home = get_stats_str(h_data)
     stats_guest = get_stats_str(g_data)
 
-    # --- NEU: PBP Analyse ---
-    pbp_summary = analyze_game_flow(box.get("actions", []), h_name, g_name)
-
-
     # 2. Der Prompt Text (Dein Wunsch-Prompt)
     prompt_sections = []
 
@@ -640,17 +644,13 @@ def generate_complex_ai_prompt(box):
     prompt_sections.append(f"- Statistik {g_name}: {stats_guest}")
     prompt_sections.append(f"- Zuschauer: {res.get('spectators', 'k.A.')}")
     prompt_sections.append(f"- Halle: {box.get('venue', {}).get('name', 'der Halle')}")
-    
-    # Hier fügen wir den Spielverlauf ein
-    prompt_sections.append("\nDETAILS ZUM SPIELVERLAUF (Play-by-Play):")
-    prompt_sections.append(pbp_summary)
 
     if is_jena_home or is_jena_guest:
         prompt_sections.append(f"- VIMODROM Baskets Jena spielte gegen: {opponent}")
         prompt_sections.append(f"- VIMODROM Ergebnis: {jena_score} : {opp_score} gegen {opponent}")
     
     prompt_sections.append("\n\nAUFGABE 1: ERSTELLE DREI JOURNALISTISCHE SPIELBERICHTE")
-    prompt_sections.append("Ziel: Atmosphäre und Dramatik des Basketballspiels einfangen. Nutze die PBP-Daten für eine detaillierte Beschreibung der Schlussphase.")
+    prompt_sections.append("Ziel: Atmosphäre und Dramatik des Basketballspiels einfangen.")
     prompt_sections.append("Sprache: Klar, prägnant, lebhafte Beschreibungen, emotionale Höhepunkte.")
     prompt_sections.append("Texte zugänglich für Gelegenheitssportfans, detailliert genug für Experten.")
     prompt_sections.append("Länge: Texte für Website und 2. DBBL Website jeweils mindestens 3000 Zeichen umfassen. Für das Spieltagsmagazin 1500-2000 Zeichen.")
@@ -691,22 +691,3 @@ def generate_complex_ai_prompt(box):
     prompt_sections.append("Wenn alle Berichte geschrieben sind, füge zusätzlich EINE Zusammenfassung mit 10 Meta-Tags (kommagetrennt) und EINER Meta-Beschreibung für das GESAMTE SPIEL hinzu.")
 
     return "\n".join(prompt_sections)
-
-def run_openai_generation(api_key, prompt):
-    """Sendet den Prompt an die OpenAI API und gibt den Text zurück."""
-    client = openai.OpenAI(api_key=api_key)
-    
-    try:
-        # Wir nutzen gpt-4o, da es aktuell das beste Preis-Leistungs-Verhältnis hat
-        # und sehr gut Deutsch schreibt.
-        response = client.chat.completions.create(
-            model="gpt-4o", 
-            messages=[
-                {"role": "system", "content": "Du bist ein professioneller Sportjournalist und SEO-Experte, spezialisiert auf Basketball. Du schreibst fundierte, lebendige und optimierte Artikel für verschiedene Zielgruppen."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.0, # Etwas niedriger, da der Prompt schon sehr spezifisch ist
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Fehler bei der API-Abfrage: {str(e)}"
