@@ -7,8 +7,8 @@ from datetime import datetime
 import pytz
 from src.config import API_HEADERS, SEASON_ID 
 
-# Lokale Hilfsfunktionen um Import-Probleme zu vermeiden
-def optimize_image_base64(url): return url # Placeholder falls Utils fehlen
+# Lokale Hilfsfunktionen
+def optimize_image_base64(url): return url 
 def format_minutes(seconds):
     if seconds is None: return "00:00"
     try:
@@ -16,17 +16,19 @@ def format_minutes(seconds):
     except: return "00:00"
 
 def calculate_age(birthdate_str):
-    if not birthdate_str or str(birthdate_str).lower() == "nan": return "-"
+    """Berechnet das Alter. Akzeptiert '1990-01-01' oder ISO."""
+    if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", ""]: return "-"
     try:
+        # Bereinige ISO String (schneide Zeit ab falls vorhanden)
         clean_date = str(birthdate_str).split("T")[0]
         bd = datetime.strptime(clean_date, "%Y-%m-%d")
         today = datetime.now()
         return today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
-    except: return "-"
+    except:
+        return "-"
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600, show_spinner="Lade Spieler-Metadaten...")
 def get_player_metadata_cached(player_id):
-    """Lädt Bild und Details eines einzelnen Spielers."""
     try:
         url = f"https://api-s.dbbl.scb.world/season-players/{player_id}"
         resp = requests.get(url, headers=API_HEADERS)
@@ -50,21 +52,37 @@ def fetch_team_data(team_id, season_id):
     api_stats = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
     api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
     
-    # 1. Stammdaten laden (für Alter/Nat)
+    # 1. Stammdaten laden & Parsen (angepasst an User-Hinweis)
     raw_details = fetch_team_details_raw(team_id, season_id)
     roster_lookup = {}
+    
     if raw_details:
         squad = raw_details.get("squad", []) if isinstance(raw_details, dict) else []
         for entry in squad:
             p = entry.get("person", {})
             pid = str(p.get("id", ""))
-            if pid:
-                nat = p.get("nationality", {}).get("name") or entry.get("nationality", {}).get("name", "-")
-                roster_lookup[pid] = {
-                    "birthdate": p.get("birthdate", ""),
-                    "nationality": nat,
-                    "height": p.get("height", "-")
-                }
+            if not pid: continue
+            
+            # GEBURTSDATUM: Check 'birthdate' (klein) und 'birthDate' (camelCase)
+            bdate = p.get("birthDate") or p.get("birthdate") or ""
+            
+            # NATIONALITÄT: Check Liste 'nationalities' ["DE"] oder Objekt 'nationality'
+            nat = "-"
+            # Prio 1: nationalities Liste im person Objekt
+            if "nationalities" in p and isinstance(p["nationalities"], list) and len(p["nationalities"]) > 0:
+                nat = ", ".join(p["nationalities"])
+            # Prio 2: nationality Objekt im person Objekt
+            elif "nationality" in p and isinstance(p["nationality"], dict):
+                nat = p["nationality"].get("name", "-")
+            # Prio 3: Fallback im Entry selbst
+            elif "nationality" in entry and isinstance(entry["nationality"], dict): 
+                nat = entry["nationality"].get("name", "-")
+            
+            roster_lookup[pid] = {
+                "birthdate": bdate,
+                "nationality": nat,
+                "height": p.get("height", "-")
+            }
 
     try:
         # 2. Stats laden
@@ -73,7 +91,6 @@ def fetch_team_data(team_id, season_id):
         
         if r_stats.status_code != 200: return None, None
         
-        # Team Stats
         ts = {}
         if r_team.status_code == 200:
             raw_ts = r_team.json()
@@ -130,11 +147,13 @@ def fetch_team_data(team_id, season_id):
             # Merge Stammdaten
             df["BIRTHDATE"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("birthdate", ""))
             df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("nationality", "-"))
+            df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("height", "-"))
             df["AGE"] = df["BIRTHDATE"].apply(calculate_age)
             
             # Stats
             df["GP"] = get_n("gamesplayed").replace(0,1)
-            min_raw = get_n("minutespergame"); sec_total = get_n("secondsplayed")
+            min_raw = get_n("minutespergame")
+            
             df["MIN_FINAL"] = min_raw
             mask_zero = (df["MIN_FINAL"] <= 0) & (df["GP"] > 0)
             if not df.loc[mask_zero].empty:
@@ -156,6 +175,8 @@ def fetch_team_data(team_id, season_id):
             df.loc[mask_att, "FG%"] = ((m2[mask_att]+m3[mask_att]) / total_att[mask_att] * 100).round(1)
             
             df["3PCT"] = get_n("threepointshotsuccesspercent").apply(lambda x: round(x*100, 1))
+            df["FTPCT"] = get_n("freethrowssuccesspercent").apply(lambda x: round(x*100, 1))
+            
             df["select"] = False
         else:
             df = pd.DataFrame()
@@ -166,6 +187,7 @@ def fetch_team_data(team_id, season_id):
 
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
+    """Lädt Spiele. Datum im Format DD.MM.YYYY."""
     url = f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}"
     try:
         resp = requests.get(url, headers=API_HEADERS)
@@ -188,7 +210,9 @@ def fetch_schedule(team_id, season_id):
                 raw_d = g.get("scheduledTime", "")
                 d_disp = raw_d
                 if raw_d:
-                    try: d_disp = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin")).strftime("%Y-%m-%d %H:%M")
+                    try: 
+                        # Umwandlung in DD.MM.YYYY HH:MM
+                        d_disp = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
                     except: pass
                 
                 clean.append({
@@ -225,7 +249,11 @@ def fetch_team_info_basic(team_id):
     sched = fetch_schedule(team_id, SEASON_ID)
     if sched:
         homes = [g for g in sched if str(g.get("homeTeamId")) == str(team_id)]
-        homes.sort(key=lambda x: x['date'], reverse=True)
+        # Sortierung mit neuem Datumsformat
+        def parse_date(d): 
+             try: return datetime.strptime(d, "%d.%m.%Y %H:%M") 
+             except: return datetime.min
+        homes.sort(key=lambda x: parse_date(x['date']), reverse=True)
         for g in homes:
             det = fetch_game_details(g['id'])
             if det and det.get("venue"): return {"id": team_id, "venue": det["venue"]}
