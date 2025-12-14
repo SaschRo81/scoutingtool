@@ -64,6 +64,18 @@ def get_player_lookup(box):
             lookup[pid] = f"#{nr} {name}"
     return lookup
 
+def get_player_team_lookup(box):
+    lookup = {}
+    h_name = get_team_name(box.get("homeTeam", {}), "Heim")
+    g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    for p in box.get("homeTeam", {}).get('playerStats', []):
+        pid = str(p.get('seasonPlayer', {}).get('id'))
+        lookup[pid] = h_name
+    for p in box.get("guestTeam", {}).get('playerStats', []):
+        pid = str(p.get('seasonPlayer', {}).get('id'))
+        lookup[pid] = g_name
+    return lookup
+
 def convert_elapsed_to_remaining(time_str, period):
     if not time_str: return "-"
     base_minutes = 10
@@ -118,6 +130,37 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
          if diff < 0 and abs(diff) > stats["g_lead"]: stats["g_lead"] = abs(diff)
          cur_h = new_h; cur_g = new_g
     return stats
+
+def analyze_game_flow(actions, home_name, guest_name):
+    if not actions: return "Keine Play-by-Play Daten verfügbar."
+    lead_changes = 0; ties = 0; last_leader = None; crunch_log = []
+    
+    for act in actions:
+        h_score = safe_int(act.get("homeTeamPoints")); g_score = safe_int(act.get("guestTeamPoints"))
+        if h_score == 0 and g_score == 0: continue
+        if h_score > g_score: current_leader = 'home'
+        elif g_score > h_score: current_leader = 'guest'
+        else: current_leader = 'tie'
+        if last_leader is not None:
+            if current_leader != last_leader:
+                if current_leader == 'tie': ties += 1
+                elif last_leader != 'tie': lead_changes += 1
+                elif last_leader == 'tie': lead_changes += 1
+        last_leader = current_leader
+
+    relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
+    filtered_actions = [a for a in actions if a.get("type") in relevant_types]
+    last_events = filtered_actions[-12:] 
+    crunch_log.append("\n**Die Schlussphase (Chronologie der letzten Ereignisse):**")
+    for ev in last_events:
+        h_pts = ev.get('homeTeamPoints'); g_pts = ev.get('guestTeamPoints'); score_str = f"{h_pts}:{g_pts}"
+        action_desc = translate_text(ev.get("type", ""))
+        if ev.get("points"): action_desc += f" (+{ev.get('points')})"
+        crunch_log.append(f"- {score_str}: {action_desc}")
+
+    summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
+    summary += "\n".join(crunch_log)
+    return summary
 
 # --- RENDERING FUNKTIONEN ---
 
@@ -398,4 +441,5 @@ def render_live_view(box):
             
     with c2:
         st.subheader("📜 Live Ticker")
+        # Hier nutzen wir die neue render_full_play_by_play Funktion
         render_full_play_by_play(box, height=400)
