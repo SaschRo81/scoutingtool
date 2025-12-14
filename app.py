@@ -31,7 +31,7 @@ from src.state_manager import export_session_state, load_session_state
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
-    generate_complex_ai_prompt, run_openai_generation 
+    generate_complex_ai_prompt, render_full_play_by_play # NEUE FUNKTION IMPORTIERT
 )
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
@@ -291,9 +291,10 @@ def render_analysis_page():
                         
                         render_game_header(box)
                         
-                        st.markdown("### 📝 Spielberichte & KI-Generator")
+                        # --- NEUE TAB STRUKTUR ---
+                        st.markdown("### 📝 Spielberichte & PBP")
 
-                        tab_simple, tab_prompt, tab_auto = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "🤖 Automatisch (API)"])
+                        tab_simple, tab_prompt, tab_pbp = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
 
                         with tab_simple:
                             report_text = generate_game_summary(box)
@@ -301,34 +302,13 @@ def render_analysis_page():
                             st.caption("Regelbasierter Kurzbericht.")
 
                         with tab_prompt:
-                            st.info("Falls du keinen API Key hast, kopiere diesen Text in ChatGPT:")
+                            st.info("Kopiere diesen Text in ChatGPT für einen detaillierten Bericht:")
                             ai_prompt = generate_complex_ai_prompt(box)
                             st.code(ai_prompt, language="text")
 
-                        with tab_auto:
-                            st.write("Generiere die ausführlichen SEO-Artikel direkt hier mit deinem OpenAI Key.")
-                            default_key = st.secrets.get("OPENAI_API_KEY", "")
-                            user_api_key = st.text_input("OpenAI API Key:", value=default_key, type="password", key="openai_key_input")
-                            col_gen, col_info = st.columns([1, 3])
-                            
-                            if col_gen.button("🚀 Berichte generieren", type="primary"):
-                                if not user_api_key:
-                                    st.error("Bitte API Key eingeben (oder in secrets.toml hinterlegen).")
-                                else:
-                                    full_prompt = generate_complex_ai_prompt(box)
-                                    with st.spinner("Die KI schreibt gerade die Artikel... (das kann ca. 30-60 Sekunden dauern)"):
-                                        result_text = run_openai_generation(user_api_key, full_prompt)
-                                    st.session_state["generated_ai_report"] = result_text
-                            
-                            if "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is not None:
-                                st.success("Berichte erfolgreich erstellt!")
-                                st.divider()
-                                st.markdown(st.session_state["generated_ai_report"])
-                                h_n = get_team_name(box.get("homeTeam", {}), "Heim").replace(" ", "_")
-                                g_n = get_team_name(box.get("guestTeam", {}), "Gast").replace(" ", "_")
-                                st.download_button("📄 Text herunterladen (.txt)", data=st.session_state["generated_ai_report"], file_name=f"Spielbericht_{h_n}_vs_{g_n}.txt", mime="text/plain")
-                            elif "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is None:
-                                st.info("Kein Bericht generiert oder es gab einen Fehler. Bitte erneut versuchen.")
+                        with tab_pbp:
+                            st.info("Vollständiges Play-by-Play Protokoll:")
+                            render_full_play_by_play(box)
 
                         st.write("")
                         st.divider()
@@ -338,17 +318,16 @@ def render_analysis_page():
                         h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
                         g_coach = box.get("guestTeam", {}).get("headCoachName", "-")
                         
-                        # HIER WURDE DER AUFRUF GEÄNDERT:
                         render_boxscore_table_pro(
                             box.get("homeTeam", {}).get("playerStats", []), 
-                            box.get("homeTeam", {}).get("gameStat", {}), # Übergebe Team-Stats
+                            box.get("homeTeam", {}).get("gameStat", {}), 
                             h_name, 
                             h_coach
                         )
                         st.write("")
                         render_boxscore_table_pro(
                             box.get("guestTeam", {}).get("playerStats", []), 
-                            box.get("guestTeam", {}).get("gameStat", {}), # Übergebe Team-Stats
+                            box.get("guestTeam", {}).get("gameStat", {}), 
                             g_name, 
                             g_coach
                         )
@@ -363,7 +342,7 @@ def render_analysis_page():
                          st.error("Details (Schiris/Viertel) konnten nicht geladen werden.")
                          h_name = get_team_name(box.get("homeTeam", {}), "Heim")
                          g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-                         render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), {}, h_name) # Fallback ohne Team-Stats
+                         render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), {}, h_name) 
                          render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), {}, g_name)
 
                     elif details:
