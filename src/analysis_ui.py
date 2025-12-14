@@ -4,6 +4,49 @@ import altair as alt
 from datetime import datetime
 import pytz
 
+# Übersetzungswörterbuch für API-Begriffe
+ACTION_TRANSLATION = {
+    "TWO_POINT_SHOT_MADE": "2-Punkt Treffer",
+    "TWO_POINT_SHOT_MISSED": "2-Punkt Fehlwurf",
+    "THREE_POINT_SHOT_MADE": "3-Punkt Treffer",
+    "THREE_POINT_SHOT_MISSED": "3-Punkt Fehlwurf",
+    "FREE_THROW_MADE": "Freiwurf Treffer",
+    "FREE_THROW_MISSED": "Freiwurf Fehlwurf",
+    "REBOUND": "Rebound",
+    "FOUL": "Foul",
+    "TURNOVER": "Ballverlust",
+    "ASSIST": "Assist",
+    "STEAL": "Steal",
+    "BLOCK": "Block",
+    "SUBSTITUTION": "Wechsel",
+    "TIMEOUT": "Auszeit",
+    "JUMP_BALL": "Sprungball",
+    "START": "Start",
+    "END": "Ende",
+    "layup": "Korbleger",
+    "jump_shot": "Sprungwurf",
+    "dunk": "Dunking",
+    "offensive": "Offensiv",
+    "defensive": "Defensiv",
+    "personal_foul": "Persönlich",
+    "technical_foul": "Technisch",
+    "unsportsmanlike_foul": "Unsportlich"
+}
+
+def translate_text(text):
+    """Hilfsfunktion für einfache Übersetzungen."""
+    if not text: return ""
+    text_upper = str(text).upper()
+    # Versuche direkten Match, sonst ersetze Unterstriche
+    if text_upper in ACTION_TRANSLATION:
+        return ACTION_TRANSLATION[text_upper]
+    
+    clean_text = text.replace("_", " ").lower()
+    for eng, ger in ACTION_TRANSLATION.items():
+        if eng.lower() in clean_text:
+            clean_text = clean_text.replace(eng.lower(), ger)
+    return clean_text.capitalize()
+
 def safe_int(val):
     if val is None: return 0
     if isinstance(val, int): return val
@@ -44,29 +87,46 @@ def get_player_lookup(box):
             lookup[pid] = f"#{nr} {name}"
     return lookup
 
+def get_player_team_lookup(box):
+    """
+    Erstellt ein Dictionary {player_id: 'TeamName'}, um Aktionen einem Team zuzuordnen,
+    auch wenn die Action selbst keine TeamID hat.
+    """
+    lookup = {}
+    h_name = get_team_name(box.get("homeTeam", {}), "Heim")
+    g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    
+    for p in box.get("homeTeam", {}).get('playerStats', []):
+        pid = str(p.get('seasonPlayer', {}).get('id'))
+        lookup[pid] = h_name
+        
+    for p in box.get("guestTeam", {}).get('playerStats', []):
+        pid = str(p.get('seasonPlayer', {}).get('id'))
+        lookup[pid] = g_name
+        
+    return lookup
+
 def render_full_play_by_play(box):
-    """Rendert eine detaillierte Play-by-Play Tabelle."""
+    """Rendert eine detaillierte Play-by-Play Tabelle auf Deutsch."""
     actions = box.get("actions", [])
     if not actions:
         st.info("Keine Play-by-Play Daten verfügbar.")
         return
 
-    # Spieler-Namen Lookup erstellen
+    # Lookups erstellen
     player_map = get_player_lookup(box)
+    player_team_map = get_player_team_lookup(box)
     
     home_name = get_team_name(box.get("homeTeam", {}), "Heim")
     guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
     home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
+    guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
 
     data = []
     
-    # Laufenden Score tracken, falls API None liefert
     running_h = 0
     running_g = 0
 
-    # Aktionen umdrehen, damit das Neueste oben ist (optional, hier chronologisch)
-    # Wir machen es chronologisch (1. Viertel zuerst)
-    
     for act in actions:
         # Score update
         h_pts = act.get("homeTeamPoints")
@@ -77,38 +137,65 @@ def render_full_play_by_play(box):
         
         score_str = f"{running_h} : {running_g}"
         
-        # Zeit formatieren (oft PT04M23S format oder ähnlich, hier vereinfacht)
-        time_str = act.get("timeInGame", "-")
+        # Zeit formatieren: API liefert oft PT00M23S oder ähnlich, oder gar nichts.
+        # Fallback auf Period
+        time_raw = act.get("timeInGame", "")
+        period = act.get("period", "")
+        time_display = f"Q{period}" if period else "-"
+        
+        if time_raw and "M" in time_raw:
+            try:
+                # Einfaches Parsing für PTxxMxxS
+                t = time_raw.replace("PT", "").replace("S", "")
+                m, s = t.split("M")
+                time_display = f"Q{period} {m}:{s.zfill(2)}"
+            except:
+                pass
         
         # Akteur bestimmen
         pid = str(act.get("seasonPlayerId"))
-        actor = player_map.get(pid, "-")
+        actor = player_map.get(pid, "")
         
-        # Team bestimmen
+        # Team bestimmen (Intelligente Logik)
         tid = str(act.get("seasonTeamId"))
-        team_display = home_name if tid == home_id else guest_name
-        if tid == "None": team_display = "-"
+        
+        if tid == home_id:
+            team_display = home_name
+        elif tid == guest_id:
+            team_display = guest_name
+        elif pid in player_team_map: # Fallback: Team über Spieler finden
+            team_display = player_team_map[pid]
+        else:
+            team_display = "-" # Weder ID noch Spieler zuordenbar
 
-        # Beschreibung hübsch machen
-        action_type = act.get("type", "").replace("_", " ")
+        # Beschreibung & Übersetzung
+        raw_type = act.get("type", "")
+        action_german = translate_text(raw_type)
+        
         qualifiers = act.get("qualifiers", [])
         if qualifiers:
-            action_type += f" ({', '.join(qualifiers).lower()})"
+            qual_german = [translate_text(q) for q in qualifiers]
+            action_german += f" ({', '.join(qual_german)})"
         
-        # Subtype (z.B. Punkteanzahl)
         if act.get("points"):
-            action_type += f" (+{act.get('points')})"
+            action_german += f" (+{act.get('points')})"
 
         data.append({
-            "Zeit": time_str,
+            "Zeit": time_display,
             "Score": score_str,
             "Team": team_display,
             "Spieler": actor,
-            "Aktion": action_type
+            "Aktion": action_german
         })
 
     df = pd.DataFrame(data)
-    st.dataframe(df, use_container_width=True, hide_index=True, height=600)
+    
+    # Dynamische Höhe berechnen, um Scrollbalken IM Container zu vermeiden
+    # Ca. 35px pro Zeile + Header Buffer
+    rows = len(df)
+    height = min((rows + 1) * 35 + 10, 1500) # Max 1500px, sonst wird die Seite zu lang
+    
+    st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
     stats = {
@@ -125,7 +212,6 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
          new_h = safe_int(act.get("homeTeamPoints"))
          new_g = safe_int(act.get("guestTeamPoints"))
          
-         # Fix für None values in Actions
          if new_h == 0 and new_g == 0 and act.get("homeTeamPoints") is None:
              new_h = cur_h
              new_g = cur_g
@@ -691,3 +777,22 @@ def generate_complex_ai_prompt(box):
     prompt_sections.append("Wenn alle Berichte geschrieben sind, füge zusätzlich EINE Zusammenfassung mit 10 Meta-Tags (kommagetrennt) und EINER Meta-Beschreibung für das GESAMTE SPIEL hinzu.")
 
     return "\n".join(prompt_sections)
+
+def run_openai_generation(api_key, prompt):
+    """Sendet den Prompt an die OpenAI API und gibt den Text zurück."""
+    client = openai.OpenAI(api_key=api_key)
+    
+    try:
+        # Wir nutzen gpt-4o, da es aktuell das beste Preis-Leistungs-Verhältnis hat
+        # und sehr gut Deutsch schreibt.
+        response = client.chat.completions.create(
+            model="gpt-4o", 
+            messages=[
+                {"role": "system", "content": "Du bist ein professioneller Sportjournalist und SEO-Experte, spezialisiert auf Basketball. Du schreibst fundierte, lebendige und optimierte Artikel für verschiedene Zielgruppen."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0, # Etwas niedriger, da der Prompt schon sehr spezifisch ist
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Fehler bei der API-Abfrage: {str(e)}"
