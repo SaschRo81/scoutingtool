@@ -19,64 +19,29 @@ def calculate_age(birthdate_str):
     """Berechnet das Alter. Akzeptiert '1990-01-01' oder ISO."""
     if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", "", "-"]: return "-"
     try:
+        # Bereinige ISO String (schneide Zeit ab falls vorhanden)
         clean_date = str(birthdate_str).split("T")[0]
         bd = datetime.strptime(clean_date, "%Y-%m-%d")
         today = datetime.now()
-        age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
-        return str(age)
+        return today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
     except:
         return "-"
 
 @st.cache_data(ttl=600, show_spinner="Lade Spieler-Metadaten...")
 def get_player_metadata_cached(player_id):
     try:
-        clean_id = str(player_id).replace(".0", "")
-        url = f"https://api-s.dbbl.scb.world/season-players/{clean_id}"
+        url = f"https://api-s.dbbl.scb.world/season-players/{player_id}"
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
             data = resp.json()
-            person = data.get("person", {})
-            
-            # Helper für Attribute
-            def get_attr(keys, source):
-                for k in keys:
-                    val = source.get(k)
-                    if val: return val
-                return None
+            # Position hier auch bereinigen für den Fall des Falles
+            pos = data.get("position", "-")
+            if isinstance(pos, dict): pos = pos.get("name", "-")
+            if isinstance(pos, str): pos = pos.replace("_", " ")
 
-            # Bild
-            img = data.get("imageUrl", "")
-            
-            # Alter
-            bdate = get_attr(["birthDate", "birthdate"], person) or get_attr(["birthDate", "birthdate"], data)
-            age = calculate_age(bdate)
-            
-            # Nationalität
-            nat = "-"
-            nats = get_attr(["nationalities"], person) or get_attr(["nationalities"], data)
-            if nats and isinstance(nats, list): nat = ", ".join(nats)
-            else:
-                n_obj = get_attr(["nationality"], person) or get_attr(["nationality"], data)
-                if n_obj and isinstance(n_obj, dict): nat = n_obj.get("name", "-")
-
-            # Größe
-            height = get_attr(["height"], person) or get_attr(["height"], data) or "-"
-            
-            # Position
-            pos = "-"
-            p_obj = get_attr(["position"], data) or get_attr(["position"], person)
-            if isinstance(p_obj, dict): pos = p_obj.get("name", "-")
-            elif isinstance(p_obj, str): pos = p_obj
-            
-            return {
-                "img": img, 
-                "height": height, 
-                "pos": pos,
-                "age": age,
-                "nationality": nat
-            }
+            return {"img": data.get("imageUrl", ""), "height": data.get("height", 0), "pos": pos}
     except: pass
-    return {"img": "", "height": "-", "pos": "-", "age": "-", "nationality": "-"}
+    return {"img": "", "height": 0, "pos": "-"}
 
 @st.cache_data(ttl=600)
 def fetch_team_details_raw(team_id, season_id):
@@ -100,45 +65,25 @@ def fetch_team_data(team_id, season_id):
         squad = raw_details.get("squad", []) if isinstance(raw_details, dict) else []
         for entry in squad:
             p = entry.get("person", {})
-            raw_id = p.get("id") or entry.get("id")
-            if not raw_id: continue
+            pid = str(p.get("id", ""))
+            if not pid: continue
             
-            pid = str(raw_id).replace(".0", "")
-            
-            # Hilfsfunktion um Werte aus 'p' (person) oder 'entry' zu holen
-            def find_val(keys):
-                for k in keys:
-                    if k in p and p[k]: return p[k]
-                    if k in entry and entry[k]: return entry[k]
-                return None
-
             # GEBURTSDATUM
-            bdate = find_val(["birthDate", "birthdate"]) or ""
+            bdate = p.get("birthDate") or p.get("birthdate") or ""
             
             # NATIONALITÄT
             nat = "-"
-            nats_list = find_val(["nationalities"])
-            if nats_list and isinstance(nats_list, list):
-                nat = ", ".join(nats_list)
-            else:
-                nat_obj = find_val(["nationality"])
-                if nat_obj and isinstance(nat_obj, dict):
-                    nat = nat_obj.get("name", "-")
-
-            # GRÖSSE
-            height = find_val(["height"]) or "-"
+            if "nationalities" in p and isinstance(p["nationalities"], list) and len(p["nationalities"]) > 0:
+                nat = ", ".join(p["nationalities"])
+            elif "nationality" in p and isinstance(p["nationality"], dict):
+                nat = p["nationality"].get("name", "-")
+            elif "nationality" in entry and isinstance(entry["nationality"], dict): 
+                nat = entry["nationality"].get("name", "-")
             
-            # POSITION
-            pos = "-"
-            pos_raw = find_val(["position"])
-            if isinstance(pos_raw, dict): pos = pos_raw.get("name", "-")
-            elif isinstance(pos_raw, str): pos = pos_raw
-
             roster_lookup[pid] = {
                 "birthdate": bdate,
                 "nationality": nat,
-                "height": height,
-                "position": pos
+                "height": p.get("height", "-")
             }
 
     try:
@@ -178,7 +123,8 @@ def fetch_team_data(team_id, season_id):
                 "firstname": ["seasonplayer.person.firstname", "person.firstname", "firstname"], 
                 "lastname": ["seasonplayer.person.lastname", "person.lastname", "lastname"],
                 "shirtnumber": ["seasonplayer.shirtnumber", "jerseynumber", "shirtnumber", "no"], 
-                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "person.id", "id"]
+                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "person.id", "id"],
+                "position": ["seasonplayer.position", "position"] # Position Mapping hinzugefügt
             }
             final_cols = {}
             for target, opts in col_map.items():
@@ -201,11 +147,15 @@ def fetch_team_data(team_id, season_id):
             df["NR"] = get_s("shirtnumber").str.replace(".0", "", regex=False)
             df["PLAYER_ID"] = get_s("id").str.replace(".0", "", regex=False)
             
+            # Position direkt aus DataFrame holen und bereinigen
+            # Oft ist Position ein String wie "POINT_GUARD"
+            raw_pos = get_s("position")
+            df["POS"] = raw_pos.apply(lambda x: x.replace("_", " "))
+
             # Merge Stammdaten
             df["BIRTHDATE"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("birthdate", ""))
             df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("nationality", "-"))
-            df["HEIGHT"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("height", "-"))
-            df["POS"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("position", "-"))
+            df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("height", "-"))
             df["AGE"] = df["BIRTHDATE"].apply(calculate_age)
             
             # Stats
