@@ -25,6 +25,7 @@ from src.html_gen import (
 )
 from src.state_manager import export_session_state, load_session_state
 
+# HIER WERDEN ALLE BENÖTIGTEN FUNKTIONEN AUS analysis_ui IMPORTIERT
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
@@ -56,18 +57,19 @@ def go_game_venue(): st.session_state.current_page = "game_venue"
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
 
-# --- HELPER UI ---
+# --- STANDARD-SEITENHEADER ---
 def render_page_header(page_title):
     header_col1, header_col2 = st.columns([1, 4])
     with header_col1:
-        st.button("🏠 Home", on_click=go_home, key=f"home_btn_{st.session_state.current_page}")
+        st.button("🏠 Home", on_click=go_home, key=f"home_button_header_{st.session_state.current_page}")
     with header_col2:
         st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro by Sascha Rosanke</h3>", unsafe_allow_html=True)
     st.title(page_title) 
     st.divider()
 
-# --- SEITEN DEFINITIONEN ---
-
+# ==========================================
+# SEITE 1: HOME
+# ==========================================
 def render_home():
     st.markdown("""<style>[data-testid="stAppViewContainer"]::before {content:"";position:fixed;top:0;left:0;width:100%;height:100%;background-image:url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");background-size:cover;opacity:0.25;z-index:-1;} .title-container {background-color: white; padding: 20px; border-radius: 15px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1); text-align: center; margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto; border: 1px solid #f0f0f0;} div.stButton > button {width: 100%; height: 4em; font-size: 18px; font-weight: bold; border-radius: 10px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s; background-color: white;} div.stButton > button:hover {transform: scale(1.02); border-color: #ff4b4b;}</style>""", unsafe_allow_html=True)
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>🏀 DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
