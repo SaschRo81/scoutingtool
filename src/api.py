@@ -298,12 +298,12 @@ def fetch_schedule(team_id, season_id):
     except: pass
     return []
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=2)
 def fetch_game_boxscore(game_id):
     try: return requests.get(f"https://api-s.dbbl.scb.world/games/{game_id}/stats", headers=API_HEADERS).json()
     except: return None
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=2)
 def fetch_game_details(game_id):
     try: return requests.get(f"https://api-s.dbbl.scb.world/games/{game_id}", headers=API_HEADERS).json()
     except: return None
