@@ -1,3 +1,4 @@
+# --- START OF FILE src/analysis_ui.py ---
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -18,8 +19,7 @@ ACTION_TRANSLATION = {
     "FREE_THROW": "Freiwurf", "layup": "Korbleger", "jump_shot": "Sprung",
     "dunk": "Dunk", "offensive": "Off", "defensive": "Def",
     "personal_foul": "Persönlich", "technical_foul": "Technisch",
-    "unsportsmanlike_foul": "Unsportlich",
-    "half_or_far_distance": "Mitteldistanz", "close_distance": "Nahdistanz"
+    "unsportsmanlike_foul": "Unsportlich", "half_or_far_distance": "Mitteldistanz", "close_distance": "Nahdistanz"
 }
 
 def translate_text(text):
@@ -33,8 +33,6 @@ def translate_text(text):
 
 def safe_int(val):
     if val is None: return 0
-    if isinstance(val, int): return val
-    if isinstance(val, float): return int(val)
     try: return int(float(val))
     except: return 0
 
@@ -49,8 +47,7 @@ def format_date_time(iso_string):
     if not iso_string: return "-"
     try:
         dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
-        berlin = pytz.timezone("Europe/Berlin")
-        return dt.astimezone(berlin).strftime("%d.%m.%Y | %H:%M Uhr")
+        return dt.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y | %H:%M Uhr")
     except: return iso_string
 
 def get_player_lookup(box):
@@ -157,6 +154,8 @@ def analyze_game_flow(actions, home_name, guest_name):
     summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
     summary += "\n".join(crunch_log)
     return summary
+
+# --- RENDERING FUNKTIONEN ---
 
 def render_game_header(details):
     h_data = details.get("homeTeam", {}); g_data = details.get("guestTeam", {})
