@@ -34,7 +34,7 @@ from src.analysis_ui import (
     generate_complex_ai_prompt, run_openai_generation 
 )
 
-st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀") # <-- TITEL HIER AKTUALISIERT
+st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
 # --- SESSION STATE ---
 for key, default in [
@@ -90,14 +90,13 @@ def render_page_header(page_title):
         st.button("🏠 Home", on_click=go_home, key=f"home_button_header_{st.session_state.current_page}")
     with header_col2:
         st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro by Sascha Rosanke</h3>", unsafe_allow_html=True)
-    st.title(page_title) # Der eigentliche Titel der Seite
+    st.title(page_title) 
     st.divider()
 
 # ==========================================
-# SEITE 1: HOME (AKTUALISIERT)
+# SEITE 1: HOME
 # ==========================================
 def render_home():
-    # Home Seite hat einen speziellen Header/Layout, daher keine render_page_header hier
     st.markdown("<h1 style='text-align: center;'>🏀 DBBL Scouting Suite by Sascha Rosanke</h1>", unsafe_allow_html=True)
     st.markdown(f"<p style='text-align: center; color: gray;'>Version {VERSION}</p>", unsafe_allow_html=True)
     st.write(""); st.write("")
@@ -114,7 +113,7 @@ def render_home():
 # SEITE 2: TEAMVERGLEICH
 # ==========================================
 def render_comparison_page():
-    render_page_header("📊 Head-to-Head Vergleich") # <-- Hinzugefügt
+    render_page_header("📊 Head-to-Head Vergleich") 
     
     c1, c2, c3 = st.columns([1, 2, 2])
     with c1: 
@@ -144,11 +143,10 @@ def render_comparison_page():
 # SEITE: SPIELERVERGLEICH
 # ==========================================
 def render_player_comparison_page():
-    render_page_header("🤼 Head-to-Head Spielervergleich") # <-- Hinzugefügt
+    render_page_header("🤼 Head-to-Head Spielervergleich") 
 
     col_left, col_mid, col_right = st.columns([1, 0.1, 1])
 
-    # --- LINKE SEITE (SPIELER A) ---
     with col_left:
         st.subheader("Spieler A")
         staffel_a = st.radio("Staffel A", ["Süd", "Nord"], horizontal=True, key="pc_s_a")
@@ -158,7 +156,7 @@ def render_player_comparison_page():
         
         df_a, _ = fetch_team_data(tid_a, SEASON_ID)
         
-        if df_a is not None and not df_a.empty: # Sicherstellen, dass df_a nicht leer ist
+        if df_a is not None and not df_a.empty: 
             p_opts_a = df_a["NAME_FULL"].tolist()
             p_name_a = st.selectbox("Spieler", p_opts_a, key="pc_p_a")
             row_a = df_a[df_a["NAME_FULL"] == p_name_a].iloc[0]
@@ -173,7 +171,6 @@ def render_player_comparison_page():
     with col_mid:
         st.write("") 
 
-    # --- RECHTE SEITE (SPIELER B) ---
     with col_right:
         st.subheader("Spieler B")
         staffel_b = st.radio("Staffel B", ["Süd", "Nord"], horizontal=True, key="pc_s_b")
@@ -183,7 +180,7 @@ def render_player_comparison_page():
         
         df_b, _ = fetch_team_data(tid_b, SEASON_ID)
         
-        if df_b is not None and not df_b.empty: # Sicherstellen, dass df_b nicht leer ist
+        if df_b is not None and not df_b.empty: 
             p_opts_b = df_b["NAME_FULL"].tolist()
             p_name_b = st.selectbox("Spieler", p_opts_b, key="pc_p_b")
             row_b = df_b[df_b["NAME_FULL"] == p_name_b].iloc[0]
@@ -197,7 +194,6 @@ def render_player_comparison_page():
 
     st.divider()
 
-    # --- VERGLEICH ---
     if row_a is not None and row_b is not None:
         metrics = [
             ("Spiele (GP)", "GP", int),
@@ -214,19 +210,16 @@ def render_player_comparison_page():
             ("Fouls (PF)", "PF", float)
         ]
 
-        # Header Namen
         h1, h2, h3 = st.columns([1, 1, 1])
         h1.markdown(f"<h3 style='text-align: right; color: #333;'>{p_name_a}</h3>", unsafe_allow_html=True)
         h2.markdown(f"<div style='text-align: center; font-weight: bold; padding-top: 10px; color: #999;'>VS</div>", unsafe_allow_html=True)
         h3.markdown(f"<h3 style='text-align: left; color: #333;'>{p_name_b}</h3>", unsafe_allow_html=True)
         st.write("")
 
-        # Zeilenweise Ausgabe
         for label, col, dtype in metrics:
             val_a = row_a[col]
             val_b = row_b[col]
 
-            # Style Logic: Better value gets bold + slightly bigger
             style_a = "color: #444;"
             style_b = "color: #444;"
             
@@ -234,7 +227,6 @@ def render_player_comparison_page():
                 try:
                     va = float(val_a)
                     vb = float(val_b)
-                    # Turnovers und Fouls: Weniger ist besser
                     if col in ["TO", "PF"]:
                         if va < vb: style_a = "font-weight: bold; color: #000; font-size: 1.1em;"
                         elif vb < va: style_b = "font-weight: bold; color: #000; font-size: 1.1em;"
@@ -244,13 +236,10 @@ def render_player_comparison_page():
                 except:
                     pass
 
-            # Layout: Spalte 1 (Wert A) | Spalte 2 (Label) | Spalte 3 (Wert B)
             c1, c2, c3 = st.columns([1, 1.5, 1])
-            
             with c1:
                 st.markdown(f"<div style='text-align: right; padding: 5px; {style_a}'>{val_a}</div>", unsafe_allow_html=True)
             with c2:
-                # Kategorie zentriert mit leichtem Hintergrund oder Rahmen
                 st.markdown(f"<div style='text-align: center; background-color: #f8f9fa; padding: 5px; border-radius: 5px; color: #666; font-size: 0.9em;'>{label}</div>", unsafe_allow_html=True)
             with c3:
                 st.markdown(f"<div style='text-align: left; padding: 5px; {style_b}'>{val_b}</div>", unsafe_allow_html=True)
@@ -260,7 +249,7 @@ def render_player_comparison_page():
 # SEITE 3: SPIELNACHBEREITUNG
 # ==========================================
 def render_analysis_page():
-    render_page_header("🎥 Spielnachbereitung") # <-- Hinzugefügt
+    render_page_header("🎥 Spielnachbereitung") 
     
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -318,10 +307,8 @@ def render_analysis_page():
 
                         with tab_auto:
                             st.write("Generiere die ausführlichen SEO-Artikel direkt hier mit deinem OpenAI Key.")
-                            
                             default_key = st.secrets.get("OPENAI_API_KEY", "")
                             user_api_key = st.text_input("OpenAI API Key:", value=default_key, type="password", key="openai_key_input")
-                            
                             col_gen, col_info = st.columns([1, 3])
                             
                             if col_gen.button("🚀 Berichte generieren", type="primary"):
@@ -329,25 +316,17 @@ def render_analysis_page():
                                     st.error("Bitte API Key eingeben (oder in secrets.toml hinterlegen).")
                                 else:
                                     full_prompt = generate_complex_ai_prompt(box)
-                                    
                                     with st.spinner("Die KI schreibt gerade die Artikel... (das kann ca. 30-60 Sekunden dauern)"):
                                         result_text = run_openai_generation(user_api_key, full_prompt)
-                                    
                                     st.session_state["generated_ai_report"] = result_text
                             
                             if "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is not None:
                                 st.success("Berichte erfolgreich erstellt!")
                                 st.divider()
                                 st.markdown(st.session_state["generated_ai_report"])
-                                
                                 h_n = get_team_name(box.get("homeTeam", {}), "Heim").replace(" ", "_")
                                 g_n = get_team_name(box.get("guestTeam", {}), "Gast").replace(" ", "_")
-                                st.download_button(
-                                    label="📄 Text herunterladen (.txt)",
-                                    data=st.session_state["generated_ai_report"],
-                                    file_name=f"Spielbericht_{h_n}_vs_{g_n}.txt",
-                                    mime="text/plain"
-                                )
+                                st.download_button("📄 Text herunterladen (.txt)", data=st.session_state["generated_ai_report"], file_name=f"Spielbericht_{h_n}_vs_{g_n}.txt", mime="text/plain")
                             elif "generated_ai_report" in st.session_state and st.session_state["generated_ai_report"] is None:
                                 st.info("Kein Bericht generiert oder es gab einen Fehler. Bitte erneut versuchen.")
 
@@ -359,15 +338,24 @@ def render_analysis_page():
                         h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
                         g_coach = box.get("guestTeam", {}).get("headCoachName", "-")
                         
-                        render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name, h_coach)
+                        # HIER WURDE DER AUFRUF GEÄNDERT:
+                        render_boxscore_table_pro(
+                            box.get("homeTeam", {}).get("playerStats", []), 
+                            box.get("homeTeam", {}).get("gameStat", {}), # Übergebe Team-Stats
+                            h_name, 
+                            h_coach
+                        )
                         st.write("")
-                        render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name, g_coach)
+                        render_boxscore_table_pro(
+                            box.get("guestTeam", {}).get("playerStats", []), 
+                            box.get("guestTeam", {}).get("gameStat", {}), # Übergebe Team-Stats
+                            g_name, 
+                            g_coach
+                        )
                         
                         st.divider()
-                        
                         render_game_top_performers(box)
                         st.divider()
-
                         render_charts_and_stats(box)
                         
                     elif box:
@@ -375,8 +363,8 @@ def render_analysis_page():
                          st.error("Details (Schiris/Viertel) konnten nicht geladen werden.")
                          h_name = get_team_name(box.get("homeTeam", {}), "Heim")
                          g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-                         render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), h_name)
-                         render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), g_name)
+                         render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), {}, h_name) # Fallback ohne Team-Stats
+                         render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), {}, g_name)
 
                     elif details:
                          render_game_header(details)
@@ -387,10 +375,10 @@ def render_analysis_page():
             st.warning("Keine Spiele gefunden.")
 
 # ==========================================
-# NEUE SEITE: SPIELORTE (AKTUALISIERT)
+# NEUE SEITE: SPIELORTE
 # ==========================================
 def render_game_venue_page():
-    render_page_header("📍 Spielorte der Teams") # <-- Hinzugefügt
+    render_page_header("📍 Spielorte der Teams") 
 
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -489,14 +477,9 @@ def render_game_venue_page():
 # SEITE 4: SCOUTING REPORT
 # ==========================================
 def render_scouting_page():
-    # Top-Level-Button, der immer sichtbar ist
-    # WICHTIG: Diesen Button jetzt in den render_page_header verschoben
-    # st.button("🏠 Home", on_click=go_home, key="scouting_home_btn_top_level") 
-    render_page_header("📝 Scouting") # <-- Hinzugefügt und Top-Level-Title entfernt
+    render_page_header("📝 Scouting") 
 
-    # --- TOP-LEVEL IF-ELSE FÜR PRINT-MODUS ---
     if st.session_state.print_mode:
-        # --- ANZEIGE DES GENERIERTEN BERICHTS UND DOWNLOAD-OPTIONEN ---
         st.subheader("Vorschau & Export")
         c1, c2 = st.columns([1, 4])
         with c1:
@@ -519,7 +502,6 @@ def render_scouting_page():
             st.info("Bitte klicken Sie auf 'Bearbeiten' und versuchen Sie es erneut.")
 
     else:
-        # --- BEARBEITUNGSMODUS (Standardansicht) ---
         with st.sidebar: 
             st.header("💾 Spielstand")
             uploaded_state = st.file_uploader("Laden (JSON)", type=["json"], key="scouting_upload_state")
@@ -584,14 +566,13 @@ def render_scouting_page():
 
         st.divider()
         
-        # Check ob Daten geladen werden müssen
         current_tid_in_state = st.session_state.get("current_tid")
         
         load_button_clicked = st.button(f"2. Kader von {'Gastteam (Gegner)' if target_radio_selection == 'Gastteam (Gegner)' else 'Heimteam'} laden", type="primary", key="load_scouting_data_btn")
         
         if load_button_clicked or (st.session_state.roster_df is None and current_tid_in_state != tid) or \
            (st.session_state.roster_df is not None and current_tid_in_state != tid):
-            # Wenn der Button geklickt wurde ODER (noch keine Daten geladen ODER Daten für ein anderes Team geladen)
+            
             with st.spinner(f"Lade Daten für Team {tid}..."):
                 df, ts = fetch_team_data(tid, SEASON_ID)
                 if df is not None and not df.empty: 
@@ -616,7 +597,6 @@ def render_scouting_page():
         elif st.session_state.roster_df is None or st.session_state.roster_df.empty:
             st.info("Bitte wählen Sie Teams aus und klicken Sie auf 'Kader laden'.")
 
-        # Dieser Bereich soll nur erscheinen, wenn Daten erfolgreich geladen wurden UND nicht leer sind
         if st.session_state.roster_df is not None and not st.session_state.roster_df.empty: 
             st.subheader("3. Auswahl & Notizen")
             cols = {
