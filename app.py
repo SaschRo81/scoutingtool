@@ -14,9 +14,10 @@ except ImportError:
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url, optimize_image_base64
+# KORREKTUR: Komma hinzugefügt vor fetch_season_games
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
-    fetch_game_boxscore, fetch_game_details, fetch_team_info_basic 
+    fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
     fetch_season_games
 )
 from src.html_gen import (
@@ -68,9 +69,6 @@ def render_page_header(page_title):
     st.title(page_title) 
     st.divider()
 
-# ==========================================
-# SEITE 1: HOME
-# ==========================================
 # ==========================================
 # SEITE 1: HOME
 # ==========================================
@@ -332,6 +330,50 @@ def render_live_page():
                         if st.button(f"Zum Spiel ({game['home'][:3]} vs {game['guest'][:3]})", key=f"btn_live_{game['id']}", use_container_width=True):
                             st.session_state.live_game_id = game['id']
                             st.rerun()
+
+def render_game_venue_page():
+    render_page_header("📍 Spielorte der Teams") 
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="venue_staffel")
+        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
+        to = {v["name"]: k for k, v in t.items()}
+    with c2:
+        tn = st.selectbox("Wähle ein Team:", list(to.keys()), key="venue_team_select")
+        tid = to[tn]
+    st.divider()
+    if tid:
+        st.subheader(f"Standard-Heimspielort von {tn}")
+        with st.spinner(f"Lade Daten..."):
+            info = fetch_team_info_basic(tid)
+            venue = info.get("venue") if info else None
+            if venue:
+                st.markdown(f"**Halle:** {venue.get('name', 'N/A')}"); st.markdown(f"**Adresse:** {venue.get('address', 'N/A')}")
+                if venue.get('address'):
+                    u = f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{venue.get('name', '')}, {venue.get('address', '')}')}"
+                    st.markdown(f"**Route:** [Google Maps öffnen]({u})", unsafe_allow_html=True)
+            else: st.warning("Nicht gefunden.")
+        st.divider()
+        st.subheader(f"Alle Spiele von {tn}")
+        games = fetch_schedule(tid, SEASON_ID)
+        if games:
+            games.sort(key=lambda x: datetime.strptime(x['date'], "%d.%m.%Y %H:%M"), reverse=True)
+            for g in games:
+                gid = g.get("id")
+                if str(g.get("homeTeamId")) == str(tid):
+                    with st.expander(f"🏟️ Heim: {g.get('date')} vs {g.get('guest')} ({g.get('score')})"):
+                        if gid:
+                            d = fetch_game_details(gid)
+                            if d and d.get("venue"):
+                                v = d.get("venue")
+                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
+                else:
+                    with st.expander(f"🚌 Gast: {g.get('date')} bei {g.get('home')} ({g.get('score')})"):
+                        if gid:
+                            d = fetch_game_details(gid)
+                            if d and d.get("venue"):
+                                v = d.get("venue")
+                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
 
 def render_analysis_page():
     render_page_header("🎥 Spielnachbereitung") 
