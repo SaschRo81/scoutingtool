@@ -17,28 +17,67 @@ def format_minutes(seconds):
 
 def calculate_age(birthdate_str):
     """Berechnet das Alter. Akzeptiert '1990-01-01' oder ISO."""
-    if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", ""]: return "-"
+    if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", "", "-"]: return "-"
     try:
         # Bereinige ISO String (schneide Zeit ab falls vorhanden)
         clean_date = str(birthdate_str).split("T")[0]
         bd = datetime.strptime(clean_date, "%Y-%m-%d")
         today = datetime.now()
-        return today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+        age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+        return str(age)
     except:
         return "-"
 
-@st.cache_data(ttl=600, show_spinner="Lade Spieler-Metadaten...")
+def extract_nationality(data_obj):
+    """Hilfsfunktion zum Extrahieren der Nationalität aus diversen Strukturen."""
+    if not data_obj: return "-"
+    
+    # 1. "nationalities": ["DE", "US"] (Liste von Strings)
+    if "nationalities" in data_obj and isinstance(data_obj["nationalities"], list) and data_obj["nationalities"]:
+        # Prüfen ob Liste von Strings oder Dicts
+        first = data_obj["nationalities"][0]
+        if isinstance(first, str):
+            return "/".join(data_obj["nationalities"])
+        elif isinstance(first, dict):
+            return "/".join([n.get("name", "") for n in data_obj["nationalities"]])
+
+    # 2. "nationality": {"name": "Germany"} (Objekt)
+    if "nationality" in data_obj and isinstance(data_obj["nationality"], dict):
+        return data_obj["nationality"].get("name", "-")
+    
+    return "-"
+
+@st.cache_data(ttl=600, show_spinner=False)
 def get_player_metadata_cached(player_id):
+    """Lädt Bild, Alter und Nationalität eines einzelnen Spielers."""
     try:
-        # IDs bereinigen für Lookup
         clean_id = str(player_id).replace(".0", "")
         url = f"https://api-s.dbbl.scb.world/season-players/{clean_id}"
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
             data = resp.json()
-            return {"img": data.get("imageUrl", ""), "height": data.get("height", 0), "pos": data.get("position", "-")}
+            person = data.get("person", {})
+            
+            # Bild
+            img = data.get("imageUrl", "")
+            
+            # Alter
+            bdate = person.get("birthDate") or person.get("birthdate")
+            age = calculate_age(bdate)
+            
+            # Nationalität (kann im player oder person objekt sein)
+            nat = extract_nationality(person)
+            if nat == "-": nat = extract_nationality(data)
+            
+            return {
+                "img": img, 
+                "height": data.get("height", 0), 
+                "pos": data.get("position", "-"),
+                "age": age,
+                "nationality": nat
+            }
     except: pass
-    return {"img": "", "height": 0, "pos": "-"}
+    return {"img": "", "height": 0, "pos": "-", "age": "-", "nationality": "-"}
 
 @st.cache_data(ttl=600)
 def fetch_team_details_raw(team_id, season_id):
@@ -55,7 +94,6 @@ def fetch_team_data(team_id, season_id):
     api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
     
     # 1. Stammdaten laden & Lookup erstellen
-    # WICHTIG: IDs müssen hier genauso bereinigt werden wie später im DataFrame (kein .0 am Ende)
     raw_details = fetch_team_details_raw(team_id, season_id)
     roster_lookup = {}
     
@@ -66,22 +104,14 @@ def fetch_team_data(team_id, season_id):
             raw_id = p.get("id") or entry.get("id")
             if not raw_id: continue
             
-            # ID Bereinigung: "20678.0" -> "20678"
             pid = str(raw_id).replace(".0", "")
             
-            # GEBURTSDATUM
-            bdate = p.get("birthDate") or p.get("birthdate") or entry.get("birthDate") or ""
+            # Geburtsdatum
+            bdate = p.get("birthDate") or p.get("birthdate") or entry.get("birthDate")
             
-            # NATIONALITÄT
-            nat = "-"
-            # Prüfen ob im person-Objekt
-            if "nationalities" in p and isinstance(p["nationalities"], list) and p["nationalities"]:
-                nat = "/".join(p["nationalities"])
-            elif "nationality" in p and isinstance(p["nationality"], dict):
-                nat = p["nationality"].get("name", "-")
-            # Prüfen ob im entry-Objekt (Fallback)
-            elif "nationalities" in entry and isinstance(entry["nationalities"], list) and entry["nationalities"]:
-                nat = "/".join(entry["nationalities"])
+            # Nationalität
+            nat = extract_nationality(p)
+            if nat == "-": nat = extract_nationality(entry)
             
             roster_lookup[pid] = {
                 "birthdate": bdate,
@@ -147,8 +177,6 @@ def fetch_team_data(team_id, season_id):
             
             df["NAME_FULL"] = (get_s("firstname") + " " + get_s("lastname")).str.strip()
             df["NR"] = get_s("shirtnumber").str.replace(".0", "", regex=False)
-            
-            # WICHTIG: ID bereinigen, damit der Lookup funktioniert
             df["PLAYER_ID"] = get_s("id").str.replace(".0", "", regex=False)
             
             # Merge Stammdaten
@@ -181,14 +209,8 @@ def fetch_team_data(team_id, season_id):
             mask_att = total_att > 0
             df.loc[mask_att, "FG%"] = ((m2[mask_att]+m3[mask_att]) / total_att[mask_att] * 100).round(1)
             
-            # KORREKTUR: Prozentwerte nicht mal 100 nehmen, wenn sie schon > 1 sind
-            # Wir nehmen an, API liefert 0-100
-            p3_raw = get_n("threepointshotsuccesspercent")
-            ft_raw = get_n("freethrowssuccesspercent")
-            
-            # Logik: Wenn Max-Wert <= 1 ist, dann mal 100. Sonst lassen.
-            df["3PCT"] = p3_raw.apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
-            df["FTPCT"] = ft_raw.apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
+            df["3PCT"] = get_n("threepointshotsuccesspercent").apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
+            df["FTPCT"] = get_n("freethrowssuccesspercent").apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
             
             df["select"] = False
         else:
