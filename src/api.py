@@ -6,18 +6,16 @@ import pandas as pd
 from datetime import datetime
 import pytz
 from src.config import API_HEADERS, SEASON_ID 
-# Wir importieren nur optimize_image_base64, format_minutes definieren wir hier selbst, um Fehler zu vermeiden
-try:
-    from src.utils import optimize_image_base64
-except ImportError:
-    # Fallback, falls src.utils fehlt
-    def optimize_image_base64(url): return url
 
-# --- HILFSFUNKTIONEN DIREKT HIER DEFINIERT ---
+# --- INTERNE HILFSFUNKTIONEN (um Import-Fehler zu vermeiden) ---
+
+def internal_optimize_image_base64_placeholder(url):
+    """Fallback, falls kein echtes Optimieren nötig ist."""
+    return url
 
 def format_minutes(seconds):
     """Wandelt Sekunden in MM:SS Format um."""
-    if not seconds or pd.isna(seconds):
+    if seconds is None:
         return "00:00"
     try:
         sec = int(seconds)
@@ -28,10 +26,9 @@ def format_minutes(seconds):
         return "00:00"
 
 def calculate_age(birthdate_str):
-    """Berechnet Alter aus ISO-String."""
+    """Berechnet das Alter aus einem ISO-Datum."""
     if not birthdate_str or str(birthdate_str).lower() == "nan": return "-"
     try:
-        # Versuch Datum zu parsen. Format oft YYYY-MM-DD
         clean_date = str(birthdate_str).split("T")[0]
         bd = datetime.strptime(clean_date, "%Y-%m-%d")
         today = datetime.now()
@@ -39,7 +36,7 @@ def calculate_age(birthdate_str):
     except:
         return "-"
 
-# --- DATA FETCHING ---
+# --- DATA FETCHING FUNKTIONEN ---
 
 @st.cache_data(ttl=600, show_spinner="Lade Spieler-Metadaten...")
 def get_player_metadata_cached(player_id):
@@ -49,9 +46,10 @@ def get_player_metadata_cached(player_id):
         if resp.status_code == 200:
             data = resp.json()
             raw_img = data.get("imageUrl", "")
-            opt_img = optimize_image_base64(raw_img) if raw_img else ""
+            # Wir nutzen hier den rohen Link oder importieren utils nur in einem try-block
+            # Um sicher zu gehen, geben wir hier einfach die URL zurück oder nutzen einen lokalen Optimierer
             return {
-                "img": opt_img,
+                "img": raw_img, # Verwende raw_img direkt, um Abhängigkeiten zu minimieren
                 "height": data.get("height", 0),
                 "pos": data.get("position", "-"),
             }
@@ -61,7 +59,7 @@ def get_player_metadata_cached(player_id):
 
 @st.cache_data(ttl=600)
 def fetch_team_details_raw(team_id, season_id):
-    """Lädt Stammdaten (Alter, Nat) vom detaillierten Team-Endpunkt (api-1)."""
+    """Lädt Stammdaten (Alter, Nat) vom detaillierten Team-Endpunkt."""
     url = f"https://api-1.dbbl.scb.world/teams/{team_id}/{season_id}"
     try:
         resp = requests.get(url, headers=API_HEADERS)
@@ -84,10 +82,7 @@ def fetch_team_data(team_id, season_id):
             p = entry.get("person", {})
             pid = str(p.get("id", ""))
             if pid:
-                # Nationalität kann an verschiedenen Orten stecken
-                nat = p.get("nationality", {}).get("name") 
-                if not nat: nat = entry.get("nationality", {}).get("name", "-")
-                
+                nat = p.get("nationality", {}).get("name") or entry.get("nationality", {}).get("name", "-")
                 roster_lookup[pid] = {
                     "birthdate": p.get("birthdate", ""),
                     "nationality": nat,
@@ -126,7 +121,7 @@ def fetch_team_data(team_id, season_id):
             df = pd.json_normalize(p_list)
             df.columns = [str(c).lower() for c in df.columns]
             
-            # Flexible Spaltensuche
+            # Mapping
             col_map = {
                 "firstname": ["seasonplayer.person.firstname", "person.firstname", "firstname"], 
                 "lastname": ["seasonplayer.person.lastname", "person.lastname", "lastname"],
@@ -136,6 +131,7 @@ def fetch_team_data(team_id, season_id):
             final_cols = {}
             for target, opts in col_map.items():
                 for opt in opts:
+                    # Suche Spalte die den Namen enthält
                     matches = [c for c in df.columns if opt in c]
                     if matches:
                         final_cols[target] = sorted(matches, key=len)[0]
@@ -206,7 +202,6 @@ def fetch_team_data(team_id, season_id):
         return df, ts
 
     except Exception as e:
-        print(f"Error fetch_team_data: {e}")
         return None, None
 
 @st.cache_data(ttl=300)
@@ -227,8 +222,8 @@ def fetch_schedule(team_id, season_id):
                 g_score = 0
                 
                 if res and isinstance(res, dict):
-                    h_score = res.get('homeTeamFinalScore')
-                    g_score = res.get('guestTeamFinalScore')
+                    h_score = res.get('homeTeamFinalScore', 0)
+                    g_score = res.get('guestTeamFinalScore', 0)
                     if h_score is not None and g_score is not None:
                         score = f"{h_score} : {g_score}"; has_res = True
                 
