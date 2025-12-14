@@ -436,7 +436,6 @@ def render_prep_page():
             df, _ = fetch_team_data(opp_id, SEASON_ID)
             sched = fetch_schedule(opp_id, SEASON_ID)
             if df is not None: 
-                # WICHTIG: Callback für Bilder übergeben
                 render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
             else: st.error("Fehler beim Laden.")
 
