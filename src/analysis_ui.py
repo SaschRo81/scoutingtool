@@ -5,8 +5,9 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
+# WICHTIG: Importieren der Metadaten-Funktion für Bilder
+from src.api import get_player_metadata_cached 
 
-# --- KONSTANTEN & HELPERS ---
 ACTION_TRANSLATION = {
     "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
     "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
@@ -78,14 +79,12 @@ def convert_elapsed_to_remaining(time_str, period):
     try:
         if int(period) > 4: base_minutes = 5
     except: pass
-    
     try:
         parts = time_str.split(":")
         sec = 0
         if len(parts) == 3: sec = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
         elif len(parts) == 2: sec = int(parts[0])*60 + int(parts[1])
         else: return time_str
-        
         rem = (base_minutes * 60) - sec
         if rem < 0: rem = 0
         return f"{rem // 60:02d}:{rem % 60:02d}"
@@ -142,7 +141,6 @@ def analyze_game_flow(actions, home_name, guest_name):
                 elif last_leader != 'tie': lead_changes += 1
                 elif last_leader == 'tie': lead_changes += 1
         last_leader = current_leader
-
     relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
     filtered_actions = [a for a in actions if a.get("type") in relevant_types]
     last_events = filtered_actions[-12:] 
@@ -152,12 +150,52 @@ def analyze_game_flow(actions, home_name, guest_name):
         action_desc = translate_text(ev.get("type", ""))
         if ev.get("points"): action_desc += f" (+{ev.get('points')})"
         crunch_log.append(f"- {score_str}: {action_desc}")
-
     summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
     summary += "\n".join(crunch_log)
     return summary
 
-# --- RENDERING FUNKTIONEN ---
+def render_full_play_by_play(box, height=600):
+    actions = box.get("actions", [])
+    if not actions:
+        st.info("Keine Play-by-Play Daten verfügbar.")
+        return
+    player_map = get_player_lookup(box)
+    home_name = get_team_name(box.get("homeTeam", {}), "Heim")
+    guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
+    guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
+    data = []; running_h = 0; running_g = 0
+    for act in actions:
+        h_pts = act.get("homeTeamPoints"); g_pts = act.get("guestTeamPoints")
+        if h_pts is not None: running_h = safe_int(h_pts)
+        if g_pts is not None: running_g = safe_int(g_pts)
+        score_str = f"{running_h} : {running_g}"
+        period = act.get("period", ""); game_time = act.get("gameTime", ""); time_in_game = act.get("timeInGame", "") 
+        if game_time: display_time = convert_elapsed_to_remaining(game_time, period)
+        else:
+            display_time = "-"
+            if time_in_game and "M" in time_in_game:
+                try: t = time_in_game.replace("PT", "").replace("S", ""); m, s = t.split("M"); display_time = f"{m}:{s.zfill(2)}"
+                except: pass
+        time_label = f"Q{period} {display_time}" if period else "-"
+        pid = str(act.get("seasonPlayerId")); actor = player_map.get(pid, "")
+        tid = str(act.get("seasonTeamId"))
+        if tid == home_id: team_display = home_name
+        elif tid == guest_id: team_display = guest_name
+        else: team_display = "-" 
+        raw_type = act.get("type", ""); action_german = translate_text(raw_type)
+        is_successful = act.get("isSuccessful")
+        if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
+             if "Treffer" not in action_german and "Fehlwurf" not in action_german:
+                 if is_successful is True: action_german += " (Treffer)"
+                 elif is_successful is False: action_german += " (Fehlwurf)"
+        qualifiers = act.get("qualifiers", [])
+        if qualifiers: qual_german = [translate_text(q) for q in qualifiers]; action_german += f" ({', '.join(qual_german)})"
+        if act.get("points"): action_german += f" (+{act.get('points')})"
+        data.append({"Zeit": time_label, "Score": score_str, "Team": team_display, "Spieler": actor, "Aktion": action_german})
+    df = pd.DataFrame(data)
+    if height == 400: df = df.iloc[::-1]
+    st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def render_game_header(details):
     h_data = details.get("homeTeam", {}); g_data = details.get("guestTeam", {})
@@ -199,7 +237,6 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         min_str = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "DNP"
         s_2p = f"{m2}/{a2} ({int(p2)}%)" if a2 and sec > 0 else ""; s_3p = f"{m3}/{a3} ({int(p3)}%)" if a3 and sec > 0 else ""; s_fg = f"{mfg}/{afg} ({int(pfg)}%)" if sec > 0 else ""; s_ft = f"{mft}/{aft} ({int(pft)}%)" if aft and sec > 0 else ""
         data.append({"No.": f"{starter}{nr}", "Name": name, "Min": min_str, "PTS": pts, "2P": s_2p, "3P": s_3p, "FG": s_fg, "FT": s_ft, "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "ST": stl, "TO": tov, "BS": blk, "PF": pf, "EFF": eff, "+/-": pm})
-
     if team_stats_official:
         t_off = team_stats_official; team_pts = safe_int(t_off.get("points")) - sum_pts; team_or = safe_int(t_off.get("offensiveRebounds")) - sum_or; team_dr = safe_int(t_off.get("defensiveRebounds")) - sum_dr
         team_tr = safe_int(t_off.get("totalRebounds")) - sum_tr; team_as = safe_int(t_off.get("assists")) - sum_as; team_st = safe_int(t_off.get("steals")) - sum_st; team_to = safe_int(t_off.get("turnovers")) - sum_to
@@ -298,7 +335,15 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games):
             for _, row in top4.iterrows():
                 with st.container():
                     col_img, col_stats = st.columns([1, 4])
-                    with col_img: st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
+                    with col_img:
+                        if "img" in row.index and row["img"]:
+                            st.image(row["img"], width=100)
+                        else:
+                            # Versuch Bild via Metadata Cache zu laden falls nicht in DF
+                            meta = get_player_metadata_cached(row["PLAYER_ID"])
+                            if meta["img"]: st.image(meta["img"], width=100)
+                            else: st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
+
                     with col_stats:
                         st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
                         st.caption(f"Alter: {row.get('AGE', '-')} | Nat: {row.get('NATIONALITY', '-')}")
