@@ -247,75 +247,91 @@ def render_prep_page():
             else: st.error("Fehler beim Laden.")
 
 def render_live_page():
-    render_page_header("🔴 Live Game Center")
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="live_staffel")
-        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-    with c2:
-        my_team = st.selectbox("Dein Team:", list({v["name"]: k for k, v in t.items()}.keys()), key="live_team")
-        tid = {v["name"]: k for k, v in t.items()}[my_team]
-    auto = st.checkbox("🔄 Auto-Refresh (15s)", value=False)
-    if tid:
-        games = fetch_schedule(tid, SEASON_ID)
-        if games:
-            games.sort(key=lambda x: x['date'], reverse=True)
-            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in games}
-            sel = st.selectbox("Spiel:", list(opts.keys()), key="live_sel")
-            gid = opts[sel]
-            if st.button("Laden", key="live_load"): st.session_state.live_game_id = gid
-            if st.session_state.live_game_id == gid:
-                st.divider()
-                box = fetch_game_boxscore(gid); det = fetch_game_details(gid)
-                if box and det:
-                    box["gameTime"] = det.get("gameTime"); box["period"] = det.get("period")
-                    render_live_view(box)
-                    if auto: time_module.sleep(15); st.rerun()
-                else: st.info("Warte auf Daten...")
+    # Helper Button zum Zurückkehren
+    if st.session_state.live_game_id:
+        c_back, c_title = st.columns([1, 5])
+        with c_back:
+            if st.button("⬅️ Zurück", key="live_back_btn"):
+                st.session_state.live_game_id = None
+                st.rerun()
+        with c_title:
+             st.title("🔴 Live View")
+    else:
+        render_page_header("🔴 Live Games Übersicht")
 
-def render_game_venue_page():
-    render_page_header("📍 Spielorte der Teams") 
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="venue_staffel")
-        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-        to = {v["name"]: k for k, v in t.items()}
-    with c2:
-        tn = st.selectbox("Wähle ein Team:", list(to.keys()), key="venue_team_select")
-        tid = to[tn]
-    st.divider()
-    if tid:
-        st.subheader(f"Standard-Heimspielort von {tn}")
-        with st.spinner(f"Lade Daten..."):
-            info = fetch_team_info_basic(tid)
-            venue = info.get("venue") if info else None
-            if venue:
-                st.markdown(f"**Halle:** {venue.get('name', 'N/A')}"); st.markdown(f"**Adresse:** {venue.get('address', 'N/A')}")
-                if venue.get('address'):
-                    u = f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{venue.get('name', '')}, {venue.get('address', '')}')}"
-                    st.markdown(f"**Route:** [Google Maps öffnen]({u})", unsafe_allow_html=True)
-            else: st.warning("Nicht gefunden.")
+    # DETAILANSICHT (Wenn Spiel gewählt)
+    if st.session_state.live_game_id:
+        gid = st.session_state.live_game_id
+        auto = st.checkbox("🔄 Auto-Refresh (15s)", value=False, key="live_auto_refresh")
         st.divider()
-        st.subheader(f"Alle Spiele von {tn}")
-        games = fetch_schedule(tid, SEASON_ID)
-        if games:
-            games.sort(key=lambda x: datetime.strptime(x['date'], "%d.%m.%Y %H:%M"), reverse=True)
-            for g in games:
-                gid = g.get("id")
-                if str(g.get("homeTeamId")) == str(tid):
-                    with st.expander(f"🏟️ Heim: {g.get('date')} vs {g.get('guest')} ({g.get('score')})"):
-                        if gid:
-                            d = fetch_game_details(gid)
-                            if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
-                else:
-                    with st.expander(f"🚌 Gast: {g.get('date')} bei {g.get('home')} ({g.get('score')})"):
-                        if gid:
-                            d = fetch_game_details(gid)
-                            if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
+        
+        # Daten laden
+        box = fetch_game_boxscore(gid)
+        det = fetch_game_details(gid)
+        
+        if box and det:
+            box["gameTime"] = det.get("gameTime")
+            box["period"] = det.get("period")
+            box["result"] = det.get("result") # Wichtig für Score
+            render_live_view(box)
+            
+            if auto:
+                time_module.sleep(15)
+                st.rerun()
+        else:
+            st.info("Warte auf Datenverbindung...")
+
+    # ÜBERSICHTSANSICHT (Alle Spiele von heute)
+    else:
+        st.markdown("### Spiele von heute")
+        with st.spinner("Lade aktuellen Spielplan..."):
+            all_games = fetch_season_games(SEASON_ID)
+            
+        if not all_games:
+            st.warning("Keine Spieldaten gefunden.")
+            return
+
+        # Datum von heute ermitteln
+        today_str = datetime.now().strftime("%d.%m.%Y")
+        
+        # Filtern nach Datum = Heute
+        # (Alternativ können wir hier auch alle Spiele anzeigen, wenn wir today_str auskommentieren,
+        # aber "Live Games" impliziert aktuelle Spiele)
+        todays_games = [g for g in all_games if g['date_only'] == today_str]
+        
+        if not todays_games:
+            st.info(f"Keine Spiele für heute ({today_str}) gefunden.")
+            # Fallback: Zeige die letzten 5 oder nächsten 5 Spiele, damit man was sieht zum Testen?
+            # Hier optional: todays_games = all_games[:4] 
+        else:
+            # Sortieren nach Uhrzeit
+            todays_games.sort(key=lambda x: x['date'])
+
+            # Grid Layout für die Spiele
+            cols = st.columns(3) # 3 Spalten Layout
+            for i, game in enumerate(todays_games):
+                col = cols[i % 3]
+                with col:
+                    # Container Stylen
+                    with st.container():
+                        st.markdown(
+                            f"""
+                            <div style="border:1px solid #ddd; border-radius:10px; padding:15px; margin-bottom:10px; background-color:white; text-align:center;">
+                                <div style="font-weight:bold; color:#555;">{game['date'].split(' ')[1]} Uhr</div>
+                                <div style="font-size:1.1em; margin:10px 0;">
+                                    <b>{game['home']}</b><br>vs<br><b>{game['guest']}</b>
+                                </div>
+                                <div style="font-size:1.5em; font-weight:bold; color:#d9534f;">
+                                    {game['score']}
+                                </div>
+                            </div>
+                            """, 
+                            unsafe_allow_html=True
+                        )
+                        # Der Button muss eindeutig sein (key=game['id'])
+                        if st.button(f"Zum Spiel ({game['home'][:3]} vs {game['guest'][:3]})", key=f"btn_live_{game['id']}", use_container_width=True):
+                            st.session_state.live_game_id = game['id']
+                            st.rerun()
 
 def render_analysis_page():
     render_page_header("🎥 Spielnachbereitung") 
