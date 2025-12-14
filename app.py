@@ -256,7 +256,14 @@ def render_analysis_page():
                     box = fetch_game_boxscore(selected_id)
                     details = fetch_game_details(selected_id)
                     if box and details: 
-                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("referee1"); box["referee2"] = details.get("referee2"); box["referee3"] = details.get("referee3"); box["scheduledTime"] = details.get("scheduledTime"); box["attendance"] = details.get("result", {}).get("spectators"); box["id"] = details.get("id") 
+                        box["venue"] = details.get("venue")
+                        box["result"] = details.get("result")
+                        box["referee1"] = details.get("referee1")
+                        box["referee2"] = details.get("referee2")
+                        box["referee3"] = details.get("referee3")
+                        box["scheduledTime"] = details.get("scheduledTime")
+                        box["attendance"] = details.get("result", {}).get("spectators")
+                        box["id"] = details.get("id") 
                         render_game_header(box)
                         st.markdown("### 📝 Spielberichte & PBP")
                         tab_simple, tab_prompt, tab_pbp = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
@@ -265,15 +272,23 @@ def render_analysis_page():
                             st.markdown(report_text)
                             st.caption("Regelbasierter Kurzbericht.")
                             st.divider()
-                            h_name = get_team_name(box.get("homeTeam", {}), "Heim"); g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-                            h_coach = box.get("homeTeam", {}).get("headCoachName", "-"); g_coach = box.get("guestTeam", {}).get("headCoachName", "-")
+                            h_name = get_team_name(box.get("homeTeam", {}), "Heim")
+                            g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+                            h_coach = box.get("homeTeam", {}).get("headCoachName", "-")
+                            g_coach = box.get("guestTeam", {}).get("headCoachName", "-")
                             render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), box.get("homeTeam", {}).get("gameStat", {}), h_name, h_coach)
                             st.write("")
                             render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), box.get("guestTeam", {}).get("gameStat", {}), g_name, g_coach)
-                            st.divider(); render_game_top_performers(box); st.divider(); render_charts_and_stats(box)
+                            st.divider()
+                            render_game_top_performers(box)
+                            st.divider()
+                            render_charts_and_stats(box)
                         with tab_prompt:
-                            st.info("Kopiere diesen Text in ChatGPT:"); ai_prompt = generate_complex_ai_prompt(box); st.code(ai_prompt, language="text")
-                        with tab_pbp: render_full_play_by_play(box)
+                            st.info("Kopiere diesen Text in ChatGPT:")
+                            ai_prompt = generate_complex_ai_prompt(box)
+                            st.code(ai_prompt, language="text")
+                        with tab_pbp:
+                            render_full_play_by_play(box)
                     else: st.error("Konnte Spieldaten nicht laden.")
         else: st.warning("Keine Spiele gefunden.")
 
@@ -294,11 +309,15 @@ def render_game_venue_page():
             team_venue_info = fetch_team_info_basic(selected_team_id)
             main_venue_data = team_venue_info.get("venue") if team_venue_info else None
             if main_venue_data:
-                st.markdown(f"**Halle:** {main_venue_data.get('name', 'N/A')}"); st.markdown(f"**Adresse:** {main_venue_data.get('address', 'N/A')}")
-                if main_venue_data.get('address'):
-                    maps_url = f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{main_venue_data.get('name', '')}, {main_venue_data.get('address', '')}')}"
+                main_venue_name = main_venue_data.get("name", "Nicht verfügbar")
+                main_venue_address = main_venue_data.get("address", "Nicht verfügbar")
+                st.markdown(f"**Halle:** {main_venue_name}")
+                st.markdown(f"**Adresse:** {main_venue_address}")
+                if main_venue_address != "Nicht verfügbar":
+                    maps_query = quote_plus(f"{main_venue_name}, {main_venue_address}")
+                    maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
                     st.markdown(f"**Route planen:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
-            else: st.warning(f"Standard-Heimspielort nicht gefunden.")
+            else: st.warning(f"Standard-Heimspielort konnte nicht geladen werden.")
         st.divider()
         st.subheader(f"Alle Spiele von {selected_team_name} und deren Spielorte")
         all_games = fetch_schedule(selected_team_id, SEASON_ID)
@@ -311,15 +330,27 @@ def render_game_venue_page():
                         if game_id:
                             game_details = fetch_game_details(game_id)
                             if game_details and game_details.get("venue"):
-                                v = game_details.get("venue")
-                                st.markdown(f"**Spielort:** {v.get('name', '-')}"); st.markdown(f"**Adresse:** {v.get('address', '-')}")
+                                game_venue_data = game_details.get("venue")
+                                game_venue_name = game_venue_data.get("name", "Nicht verfügbar")
+                                game_venue_address = game_venue_data.get("address", "Nicht verfügbar")
+                                st.markdown(f"**Spielort:** {game_venue_name}")
+                                st.markdown(f"**Adresse:** {game_venue_address}")
+                                if main_venue_data:
+                                    if (game_venue_name != main_venue_data.get("name") or game_venue_address != main_venue_data.get("address")):
+                                        st.info("ℹ️ **ACHTUNG:** Dieser Spielort weicht vom Standard-Heimspielort ab!")
+                                if game_venue_address != "Nicht verfügbar":
+                                    maps_query = quote_plus(f"{game_venue_name}, {game_venue_address}")
+                                    maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
+                                    st.markdown(f"**Route planen für dieses Spiel:** [Google Maps öffnen]({maps_url})", unsafe_allow_html=True)
+                        else: st.info(f"Keine Game ID für dieses Heimspiel vorhanden.")
                 else: 
                     with st.expander(f"🚌 Auswärtsspiel: {game.get('date')} bei {game.get('home')} ({game.get('score')})"):
                         if game_id:
                             game_details = fetch_game_details(game_id)
                             if game_details and game_details.get("venue"):
-                                v = game_details.get("venue")
-                                st.markdown(f"**Spielort:** {v.get('name', '-')}"); st.markdown(f"**Adresse:** {v.get('address', '-')}")
+                                game_venue_data = game_details.get("venue")
+                                st.markdown(f"**Spielort:** {game_venue_data.get('name', '-')}")
+                                st.markdown(f"**Adresse:** {game_venue_data.get('address', '-')}")
 
 def render_scouting_page():
     render_page_header("📝 Scouting") 
@@ -339,12 +370,13 @@ def render_scouting_page():
             st.header("💾 Spielstand")
             uploaded_state = st.file_uploader("Laden (JSON)", type=["json"], key="scouting_upload_state")
             if uploaded_state and st.button("Daten wiederherstellen", key="scouting_restore_btn"):
-                success, msg = load_session_state(uploaded_state); 
+                success, msg = load_session_state(uploaded_state)
                 if success: st.success("✅ " + msg)
                 else: st.error(msg)
             st.divider()
             if st.session_state.roster_df is not None:
-                save_name = f"Save_{date.today()}.json"; st.download_button("💾 Speichern", export_session_state(), save_name, "application/json", key="scouting_save_btn")
+                save_name = f"Save_{date.today()}.json" 
+                st.download_button("💾 Speichern", export_session_state(), save_name, "application/json", key="scouting_save_btn")
         st.subheader("1. Spieldaten")
         c1, c2, c3 = st.columns([1, 2, 2])
         with c1: 
@@ -406,7 +438,9 @@ def render_scouting_page():
                         pid = r["PLAYER_ID"]; c_h, c_c = st.columns([3, 1]); c_h.markdown(f"**#{r['NR']} {r['NAME_FULL']}**"); saved_c = st.session_state.saved_colors.get(pid, "Grau"); idx = list(c_map.keys()).index(saved_c) if saved_c in c_map else 0
                         col = c_c.selectbox("Farbe", list(c_map.keys()), key=f"color_select_{pid}_{i}_scouting", index=idx, label_visibility="collapsed") 
                         c1, c2 = st.columns(2); notes = {}
-                        for k_note in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: val = st.session_state.saved_notes.get(f"{k_note}_{pid}", ""); notes[k_note] = (c1 if k_note.startswith("l") else c2).text_input(k_note, value=val, key=f"note_input_{k_note}_{pid}_{i}_scouting", label_visibility="collapsed")
+                        for k_note in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: 
+                            val = st.session_state.saved_notes.get(f"{k_note}_{pid}", "")
+                            notes[k_note] = (c1 if k_note.startswith("l") else c2).text_input(k_note, value=val, key=f"note_input_{k_note}_{pid}_{i}_scouting", label_visibility="collapsed")
                         st.divider(); form_res.append({"row": r, "pid": pid, "color": col, "notes": notes})
                     c1, c2, c3 = st.columns(3)
                     with c1: st.caption("Offense"); e_off = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo_facts_scouting")
