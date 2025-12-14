@@ -97,11 +97,11 @@ def render_page_header(page_title):
 # SEITE 1: HOME
 # ==========================================
 def render_home():
-    # CSS für Hintergrundbild mit Transparenz via Overlay
-    # Wir nutzen data-testid="stAppViewContainer" als Ziel
+    # CSS für Hintergrundbild und Button-Styling
     st.markdown(
         """
         <style>
+        /* Hintergrundbild auf dem Hauptcontainer */
         [data-testid="stAppViewContainer"]::before {
             content: "";
             position: fixed;
@@ -112,47 +112,61 @@ def render_home():
             background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
             background-size: cover;
             background-position: center;
-            opacity: 0.3; /* 30% Deckkraft (70% transparent) */
-            z-index: -1; /* Hinter dem Inhalt */
+            background-repeat: no-repeat;
+            opacity: 0.3; /* 30% sichtbar, also schön im Hintergrund */
+            z-index: -1;
         }
-        /* Buttons etwas größer machen */
-        div.stButton > button:first-child {
+        
+        /* Buttons etwas schöner machen */
+        div.stButton > button {
             width: 100%;
             height: 4em;
-            font-size: 20px;
-            margin-bottom: 20px;
+            font-size: 18px;
             font-weight: bold;
+            border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        div.stButton > button:hover {
+            transform: scale(1.02);
         }
         </style>
         """,
         unsafe_allow_html=True
     )
 
-    st.markdown("<h1 style='text-align: center; color: #111;'>🏀 DBBL Scouting Suite</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align: center; color: #333; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p>", unsafe_allow_html=True)
-    st.write(""); st.write("")
+    # Titel und Version zentriert
+    st.markdown("<div style='text-align: center; margin-top: 50px;'><h1>🏀 DBBL Scouting Suite</h1></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: center; color: #444; font-weight: bold; margin-bottom: 50px;'>Version {VERSION} | by Sascha Rosanke</div>", unsafe_allow_html=True)
     
-    # Layout Grid: Zentriert
-    # Wir nutzen Spalten, um das Layout zu zentrieren: [Spacer, Btn1, Btn2, Spacer]
+    # Layout Zentrierung: Wir nutzen 3 Spalten [Spacer, Content, Spacer]
+    # Die mittlere Spalte enthält die Buttons
+    _, col_center, _ = st.columns([1, 2, 1])
     
-    # Zeile 1
-    _, c1, c2, _ = st.columns([1, 2, 2, 1])
-    with c1:
-        if st.button("📊 Teamvergleich"): go_comparison(); st.rerun()
-    with c2:
-        if st.button("🤼 Spielervergleich"): go_player_comparison(); st.rerun()
-    
-    # Zeile 2
-    _, c3, c4, _ = st.columns([1, 2, 2, 1])
-    with c3:
-        if st.button("📝 Scouting Report"): go_scouting(); st.rerun()
-    with c4:
-        if st.button("🎥 Spielnachbereitung"): go_analysis(); st.rerun()
+    with col_center:
+        # Reihe 1: Teamvergleich & Spielervergleich
+        r1_c1, r1_c2 = st.columns(2)
+        with r1_c1:
+            if st.button("📊 Teamvergleich", use_container_width=True): go_comparison(); st.rerun()
+        with r1_c2:
+            if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
         
-    # Zeile 3 (Einzelner Button mittig)
-    _, c5, _ = st.columns([1.5, 2, 1.5]) # Mittlere Spalte gleich breit wie oben (2 Einheiten)
-    with c5:
-        if st.button("📍 Spielorte"): go_game_venue(); st.rerun() 
+        st.write("") # Kleiner Abstand
+
+        # Reihe 2: Scouting & Analyse
+        r2_c1, r2_c2 = st.columns(2)
+        with r2_c1:
+            if st.button("📝 Scouting Report", use_container_width=True): go_scouting(); st.rerun()
+        with r2_c2:
+            if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
+            
+        st.write("") # Kleiner Abstand
+
+        # Reihe 3: Spielorte (Zentriert unter den anderen)
+        # Um diesen Button mittig unter den 2er Reihen zu haben, nutzen wir wieder Spalten im Center
+        r3_c1, r3_c2, r3_c3 = st.columns([1, 2, 1])
+        with r3_c2:
+             if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun() 
 
 # ==========================================
 # SEITE 2: TEAMVERGLEICH
@@ -336,7 +350,6 @@ def render_analysis_page():
                         
                         render_game_header(box)
                         
-                        # --- NEUE TAB STRUKTUR ---
                         st.markdown("### 📝 Spielberichte & PBP")
 
                         tab_simple, tab_prompt, tab_pbp = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
@@ -717,10 +730,7 @@ def render_scouting_page():
                             st.session_state.print_mode = True
                             st.rerun()
 
-            else: # Keine Spieler ausgewählt
-                st.info("Bitte wählen Sie mindestens einen Spieler aus, um Notizen zu bearbeiten und einen Bericht zu generieren.")
-
-        else: # Keine Spielerdaten im roster_df
+        else: 
             st.info("Bitte laden Sie zuerst den Kader, um Spieler auszuwählen.")
         
 # ==========================================
