@@ -31,7 +31,7 @@ from src.state_manager import export_session_state, load_session_state
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
-    generate_complex_ai_prompt, render_full_play_by_play 
+    generate_complex_ai_prompt, render_full_play_by_play, run_openai_generation 
 )
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
@@ -336,6 +336,7 @@ def render_analysis_page():
                         
                         render_game_header(box)
                         
+                        # --- NEUE TAB STRUKTUR ---
                         st.markdown("### 📝 Spielberichte & PBP")
 
                         tab_simple, tab_prompt, tab_pbp = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
