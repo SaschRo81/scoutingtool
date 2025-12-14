@@ -25,6 +25,7 @@ from src.html_gen import (
 )
 from src.state_manager import export_session_state, load_session_state
 
+# HIER WERDEN ALLE BENÖTIGTEN FUNKTIONEN AUS analysis_ui IMPORTIERT
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
@@ -34,7 +35,7 @@ from src.analysis_ui import (
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
-# ... (Session State Code wie gehabt) ...
+# --- SESSION STATE ---
 for key, default in [
     ("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
     ("roster_df", None), ("team_stats", None), ("game_meta", {}),
@@ -46,6 +47,7 @@ for key, default in [
 ]:
     if key not in st.session_state: st.session_state[key] = default
 
+# --- NAVIGATIONS-HELFER ---
 def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
 def go_scouting(): st.session_state.current_page = "scouting"
 def go_comparison(): st.session_state.current_page = "comparison"
@@ -55,15 +57,24 @@ def go_game_venue(): st.session_state.current_page = "game_venue"
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
 
-def render_page_header(title):
-    c1, c2 = st.columns([1, 4])
-    with c1: st.button("🏠 Home", on_click=go_home, key=f"home_{st.session_state.current_page}")
-    with c2: st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro by Sascha Rosanke</h3>", unsafe_allow_html=True)
-    st.title(title); st.divider()
+# --- STANDARD-SEITENHEADER ---
+def render_page_header(page_title):
+    header_col1, header_col2 = st.columns([1, 4])
+    with header_col1:
+        st.button("🏠 Home", on_click=go_home, key=f"home_button_header_{st.session_state.current_page}")
+    with header_col2:
+        st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro by Sascha Rosanke</h3>", unsafe_allow_html=True)
+    st.title(page_title) 
+    st.divider()
 
+# ==========================================
+# SEITE 1: HOME
+# ==========================================
 def render_home():
     st.markdown("""<style>[data-testid="stAppViewContainer"]::before {content:"";position:fixed;top:0;left:0;width:100%;height:100%;background-image:url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");background-size:cover;opacity:0.3;z-index:-1;} div.stButton>button{width:100%;height:4em;font-size:18px;font-weight:bold;border-radius:10px;box-shadow:0px 4px 6px rgba(0,0,0,0.1);}</style>""", unsafe_allow_html=True)
     st.markdown("<div style='text-align: center; margin-top: 50px;'><h1>🏀 DBBL Scouting Suite</h1></div>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #333; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p>", unsafe_allow_html=True)
+    st.write(""); st.write("")
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
         c1, c2 = st.columns(2)
@@ -84,63 +95,11 @@ def render_home():
         with c6:
              if st.button("🔴 Live Game", use_container_width=True): go_live(); st.rerun()
         st.write("")
-        if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
+        if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun() 
 
-def render_prep_page():
-    render_page_header("🔮 Spielvorbereitung")
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="prep_staffel")
-        teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-    with c2:
-        opp_name = st.selectbox("Gegner-Team:", list({v["name"]: k for k, v in teams.items()}.keys()), key="prep_team")
-        opp_id = {v["name"]: k for k, v in teams.items()}[opp_name]
-
-    if st.button("Vorbereitung starten", type="primary"):
-        with st.spinner("Analysiere..."):
-            df, _ = fetch_team_data(opp_id, SEASON_ID)
-            sched = fetch_schedule(opp_id, SEASON_ID)
-            if df is not None: 
-                # WICHTIG: Callback für Bilder übergeben
-                render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
-            else: st.error("Fehler beim Laden.")
-
-# ... (RESTLICHE FUNKTIONEN: render_live_page, render_comparison_page, etc. - GLEICH WIE VORHER)
-# Ich füge sie der Vollständigkeit halber ein
-
-def render_live_page():
-    render_page_header("🔴 Live Game Center")
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="live_staffel")
-        teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
-    with c2:
-        my_team = st.selectbox("Dein Team:", list({v["name"]: k for k, v in teams.items()}.keys()), key="live_team")
-        tid = {v["name"]: k for k, v in teams.items()}[my_team]
-    
-    auto = st.checkbox("🔄 Auto-Refresh (15s)", value=False)
-
-    if tid:
-        games = fetch_schedule(tid, SEASON_ID)
-        if games:
-            games.sort(key=lambda x: x['date'], reverse=True)
-            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in games}
-            sel = st.selectbox("Spiel:", list(opts.keys()), key="live_sel")
-            gid = opts[sel]
-            
-            if st.button("Laden", key="live_load"): st.session_state.live_game_id = gid
-            
-            if st.session_state.live_game_id == gid:
-                st.divider()
-                box = fetch_game_boxscore(gid)
-                det = fetch_game_details(gid)
-                if box and det:
-                    box["gameTime"] = det.get("gameTime")
-                    box["period"] = det.get("period")
-                    render_live_view(box)
-                    if auto: time_module.sleep(15); st.rerun()
-                else: st.info("Warte auf Daten...")
-
+# ==========================================
+# SEITE 2: TEAMVERGLEICH
+# ==========================================
 def render_comparison_page():
     render_page_header("📊 Head-to-Head Vergleich") 
     c1, c2, c3 = st.columns([1, 2, 2])
@@ -167,6 +126,9 @@ def render_comparison_page():
             else:
                 st.error("Daten nicht verfügbar.")
 
+# ==========================================
+# SEITE: SPIELERVERGLEICH
+# ==========================================
 def render_player_comparison_page():
     render_page_header("🤼 Head-to-Head Spielervergleich") 
     col_left, col_mid, col_right = st.columns([1, 0.1, 1])
@@ -458,6 +420,58 @@ def render_scouting_page():
                                 st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts); st.session_state.print_mode = True; st.rerun()
                             except Exception as e: st.error(f"PDF Error: {e}"); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
                         else: st.warning("PDFKit fehlt."); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
+
+def render_prep_page():
+    render_page_header("🔮 Spielvorbereitung")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="prep_staffel")
+        teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
+    with c2:
+        opp_name = st.selectbox("Gegner-Team:", list({v["name"]: k for k, v in teams.items()}.keys()), key="prep_team")
+        opp_id = {v["name"]: k for k, v in teams.items()}[opp_name]
+
+    if st.button("Vorbereitung starten", type="primary"):
+        with st.spinner("Analysiere..."):
+            df, _ = fetch_team_data(opp_id, SEASON_ID)
+            sched = fetch_schedule(opp_id, SEASON_ID)
+            if df is not None: 
+                # WICHTIG: Callback für Bilder übergeben
+                render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
+            else: st.error("Fehler beim Laden.")
+
+def render_live_page():
+    render_page_header("🔴 Live Game Center")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        staffel = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="live_staffel")
+        teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
+    with c2:
+        my_team = st.selectbox("Dein Team:", list({v["name"]: k for k, v in teams.items()}.keys()), key="live_team")
+        tid = {v["name"]: k for k, v in teams.items()}[my_team]
+    
+    auto = st.checkbox("🔄 Auto-Refresh (15s)", value=False)
+
+    if tid:
+        games = fetch_schedule(tid, SEASON_ID)
+        if games:
+            games.sort(key=lambda x: x['date'], reverse=True)
+            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in games}
+            sel = st.selectbox("Spiel:", list(opts.keys()), key="live_sel")
+            gid = opts[sel]
+            
+            if st.button("Laden", key="live_load"): st.session_state.live_game_id = gid
+            
+            if st.session_state.live_game_id == gid:
+                st.divider()
+                box = fetch_game_boxscore(gid)
+                det = fetch_game_details(gid)
+                if box and det:
+                    box["gameTime"] = det.get("gameTime")
+                    box["period"] = det.get("period")
+                    render_live_view(box)
+                    if auto: time_module.sleep(15); st.rerun()
+                else: st.info("Warte auf Daten...")
 
 if st.session_state.current_page == "home": render_home()
 elif st.session_state.current_page == "scouting": render_scouting_page()
