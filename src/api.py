@@ -30,7 +30,9 @@ def calculate_age(birthdate_str):
 @st.cache_data(ttl=600, show_spinner="Lade Spieler-Metadaten...")
 def get_player_metadata_cached(player_id):
     try:
-        url = f"https://api-s.dbbl.scb.world/season-players/{player_id}"
+        # IDs bereinigen für Lookup
+        clean_id = str(player_id).replace(".0", "")
+        url = f"https://api-s.dbbl.scb.world/season-players/{clean_id}"
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
             data = resp.json()
@@ -52,7 +54,8 @@ def fetch_team_data(team_id, season_id):
     api_stats = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
     api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
     
-    # 1. Stammdaten laden & Parsen (angepasst an User-Hinweis)
+    # 1. Stammdaten laden & Lookup erstellen
+    # WICHTIG: IDs müssen hier genauso bereinigt werden wie später im DataFrame (kein .0 am Ende)
     raw_details = fetch_team_details_raw(team_id, season_id)
     roster_lookup = {}
     
@@ -60,23 +63,25 @@ def fetch_team_data(team_id, season_id):
         squad = raw_details.get("squad", []) if isinstance(raw_details, dict) else []
         for entry in squad:
             p = entry.get("person", {})
-            pid = str(p.get("id", ""))
-            if not pid: continue
+            raw_id = p.get("id") or entry.get("id")
+            if not raw_id: continue
             
-            # GEBURTSDATUM: Check 'birthdate' (klein) und 'birthDate' (camelCase)
-            bdate = p.get("birthDate") or p.get("birthdate") or ""
+            # ID Bereinigung: "20678.0" -> "20678"
+            pid = str(raw_id).replace(".0", "")
             
-            # NATIONALITÄT: Check Liste 'nationalities' ["DE"] oder Objekt 'nationality'
+            # GEBURTSDATUM
+            bdate = p.get("birthDate") or p.get("birthdate") or entry.get("birthDate") or ""
+            
+            # NATIONALITÄT
             nat = "-"
-            # Prio 1: nationalities Liste im person Objekt
-            if "nationalities" in p and isinstance(p["nationalities"], list) and len(p["nationalities"]) > 0:
-                nat = ", ".join(p["nationalities"])
-            # Prio 2: nationality Objekt im person Objekt
+            # Prüfen ob im person-Objekt
+            if "nationalities" in p and isinstance(p["nationalities"], list) and p["nationalities"]:
+                nat = "/".join(p["nationalities"])
             elif "nationality" in p and isinstance(p["nationality"], dict):
                 nat = p["nationality"].get("name", "-")
-            # Prio 3: Fallback im Entry selbst
-            elif "nationality" in entry and isinstance(entry["nationality"], dict): 
-                nat = entry["nationality"].get("name", "-")
+            # Prüfen ob im entry-Objekt (Fallback)
+            elif "nationalities" in entry and isinstance(entry["nationalities"], list) and entry["nationalities"]:
+                nat = "/".join(entry["nationalities"])
             
             roster_lookup[pid] = {
                 "birthdate": bdate,
@@ -142,6 +147,8 @@ def fetch_team_data(team_id, season_id):
             
             df["NAME_FULL"] = (get_s("firstname") + " " + get_s("lastname")).str.strip()
             df["NR"] = get_s("shirtnumber").str.replace(".0", "", regex=False)
+            
+            # WICHTIG: ID bereinigen, damit der Lookup funktioniert
             df["PLAYER_ID"] = get_s("id").str.replace(".0", "", regex=False)
             
             # Merge Stammdaten
@@ -174,8 +181,14 @@ def fetch_team_data(team_id, season_id):
             mask_att = total_att > 0
             df.loc[mask_att, "FG%"] = ((m2[mask_att]+m3[mask_att]) / total_att[mask_att] * 100).round(1)
             
-            df["3PCT"] = get_n("threepointshotsuccesspercent").apply(lambda x: round(x*100, 1))
-            df["FTPCT"] = get_n("freethrowssuccesspercent").apply(lambda x: round(x*100, 1))
+            # KORREKTUR: Prozentwerte nicht mal 100 nehmen, wenn sie schon > 1 sind
+            # Wir nehmen an, API liefert 0-100
+            p3_raw = get_n("threepointshotsuccesspercent")
+            ft_raw = get_n("freethrowssuccesspercent")
+            
+            # Logik: Wenn Max-Wert <= 1 ist, dann mal 100. Sonst lassen.
+            df["3PCT"] = p3_raw.apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
+            df["FTPCT"] = ft_raw.apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
             
             df["select"] = False
         else:
@@ -211,7 +224,6 @@ def fetch_schedule(team_id, season_id):
                 d_disp = raw_d
                 if raw_d:
                     try: 
-                        # Umwandlung in DD.MM.YYYY HH:MM
                         d_disp = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
                     except: pass
                 
@@ -248,11 +260,10 @@ def fetch_team_info_basic(team_id):
     except: pass
     sched = fetch_schedule(team_id, SEASON_ID)
     if sched:
-        homes = [g for g in sched if str(g.get("homeTeamId")) == str(team_id)]
-        # Sortierung mit neuem Datumsformat
         def parse_date(d): 
              try: return datetime.strptime(d, "%d.%m.%Y %H:%M") 
              except: return datetime.min
+        homes = [g for g in sched if str(g.get("homeTeamId")) == str(team_id)]
         homes.sort(key=lambda x: parse_date(x['date']), reverse=True)
         for g in homes:
             det = fetch_game_details(g['id'])
