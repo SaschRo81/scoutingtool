@@ -78,20 +78,25 @@ def render_home():
     st.markdown(
         """
         <style>
-        /* Hintergrundbild auf dem Hauptcontainer */
-        [data-testid="stAppViewContainer"]::before {
-            content: "";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+        /* FIX: Wir nutzen .stApp statt data-testid und passen den z-index an */
+        .stApp {
             background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            opacity: 0.25; 
-            z-index: -1;
+            background-attachment: fixed;
+        }
+
+        /* Um die Opazität (Transparenz) zu erreichen, nutzen wir einen Trick mit einem Overlay */
+        .stApp::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.75); /* Weißer Schleier für Transparenz-Effekt */
+            z-index: -1; /* Hinter den Inhalt, aber vor das Hintergrundbild */
         }
         
         /* Buttons Stylen - Deckend Weiß */
@@ -103,10 +108,10 @@ def render_home():
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
             transition: transform 0.2s;
-            background-color: #ffffff !important; /* Wichtig: Überschreibt Theme */
+            background-color: #ffffff !important; 
             color: #333333 !important;
             border: 1px solid #ddd;
-            opacity: 1 !important; /* Keine Transparenz */
+            opacity: 1 !important; 
         }
         div.stButton > button:hover {
             transform: scale(1.02);
@@ -117,7 +122,7 @@ def render_home():
         
         /* Titel Box */
         .title-container {
-            background-color: #ffffff; /* Deckend Weiß */
+            background-color: #ffffff; 
             padding: 20px; 
             border-radius: 15px; 
             box-shadow: 0px 4px 6px rgba(0,0,0,0.1); 
