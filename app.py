@@ -15,7 +15,6 @@ except ImportError:
     HAS_PDFKIT = False
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-# Wir nutzen utils nur noch für Basis-Sachen
 from src.utils import get_logo_url 
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
@@ -41,38 +40,25 @@ CURRENT_SEASON_ID = "2025"
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
 # --- BILDER LADE LOGIK ---
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_best_team_logo(team_id):
-    """
-    Versucht das Logo zu laden (Aggressive Suche über mehrere Jahre/URLs).
-    """
+    """Aggressive Logo-Suche."""
     if not team_id: return None
-    
     candidates = [
         f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
         f"https://api-n.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
         f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}", 
         f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
     ]
-
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
-        "Referer": "https://dbbl.de/" 
-    }
-
+    headers = { "User-Agent": "Mozilla/5.0", "Accept": "image/*" }
     for url in candidates:
         try:
             r = requests.get(url, headers=headers, timeout=1.5)
             if r.status_code == 200 and len(r.content) > 500: 
                 b64 = base64.b64encode(r.content).decode()
-                mime = "image/png"
-                if "jpeg" in r.headers.get("Content-Type", "") or "jpg" in url: mime = "image/jpeg"
+                mime = "image/jpeg" if "jpg" in url or "jpeg" in url else "image/png"
                 return f"data:{mime};base64,{b64}"
-        except:
-            continue
-            
+        except: continue
     return None
 
 # --- SESSION STATE ---
@@ -117,50 +103,26 @@ def render_home():
         """
         <style>
         .stApp::before {
-            content: "";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            opacity: 0.7; 
-            z-index: -1;
+            background-size: cover; background-position: center; background-repeat: no-repeat;
+            opacity: 0.7; z-index: -1;
         }
         div.stButton > button {
-            width: 100%;
-            height: 4em;
-            font-size: 18px;
-            font-weight: bold;
-            border-radius: 10px;
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-            background-color: #ffffff !important; 
-            color: #333333 !important;
-            border: 1px solid #ddd;
+            width: 100%; height: 4em; font-size: 18px; font-weight: bold; border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s;
+            background-color: #ffffff !important; color: #333333 !important; border: 1px solid #ddd;
             opacity: 1 !important; 
         }
         div.stButton > button:hover {
-            transform: scale(1.02);
-            border-color: #ff4b4b;
-            background-color: #ffffff !important;
+            transform: scale(1.02); border-color: #ff4b4b; background-color: #ffffff !important;
             color: #ff4b4b !important;
         }
         .title-container {
-            background-color: #ffffff; 
-            padding: 20px; 
-            border-radius: 15px; 
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); 
-            text-align: center; 
-            margin-bottom: 40px; 
-            max-width: 800px; 
-            margin-left: auto; 
-            margin-right: auto; 
-            border: 1px solid #f0f0f0;
-            opacity: 1 !important;
+            background-color: #ffffff; padding: 20px; border-radius: 15px; 
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); text-align: center; 
+            margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto; 
+            border: 1px solid #f0f0f0; opacity: 1 !important;
         }
         </style>
         """, unsafe_allow_html=True
@@ -175,21 +137,18 @@ def render_home():
         with r1_c2: 
             if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
         st.write("") 
-        
         r2_c1, r2_c2 = st.columns(2)
         with r2_c1:
             if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
         with r2_c2: 
             if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
         st.write("") 
-        
         r3_c1, r3_c2 = st.columns(2)
         with r3_c1: 
             if st.button("📝 PreGame Report", use_container_width=True): go_scouting(); st.rerun()
         with r3_c2:
              if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
         st.write("")
-        
         r4_c1, r4_c2 = st.columns(2)
         with r4_c1:
              if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
@@ -209,19 +168,11 @@ def render_team_stats_page():
                 st.rerun()
         
         with st.spinner("Lade Team Statistiken..."):
-            # 1. VERSUCH: SAISON 2025
-            active_season = CURRENT_SEASON_ID
-            df, ts = fetch_team_data(tid, active_season)
+            # NUR 2025 LADEN, KEIN FALLBACK MEHR
+            df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
             
-            # 2. VERSUCH: FALLBACK AUF 2024
-            if (df is None or df.empty) and not ts:
-                active_season = "2024"
-                df, ts = fetch_team_data(tid, active_season)
-        
-        # ANZEIGEN WENN IRGENDETWAS DA IST (TS oder DF)
-        has_data = (df is not None and not df.empty) or (ts and len(ts) > 0)
-
-        if has_data:
+        # ANZEIGEN WENN DF DA IST (Das ist das wichtigste für die Tabelle)
+        if df is not None and not df.empty:
             t_info = TEAMS_DB.get(tid, {})
             name = t_info.get("name", "Team")
             logo_b64 = get_best_team_logo(tid)
@@ -232,12 +183,11 @@ def render_team_stats_page():
                 else: st.markdown("🏀", unsafe_allow_html=True)
             with c2: 
                 st.title(f"Statistik: {name}")
-                if active_season != CURRENT_SEASON_ID:
-                    st.caption(f"Daten aus Saison {active_season} geladen.")
             
             st.divider()
             
-            st.subheader(f"Saison Durchschnittswerte (Saison {active_season})")
+            # Wenn Team-Stats fehlen, haben wir sie in api.py berechnet
+            st.subheader(f"Saison Durchschnittswerte (Saison {CURRENT_SEASON_ID})")
             if ts:
                 m1, m2, m3, m4, m5, m6 = st.columns(6)
                 m1.metric("Punkte", f"{ts.get('ppg', 0):.1f}")
@@ -255,33 +205,30 @@ def render_team_stats_page():
                 m5.metric("Def. Reb", f"{ts.get('dr', 0):.1f}")
                 m6.metric("Blocks", f"{ts.get('bs', 0):.1f}")
             else:
-                st.info("Keine Team-Metriken verfügbar.")
+                st.info("Team-Metriken konnten nicht berechnet werden.")
             
             st.divider()
             
             st.subheader("Aktueller Kader & Stats")
-            if df is not None and not df.empty:
-                display_cols = ["NR", "NAME_FULL", "GP", "MIN_DISPLAY", "PPG", "FG%", "3PCT", "FTPCT", "TOT", "AS", "ST", "TO", "PF"]
-                col_config = {
-                    "NR": st.column_config.TextColumn("#", width="small"),
-                    "NAME_FULL": st.column_config.TextColumn("Name", width="medium"),
-                    "GP": st.column_config.NumberColumn("Spiele"),
-                    "MIN_DISPLAY": st.column_config.TextColumn("Min"),
-                    "PPG": st.column_config.NumberColumn("PTS", format="%.1f"),
-                    "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
-                    "3PCT": st.column_config.NumberColumn("3P%", format="%.1f %%"),
-                    "FTPCT": st.column_config.NumberColumn("FW%", format="%.1f %%"),
-                    "TOT": st.column_config.NumberColumn("REB", format="%.1f"),
-                    "AS": st.column_config.NumberColumn("AST", format="%.1f"),
-                    "ST": st.column_config.NumberColumn("STL", format="%.1f"),
-                    "TO": st.column_config.NumberColumn("TO", format="%.1f"),
-                    "PF": st.column_config.NumberColumn("PF", format="%.1f"),
-                }
-                st.dataframe(df[display_cols], column_config=col_config, hide_index=True, use_container_width=True, height=600)
-            else:
-                st.info("Keine Spielerdaten verfügbar (Tabelle leer).")
+            display_cols = ["NR", "NAME_FULL", "GP", "MIN_DISPLAY", "PPG", "FG%", "3PCT", "FTPCT", "TOT", "AS", "ST", "TO", "PF"]
+            col_config = {
+                "NR": st.column_config.TextColumn("#", width="small"),
+                "NAME_FULL": st.column_config.TextColumn("Name", width="medium"),
+                "GP": st.column_config.NumberColumn("Spiele"),
+                "MIN_DISPLAY": st.column_config.TextColumn("Min"),
+                "PPG": st.column_config.NumberColumn("PTS", format="%.1f"),
+                "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
+                "3PCT": st.column_config.NumberColumn("3P%", format="%.1f %%"),
+                "FTPCT": st.column_config.NumberColumn("FW%", format="%.1f %%"),
+                "TOT": st.column_config.NumberColumn("REB", format="%.1f"),
+                "AS": st.column_config.NumberColumn("AST", format="%.1f"),
+                "ST": st.column_config.NumberColumn("STL", format="%.1f"),
+                "TO": st.column_config.NumberColumn("TO", format="%.1f"),
+                "PF": st.column_config.NumberColumn("PF", format="%.1f"),
+            }
+            st.dataframe(df[display_cols], column_config=col_config, hide_index=True, use_container_width=True, height=600)
         else:
-            st.error(f"Daten konnten weder für Saison 2025 noch für 2024 geladen werden (Team-ID: {tid}).")
+            st.error(f"Keine Spielerdaten für Saison {CURRENT_SEASON_ID} gefunden. Bitte prüfen, ob die Saison-ID korrekt ist oder die API Daten liefert.")
     else:
         render_page_header("📈 Team Statistiken")
         tab_nord, tab_sued = st.tabs(["Nord", "Süd"])
@@ -294,12 +241,10 @@ def render_team_stats_page():
                 with col:
                     with st.container(border=True):
                         logo_b64 = get_best_team_logo(tid)
-                        
                         c_l, c_m, c_r = st.columns([1, 2, 1])
                         with c_m:
                             if logo_b64: st.image(logo_b64, width=100)
                             else: st.markdown(f"<div style='font-size: 40px; text-align:center;'>🏀</div>", unsafe_allow_html=True)
-                        
                         st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center;'>{info['name']}</div>", unsafe_allow_html=True)
                         if st.button("Stats anzeigen", key=f"btn_stats_{tid}", use_container_width=True):
                             st.session_state.stats_team_id = tid
@@ -533,24 +478,12 @@ def render_scouting_page():
         
         if click_load or (st.session_state.roster_df is None and cur_tid != tid) or (st.session_state.roster_df is not None and cur_tid != tid):
             with st.spinner("Lade Daten..."):
-                # VERSUCH 1: 2025
-                active_season = CURRENT_SEASON_ID
-                df, ts = fetch_team_data(tid, active_season)
-                
-                # VERSUCH 2: 2024
-                if (df is None or df.empty) and not ts:
-                    active_season = "2024"
-                    df, ts = fetch_team_data(tid, active_season)
-
-                if (df is not None and not df.empty) or ts: 
+                df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
+                if df is not None and not df.empty: 
                     st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
                     st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
                     st.session_state.print_mode = False 
-                    if active_season != CURRENT_SEASON_ID:
-                        st.toast(f"Hinweis: Daten aus Saison {active_season} geladen.", icon="⚠️")
-                else: 
-                    st.error("Fehler API: Keine Daten für 2025 oder 2024 gefunden."); 
-                    st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
+                else: st.error("Fehler API."); st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
         elif st.session_state.roster_df is None or st.session_state.roster_df.empty: st.info("Bitte laden.")
         
         if st.session_state.roster_df is not None and not st.session_state.roster_df.empty: 
