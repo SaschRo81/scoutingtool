@@ -94,22 +94,32 @@ def fetch_team_data(team_id, season_id):
             data = r_team.json()
             td = data[0] if isinstance(data, list) and data else data
             
-            # SICHERHEITSCHECK: Nur verarbeiten, wenn es ein Dictionary mit Daten ist
-            if isinstance(td, dict) and td.get("pointsPerGame") is not None:
+            if isinstance(td, dict):
+                gp = td.get("gamesPlayed") or 1 # Division durch 0 vermeiden
+                
+                # Absolute Werte für korrekte Prozent-Berechnung
+                fgm = td.get("fieldGoalsMade") or 0
+                fga = td.get("fieldGoalsAttempted") or 0
+                m3 = td.get("threePointShotsMade") or 0
+                a3 = td.get("threePointShotsAttempted") or 0
+                ftm = td.get("freeThrowsMade") or 0
+                fta = td.get("freeThrowsAttempted") or 0
+                
                 ts = {
-                    "ppg": td.get("pointsPerGame") or 0,
-                    "tot": td.get("totalReboundsPerGame") or 0,
-                    "as": td.get("assistsPerGame") or 0,
-                    "to": td.get("turnoversPerGame") or 0,
-                    "st": td.get("stealsPerGame") or 0,
-                    "bs": td.get("blocksPerGame") or 0,
-                    "pf": td.get("foulsCommittedPerGame") or 0,
-                    "or": td.get("offensiveReboundsPerGame") or 0,
-                    "dr": td.get("defensiveReboundsPerGame") or 0,
-                    # WICHTIG: Die Prozentwerte kommen oft als Zahl > 1, nicht als 0.xx
-                    "fgpct": td.get("fieldGoalsSuccessPercent") or 0,
-                    "3pct": td.get("threePointShotSuccessPercent") or 0,
-                    "ftpct": td.get("freeThrowsSuccessPercent") or 0,
+                    "ppg": (td.get("points") or 0) / gp,
+                    "tot": (td.get("totalRebounds") or 0) / gp,
+                    "as": (td.get("assists") or 0) / gp,
+                    "to": (td.get("turnovers") or 0) / gp,
+                    "st": (td.get("steals") or 0) / gp,
+                    "bs": (td.get("blocks") or 0) / gp,
+                    "pf": (td.get("foulsCommitted") or 0) / gp,
+                    "or": (td.get("offensiveRebounds") or 0) / gp,
+                    "dr": (td.get("defensiveRebounds") or 0) / gp,
+                    
+                    # Prozente aus absoluten Werten berechnen
+                    "fgpct": (fgm / fga * 100) if fga > 0 else 0,
+                    "3pct": (m3 / a3 * 100) if a3 > 0 else 0,
+                    "ftpct": (ftm / fta * 100) if fta > 0 else 0,
                 }
     except Exception as e:
         print(f"Fehler bei Team Stats API: {e}")
@@ -125,16 +135,13 @@ def fetch_team_data(team_id, season_id):
                 df = pd.json_normalize(p_list)
                 df.columns = [str(c).lower() for c in df.columns]
                 
-                # Helfer zum sicheren Abrufen von Werten
                 def get_val(key, default=0.0):
-                    # Sucht nach exakten oder teilweisen Übereinstimmungen
                     matches = [c for c in df.columns if key == c or (key in c and 'pergame' not in c and 'percent' not in c)]
                     if matches:
                         c = sorted(matches, key=len)[0]
                         return pd.to_numeric(df[c], errors="coerce").fillna(default)
                     return pd.Series([default]*len(df), index=df.index)
-                
-                # Basis Daten
+
                 col_fn = next((c for c in df.columns if "firstname" in c), None)
                 col_ln = next((c for c in df.columns if "lastname" in c), None)
                 col_nr = next((c for c in df.columns if "shirtnumber" in c or "jerseynumber" in c), None)
@@ -149,44 +156,28 @@ def fetch_team_data(team_id, season_id):
                 
                 df["GP"] = get_val("gamesplayed").replace(0, 1)
                 
-                # TOTALS (ABSOLUTE WERTE) aus der API ziehen
+                # TOTALS
                 df["TOTAL_MINUTES"] = get_val("secondsplayed") / 60
-                df["TOTAL_PTS"] = get_val("points")
-                df["TOTAL_REB"] = get_val("totalrebounds")
-                df["TOTAL_AST"] = get_val("assists")
-                df["TOTAL_STL"] = get_val("steals")
-                df["TOTAL_TO"] = get_val("turnovers")
-                df["TOTAL_BLK"] = get_val("blocks")
-                df["TOTAL_PF"] = get_val("foulscommitted")
-                df["TOTAL_OR"] = get_val("offensiverebounds")
-                df["TOTAL_DR"] = get_val("defensiverebounds")
-
-                df["TOTAL_FGM"] = get_val("fieldgoalsmade")
-                df["TOTAL_FGA"] = get_val("fieldgoalsattempted")
-                df["TOTAL_3M"] = get_val("threepointshotsmade")
-                df["TOTAL_3A"] = get_val("threepointshotsattempted")
-                df["TOTAL_FTM"] = get_val("freethrowsmade")
-                df["TOTAL_FTA"] = get_val("freethrowsattempted")
-                df["TOTAL_2M"] = df["TOTAL_FGM"] - df["TOTAL_3M"]
+                df["TOTAL_PTS"] = get_val("points"); df["TOTAL_REB"] = get_val("totalrebounds")
+                df["TOTAL_AST"] = get_val("assists"); df["TOTAL_STL"] = get_val("steals")
+                df["TOTAL_TO"] = get_val("turnovers"); df["TOTAL_BLK"] = get_val("blocks")
+                df["TOTAL_PF"] = get_val("foulscommitted"); df["TOTAL_OR"] = get_val("offensiverebounds")
+                df["TOTAL_DR"] = get_val("defensiverebounds"); df["TOTAL_FGM"] = get_val("fieldgoalsmade")
+                df["TOTAL_FGA"] = get_val("fieldgoalsattempted"); df["TOTAL_3M"] = get_val("threepointshotsmade")
+                df["TOTAL_3A"] = get_val("threepointshotsattempted"); df["TOTAL_FTM"] = get_val("freethrowsmade")
+                df["TOTAL_FTA"] = get_val("freethrowsattempted"); df["TOTAL_2M"] = df["TOTAL_FGM"] - df["TOTAL_3M"]
                 df["TOTAL_2A"] = df["TOTAL_FGA"] - df["TOTAL_3A"]
                 
-                # PER GAME (DURCHSCHNITTSWERTE) für die Tabelle berechnen
-                gp_safe = df["GP"].replace(0, 1) # Division durch 0 vermeiden
+                # PER GAME
+                gp_safe = df["GP"].replace(0, 1)
                 df["MIN_DISPLAY"] = (df["TOTAL_MINUTES"] * 60 / gp_safe).apply(format_minutes)
-                df["PPG"] = (df["TOTAL_PTS"] / gp_safe).round(1)
-                df["TOT"] = (df["TOTAL_REB"] / gp_safe).round(1)
-                df["AS"] = (df["TOTAL_AST"] / gp_safe).round(1)
-                df["ST"] = (df["TOTAL_STL"] / gp_safe).round(1)
-                df["TO"] = (df["TOTAL_TO"] / gp_safe).round(1)
-                df["BS"] = (df["TOTAL_BLK"] / gp_safe).round(1)
-                df["PF"] = (df["TOTAL_PF"] / gp_safe).round(1)
-                df["OR"] = (df["TOTAL_OR"] / gp_safe).round(1)
-                df["DR"] = (df["TOTAL_DR"] / gp_safe).round(1)
-                df["2M"] = (df["TOTAL_2M"] / gp_safe).round(1)
-                df["2A"] = (df["TOTAL_2A"] / gp_safe).round(1)
-                df["3M"] = (df["TOTAL_3M"] / gp_safe).round(1)
-                df["3A"] = (df["TOTAL_3A"] / gp_safe).round(1)
-                df["FTM"] = (df["TOTAL_FTM"] / gp_safe).round(1)
+                df["PPG"] = (df["TOTAL_PTS"] / gp_safe).round(1); df["TOT"] = (df["TOTAL_REB"] / gp_safe).round(1)
+                df["AS"] = (df["TOTAL_AST"] / gp_safe).round(1); df["ST"] = (df["TOTAL_STL"] / gp_safe).round(1)
+                df["TO"] = (df["TOTAL_TO"] / gp_safe).round(1); df["BS"] = (df["TOTAL_BLK"] / gp_safe).round(1)
+                df["PF"] = (df["TOTAL_PF"] / gp_safe).round(1); df["OR"] = (df["TOTAL_OR"] / gp_safe).round(1)
+                df["DR"] = (df["TOTAL_DR"] / gp_safe).round(1); df["2M"] = (df["TOTAL_2M"] / gp_safe).round(1)
+                df["2A"] = (df["TOTAL_2A"] / gp_safe).round(1); df["3M"] = (df["TOTAL_3M"] / gp_safe).round(1)
+                df["3A"] = (df["TOTAL_3A"] / gp_safe).round(1); df["FTM"] = (df["TOTAL_FTM"] / gp_safe).round(1)
                 df["FTA"] = (df["TOTAL_FTA"] / gp_safe).round(1)
 
                 df["FG%"] = (df["TOTAL_FGM"] / df["TOTAL_FGA"] * 100).round(1).fillna(0)
