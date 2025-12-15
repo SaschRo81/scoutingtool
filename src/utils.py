@@ -9,8 +9,11 @@ from src.config import API_HEADERS
 # Grauer Platzhalter (Base64)
 GRAY_BOX_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
 
-def get_logo_url(team_id: int, season_id: str) -> str:
-    return f"https://api-s.dbbl.scb.world/images/teams/logo/{season_id}/{team_id}"
+def get_logo_url(team_id, season_id):
+    return f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/logo"
+
+def optimize_image_base64(url):
+    return url
 
 def format_minutes(val):
     try:
