@@ -84,11 +84,18 @@ def fetch_team_data(team_id, season_id):
             raw_id = p.get("id") or entry.get("id")
             if not raw_id: continue
             pid = str(raw_id).replace(".0", "")
+            
             def find_val(keys):
                 for k in keys:
                     if k in p and p[k]: return p[k]
                     if k in entry and entry[k]: return entry[k]
                 return None
+
+            # NAME FIX: Namen aus den zuverlässigen Kaderdaten holen
+            first_name = find_val(["firstName", "firstname"]) or ""
+            last_name = find_val(["lastName", "lastname"]) or ""
+            full_name_from_roster = f"{first_name} {last_name}".strip()
+
             bdate = find_val(["birthDate", "birthdate"]) or ""
             nat = "-"
             nats_list = find_val(["nationalities"])
@@ -102,15 +109,17 @@ def fetch_team_data(team_id, season_id):
             if isinstance(pos_raw, dict): pos = pos_raw.get("name", "-")
             elif isinstance(pos_raw, str): pos = pos_raw
             if pos: pos = pos.replace("_", " ")
-            roster_lookup[pid] = {"birthdate": bdate, "nationality": nat, "height": height, "position": pos}
+            
+            roster_lookup[pid] = {
+                "name": full_name_from_roster, # WICHTIG: Name wird hier gespeichert
+                "birthdate": bdate, "nationality": nat, "height": height, "position": pos
+            }
 
     try:
         r_stats = requests.get(api_stats, headers=API_HEADERS)
         if r_stats.status_code != 200: return None, None
         
         ts = {}
-        # Team Stats (simplified, as they are part of the standings call now)
-        
         df = None
         raw_p = r_stats.json()
         p_list = raw_p if isinstance(raw_p, list) else raw_p.get("data", [])
@@ -119,13 +128,12 @@ def fetch_team_data(team_id, season_id):
             df = pd.json_normalize(p_list)
             df.columns = [str(c).lower() for c in df.columns]
             
-            # NAME FIX: Add 'displayname' as a fallback
             col_map = {
                 "firstname": ["seasonplayer.person.firstname", "person.firstname"], 
                 "lastname": ["seasonplayer.person.lastname", "person.lastname"],
                 "displayname": ["seasonplayer.displayname", "displayname"],
                 "shirtnumber": ["seasonplayer.shirtnumber", "jerseynumber"], 
-                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid"],
+                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "seasonplayer.id"],
                 "position": ["seasonplayer.position", "position"]
             }
             final_cols = {}
@@ -145,14 +153,21 @@ def fetch_team_data(team_id, season_id):
                     return pd.to_numeric(df[col], errors="coerce").fillna(default)
                 return pd.Series([default]*len(df), index=df.index)
             
-            # Create name from first/last, then use displayname as fallback
-            df["NAME_FULL"] = (get_s("firstname") + " " + get_s("lastname")).str.strip()
-            display_name_col = final_cols.get("displayname")
-            if display_name_col in df.columns:
-                df.loc[df["NAME_FULL"] == "", "NAME_FULL"] = df[display_name_col]
+            df["PLAYER_ID"] = get_s("id").str.replace(".0", "", regex=False)
+            
+            # NAME FIX - NEUE LOGIK:
+            # 1. Priorität: Name aus dem Roster-Lookup (zuverlässigste Quelle)
+            df["NAME_FULL"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("name", ""))
+            
+            # 2. Priorität (Fallback): Name aus den Statistik-Daten (firstname + lastname)
+            name_from_stats = (get_s("firstname") + " " + get_s("lastname")).str.strip()
+            df.loc[df["NAME_FULL"] == "", "NAME_FULL"] = name_from_stats[df["NAME_FULL"] == ""]
+            
+            # 3. Priorität (letzter Fallback): DisplayName aus den Statistik-Daten
+            display_name_stats = get_s("displayname").str.strip()
+            df.loc[df["NAME_FULL"] == "", "NAME_FULL"] = display_name_stats[df["NAME_FULL"] == ""]
 
             df["NR"] = get_s("shirtnumber").str.replace(".0", "", regex=False)
-            df["PLAYER_ID"] = get_s("id").str.replace(".0", "", regex=False)
             df["POS"] = get_s("position").apply(lambda x: x.replace("_", " "))
             df["BIRTHDATE"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("birthdate", ""))
             df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("nationality", "-"))
@@ -180,25 +195,19 @@ def fetch_team_data(team_id, season_id):
     except Exception:
         return None, None
 
-# ... (alle anderen fetch funktionen bleiben gleich) ...
-
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
     url = f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}"
     try:
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
-            data = resp.json()
-            items = data.get("items", [])
-            clean = []
+            data = resp.json(); items = data.get("items", []); clean = []
             for g in items:
-                res = g.get("result")
-                score, has_res, h_score, g_score = "-", False, 0, 0
+                res = g.get("result"); score, has_res, h_score, g_score = "-", False, 0, 0
                 if res and isinstance(res, dict):
                     h_score = res.get('homeTeamFinalScore'); g_score = res.get('guestTeamFinalScore')
                     if h_score is not None and g_score is not None: score, has_res = f"{h_score} : {g_score}", True
-                raw_d = g.get("scheduledTime", "")
-                d_disp = raw_d
+                raw_d = g.get("scheduledTime", ""); d_disp = raw_d
                 if raw_d:
                     try: d_disp = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
                     except: pass
@@ -231,8 +240,7 @@ def fetch_team_info_basic(team_id):
         def parse_date(d): 
              try: return datetime.strptime(d, "%d.%m.%Y %H:%M") 
              except: return datetime.min
-        homes = [g for g in sched if str(g.get("homeTeamId")) == str(team_id)]
-        homes.sort(key=lambda x: parse_date(x['date']), reverse=True)
+        homes = [g for g in sched if str(g.get("homeTeamId")) == str(team_id)]; homes.sort(key=lambda x: parse_date(x['date']), reverse=True)
         for g in homes:
             det = fetch_game_details(g['id'])
             if det and det.get("venue"): return {"id": team_id, "venue": det["venue"]}
@@ -244,18 +252,15 @@ def fetch_season_games(season_id):
     try:
         resp = requests.get(url, headers=API_HEADERS)
         if resp.status_code == 200:
-            items = resp.json().get("items", [])
-            clean = []
+            items = resp.json().get("items", []); clean = []
             for g in items:
-                res = g.get("result")
-                score, has_res, h_score, g_score = "0 : 0", False, 0, 0
+                res = g.get("result"); score, has_res, h_score, g_score = "0 : 0", False, 0, 0
                 if res and isinstance(res, dict):
                     h_score = res.get('homeTeamFinalScore', 0); g_score = res.get('guestTeamFinalScore', 0)
                     if h_score is not None and g_score is not None:
                         score = f"{h_score} : {g_score}"
                         if h_score > 0 or g_score > 0: has_res = True
-                raw_d = g.get("scheduledTime", "")
-                d_disp, date_only = raw_d, ""
+                raw_d = g.get("scheduledTime", ""); d_disp, date_only = raw_d, ""
                 if raw_d:
                     try: 
                         dt = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
@@ -268,13 +273,12 @@ def fetch_season_games(season_id):
 
 @st.cache_data(ttl=3600)
 def fetch_standings(season_id, staffel):
-    """Lädt die Tabelle für die angegebene Staffel (Nord oder Süd)."""
     staffel_short = "n" if staffel.lower() == "nord" else "s"
     url = f"https://api-{staffel_short}.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND"
     
     standings_data = []
     try:
-        # TABELLEN-FIX: Die Anfrage wird OHNE die API-Header gesendet.
+        # ANFRAGE OHNE HEADER SENDEN
         resp = requests.get(url)
         if resp.status_code == 200:
             data = resp.json()
