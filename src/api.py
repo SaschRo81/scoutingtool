@@ -38,15 +38,21 @@ def get_player_metadata_cached(player_id):
             data = resp.json()
             person = data.get("person", {})
             
+            # Helper für Attribute
             def get_attr(keys, source):
                 for k in keys:
                     val = source.get(k)
                     if val: return val
                 return None
 
+            # Bild
             img = data.get("imageUrl", "")
+            
+            # Alter
             bdate = get_attr(["birthDate", "birthdate"], person) or get_attr(["birthDate", "birthdate"], data)
             age = calculate_age(bdate)
+            
+            # Nationalität
             nat = "-"
             nats = get_attr(["nationalities"], person) or get_attr(["nationalities"], data)
             if nats and isinstance(nats, list): nat = ", ".join(nats)
@@ -54,14 +60,23 @@ def get_player_metadata_cached(player_id):
                 n_obj = get_attr(["nationality"], person) or get_attr(["nationality"], data)
                 if n_obj and isinstance(n_obj, dict): nat = n_obj.get("name", "-")
 
+            # Größe
             height = get_attr(["height"], person) or get_attr(["height"], data) or "-"
+            
+            # Position
             pos = "-"
             p_obj = get_attr(["position"], data) or get_attr(["position"], person)
             if isinstance(p_obj, dict): pos = p_obj.get("name", "-")
             elif isinstance(p_obj, str): pos = p_obj
             if pos: pos = pos.replace("_", " ") # Clean up
             
-            return {"img": img, "height": height, "pos": pos, "age": age, "nationality": nat}
+            return {
+                "img": img, 
+                "height": height, 
+                "pos": pos,
+                "age": age,
+                "nationality": nat
+            }
     except: pass
     return {"img": "", "height": "-", "pos": "-", "age": "-", "nationality": "-"}
 
@@ -79,6 +94,7 @@ def fetch_team_data(team_id, season_id):
     api_stats = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
     api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
     
+    # 1. Stammdaten laden & Lookup erstellen
     raw_details = fetch_team_details_raw(team_id, season_id)
     roster_lookup = {}
     
@@ -88,14 +104,20 @@ def fetch_team_data(team_id, season_id):
             p = entry.get("person", {})
             raw_id = p.get("id") or entry.get("id")
             if not raw_id: continue
+            
             pid = str(raw_id).replace(".0", "")
+            
+            # Hilfsfunktion um Werte aus 'p' (person) oder 'entry' zu holen
             def find_val(keys):
                 for k in keys:
                     if k in p and p[k]: return p[k]
                     if k in entry and entry[k]: return entry[k]
                 return None
 
+            # GEBURTSDATUM
             bdate = find_val(["birthDate", "birthdate"]) or ""
+            
+            # NATIONALITÄT
             nat = "-"
             nats_list = find_val(["nationalities"])
             if nats_list and isinstance(nats_list, list):
@@ -105,16 +127,25 @@ def fetch_team_data(team_id, season_id):
                 if nat_obj and isinstance(nat_obj, dict):
                     nat = nat_obj.get("name", "-")
 
+            # GRÖSSE
             height = find_val(["height"]) or "-"
+            
+            # POSITION
             pos = "-"
             pos_raw = find_val(["position"])
             if isinstance(pos_raw, dict): pos = pos_raw.get("name", "-")
             elif isinstance(pos_raw, str): pos = pos_raw
             if pos: pos = pos.replace("_", " ")
 
-            roster_lookup[pid] = {"birthdate": bdate, "nationality": nat, "height": height, "position": pos}
+            roster_lookup[pid] = {
+                "birthdate": bdate,
+                "nationality": nat,
+                "height": height,
+                "position": pos
+            }
 
     try:
+        # 2. Stats laden
         r_stats = requests.get(api_stats, headers=API_HEADERS)
         r_team = requests.get(api_team, headers=API_HEADERS)
         
@@ -136,6 +167,7 @@ def fetch_team_data(team_id, season_id):
                     "dr": td.get("defensiveReboundsPerGame", 0), "or": td.get("offensiveReboundsPerGame", 0)
                 }
 
+        # Player DataFrame
         df = None
         raw_p = r_stats.json()
         p_list = raw_p if isinstance(raw_p, list) else raw_p.get("data", [])
@@ -144,14 +176,24 @@ def fetch_team_data(team_id, season_id):
             df = pd.json_normalize(p_list)
             df.columns = [str(c).lower() for c in df.columns]
             
-            col_map = { "firstname": ["seasonplayer.person.firstname", "person.firstname", "firstname"], "lastname": ["seasonplayer.person.lastname", "person.lastname", "lastname"], "shirtnumber": ["seasonplayer.shirtnumber", "jerseynumber", "shirtnumber", "no"], "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "person.id", "id"], "position": ["seasonplayer.position", "position"] }
+            # Mapping
+            col_map = {
+                "firstname": ["seasonplayer.person.firstname", "person.firstname", "firstname"], 
+                "lastname": ["seasonplayer.person.lastname", "person.lastname", "lastname"],
+                "shirtnumber": ["seasonplayer.shirtnumber", "jerseynumber", "shirtnumber", "no"], 
+                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "person.id", "id"],
+                "position": ["seasonplayer.position", "position"] 
+            }
             final_cols = {}
             for target, opts in col_map.items():
                 for opt in opts:
                     matches = [c for c in df.columns if opt in c]
                     if matches: final_cols[target] = sorted(matches, key=len)[0]; break
             
-            def get_s(k): return df[final_cols.get(k)].astype(str).fillna("") if final_cols.get(k) in df.columns else pd.Series([""]*len(df), index=df.index)
+            def get_s(k): 
+                c = final_cols.get(k)
+                return df[c].astype(str).fillna("") if c in df.columns else pd.Series([""]*len(df), index=df.index)
+            
             def get_n(k, default=0.0):
                 matches = [c for c in df.columns if k in c]
                 if matches:
@@ -162,15 +204,25 @@ def fetch_team_data(team_id, season_id):
             df["NAME_FULL"] = (get_s("firstname") + " " + get_s("lastname")).str.strip()
             df["NR"] = get_s("shirtnumber").str.replace(".0", "", regex=False)
             df["PLAYER_ID"] = get_s("id").str.replace(".0", "", regex=False)
-            df["POS"] = get_s("position").apply(lambda x: x.replace("_", " "))
+            
+            # Position
+            raw_pos = get_s("position")
+            df["POS"] = raw_pos.apply(lambda x: x.replace("_", " "))
+
+            # Merge Stammdaten
             df["BIRTHDATE"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("birthdate", ""))
             df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("nationality", "-"))
             df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("height", "-"))
             df["AGE"] = df["BIRTHDATE"].apply(calculate_age)
+            
             df["POS_ROSTER"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("position", "-"))
+            
             df["POS"] = df.apply(lambda x: x["POS_ROSTER"] if x["POS_ROSTER"] != "-" else x["POS"], axis=1)
+
+            # Stats
             df["GP"] = get_n("gamesplayed").replace(0,1)
             min_raw = get_n("minutespergame")
+            
             df["MIN_FINAL"] = min_raw
             mask_zero = (df["MIN_FINAL"] <= 0) & (df["GP"] > 0)
             if not df.loc[mask_zero].empty:
@@ -182,14 +234,18 @@ def fetch_team_data(team_id, season_id):
             df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
             df["PPG"] = get_n("pointspergame"); df["TOT"] = get_n("totalreboundspergame"); df["AS"] = get_n("assistspergame")
             df["TO"] = get_n("turnoverspergame"); df["ST"] = get_n("stealspergame"); df["BS"] = get_n("blockspergame"); df["PF"] = get_n("foulscommittedpergame")
+            
             m2 = get_n("twopointshotsmadepergame"); a2 = get_n("twopointshotsattemptedpergame")
             m3 = get_n("threepointshotsmadepergame"); a3 = get_n("threepointshotsattemptedpergame")
+            
             total_att = a2 + a3
             df["FG%"] = pd.Series([0.0]*len(df), index=df.index)
             mask_att = total_att > 0
             df.loc[mask_att, "FG%"] = ((m2[mask_att]+m3[mask_att]) / total_att[mask_att] * 100).round(1)
+            
             df["3PCT"] = get_n("threepointshotsuccesspercent").apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
             df["FTPCT"] = get_n("freethrowssuccesspercent").apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
+            
             df["select"] = False
         else:
             df = pd.DataFrame()
@@ -286,6 +342,7 @@ def fetch_season_games(season_id):
                 has_res = False
                 h_score = 0
                 g_score = 0
+                
                 if res and isinstance(res, dict):
                     h_score = res.get('homeTeamFinalScore', 0)
                     g_score = res.get('guestTeamFinalScore', 0)
@@ -304,48 +361,63 @@ def fetch_season_games(season_id):
                     except: pass
                 
                 clean.append({
-                    "id": g.get("id"), "date": d_disp, "date_only": date_only, "score": score, "has_result": has_res,
-                    "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
-                    "home_logo_id": str(g.get("homeTeam", {}).get("teamId")), "guest_logo_id": str(g.get("guestTeam", {}).get("teamId"))
+                    "id": g.get("id"), 
+                    "date": d_disp, 
+                    "date_only": date_only,
+                    "score": score, 
+                    "has_result": has_res,
+                    "home": g.get("homeTeam", {}).get("name", "?"), 
+                    "guest": g.get("guestTeam", {}).get("name", "?"),
+                    "home_logo_id": str(g.get("homeTeam", {}).get("teamId")),
+                    "guest_logo_id": str(g.get("guestTeam", {}).get("teamId"))
                 })
             return clean
     except: pass
     return []
 
+# --- NEUE, KORRIGIERTE FUNKTION ---
 @st.cache_data(ttl=3600)
 def fetch_standings(season_id):
-    """Lädt die Tabelle für die Saison über den team-statistics Endpunkt."""
-    url = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND_AND_PLAY_OFFS"
-    try:
-        resp = requests.get(url, headers=API_HEADERS)
-        if resp.status_code == 200:
-            data = resp.json()
-            if not data: return pd.DataFrame()
+    """Lädt die Tabellen für Nord & Süd und kombiniert sie."""
+    urls = {
+        "nord": f"https://api-n.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND_AND_PLAY_OFFS",
+        "sued": f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND_AND_PLAY_OFFS"
+    }
+    
+    all_standings_data = []
+    
+    for key, url in urls.items():
+        try:
+            resp = requests.get(url, headers=API_HEADERS)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    all_standings_data.extend(data)
+        except requests.exceptions.RequestException:
+            # Wenn eine API (z.B. Nord) nicht erreichbar ist, machen wir trotzdem weiter
+            continue
             
-            df = pd.json_normalize(data)
-            
-            # Relevante Spalten auswählen und umbenennen
-            col_map = {
-                'rank': 'PL',
-                'team.name': 'Team',
-                'team.id': 'teamId',
-                'matchesPlayed': 'G',
-                'wins': 'S',
-                'losses': 'N',
-                'points': 'PKT',
-                'pointsScored': 'P+',
-                'pointsConceded': 'P-',
-                'pointsDifference': 'Diff',
-                'streak': 'Serie'
+    # Wir bauen ein Dictionary, damit wir später leicht nach Team-ID suchen können
+    standings_map = {}
+    for entry in all_standings_data:
+        # Die Team-ID ist hier direkt im Objekt
+        tid = str(entry.get("teamId", ""))
+        if tid:
+            # Wir mappen die API-Antwort auf die Keys, die das Frontend erwartet
+            # um die analysis_ui.py nicht anpassen zu müssen.
+            standings_map[tid] = {
+                "rank": entry.get("rank", "-"),
+                "team": {"name": entry.get("teamName", "Unbekannt")},
+                "matchesPlayed": entry.get("gamesPlayed", 0),
+                "wins": entry.get("wins", 0),
+                "losses": entry.get("losses", 0),
+                "points": entry.get("points", 0),
+                "pointsScored": entry.get("pointsScored", 0),
+                "pointsConceded": entry.get("pointsConceded", 0),
+                "pointsDifference": entry.get("pointsDifference", 0),
+                "streak": entry.get("streak", "-"),
+                "homePerformance": entry.get("homePerformance", {}),
+                "guestPerformance": entry.get("guestPerformance", {})
             }
             
-            # Nur Spalten behalten, die existieren
-            existing_cols = {api_col: new_col for api_col, new_col in col_map.items() if api_col in df.columns}
-            df = df[list(existing_cols.keys())]
-            df = df.rename(columns=existing_cols)
-            
-            return df
-            
-    except Exception as e:
-        st.error(f"Fehler beim Laden der Tabelle: {e}")
-        return pd.DataFrame()
+    return standings_map
