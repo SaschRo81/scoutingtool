@@ -543,16 +543,7 @@ def render_scouting_page():
                         
                         if HAS_PDFKIT:
                             try:
-                                opts = {
-                                    "page-size": "A4", "orientation": "Portrait", 
-                                    "margin-top": "5mm", "margin-right": "5mm", 
-                                    "margin-bottom": "5mm", "margin-left": "5mm", 
-                                    "encoding": "UTF-8", "zoom": "0.6", 
-                                    "load-error-handling": "ignore", 
-                                    "load-media-error-handling": "ignore", 
-                                    "javascript-delay": "1000"
-                                    
-                                }
+                                opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42", "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
                                 st.session_state.pdf_bytes = pdfkit.from_string(
                                     f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", 
                                     False, options=opts
