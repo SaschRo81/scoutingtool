@@ -36,7 +36,6 @@ from src.analysis_ui import (
 )
 
 # --- KONFIGURATION ---
-# Die URL Struktur erzwingt 2025, wie von dir gewünscht
 CURRENT_SEASON_ID = "2025" 
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
@@ -46,39 +45,30 @@ st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", pag
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_best_team_logo(team_id):
     """
-    Versucht das Logo exakt unter der URL Struktur zu laden, die du genannt hast.
-    Lädt das Bild im Backend herunter, um Browser-Blockaden zu umgehen.
+    Versucht das Logo zu laden (Aggressive Suche über mehrere Jahre/URLs).
     """
     if not team_id: return None
     
-    # Priorität 1: Die URL Struktur, die du bestätigt hast (Süd Server)
     candidates = [
         f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
-        # Fallback: Nord Server
         f"https://api-n.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
-        # Fallback: Letztes Jahr (falls Verein noch kein neues Logo hat)
-        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}"
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}", # Fallback Vorjahr
+        f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
     ]
 
-    # Header simulieren einen echten Browser
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0",
         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
         "Referer": "https://dbbl.de/" 
     }
 
     for url in candidates:
         try:
-            r = requests.get(url, headers=headers, timeout=2)
-            # Prüfen ob Erfolg (200) und ob Daten zurückkamen (> 500 Bytes)
+            r = requests.get(url, headers=headers, timeout=1.5)
             if r.status_code == 200 and len(r.content) > 500: 
                 b64 = base64.b64encode(r.content).decode()
-                
-                # MIME Type bestimmen
                 mime = "image/png"
-                if "jpeg" in r.headers.get("Content-Type", ""): mime = "image/jpeg"
-                elif "jpg" in url: mime = "image/jpeg"
-                
+                if "jpeg" in r.headers.get("Content-Type", "") or "jpg" in url: mime = "image/jpeg"
                 return f"data:{mime};base64,{b64}"
         except:
             continue
@@ -225,12 +215,11 @@ def render_team_stats_page():
             t_info = TEAMS_DB.get(tid, {})
             name = t_info.get("name", "Team")
             
-            # LOGO LADEN
             logo_b64 = get_best_team_logo(tid)
             
             c1, c2 = st.columns([1, 4])
             with c1: 
-                if logo_b64: st.image(logo_b64, width=120)
+                if logo_b64: st.image(logo_b64, width=100) # Kleinere Darstellung
                 else: st.markdown("🏀", unsafe_allow_html=True)
             with c2: 
                 st.title(f"Statistik: {name}")
@@ -290,13 +279,21 @@ def render_team_stats_page():
                 col = cols[idx % 5]
                 with col:
                     with st.container(border=True):
-                        # AGGRESSIVES LADEN
+                        # Bild laden
                         logo_b64 = get_best_team_logo(tid)
                         
-                        if logo_b64: st.image(logo_b64, use_container_width=True)
-                        else: st.markdown(f"<div style='font-size: 50px; text-align:center;'>🏀</div>", unsafe_allow_html=True)
+                        # Zentrierung mittels Spalten (1,2,1) Trick für Streamlit
+                        c_left, c_mid, c_right = st.columns([1, 2, 1])
+                        with c_mid:
+                            if logo_b64: 
+                                # HIER DIE GRÖSSE ANPASSEN (width=100)
+                                st.image(logo_b64, width=100) 
+                            else: 
+                                st.markdown(f"<div style='font-size: 40px; text-align:center;'>🏀</div>", unsafe_allow_html=True)
                         
-                        st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center;'>{info['name']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center; margin-bottom: 10px;'>{info['name']}</div>", unsafe_allow_html=True)
+                        
+                        # Button volle Breite
                         if st.button("Stats anzeigen", key=f"btn_stats_{tid}", use_container_width=True):
                             st.session_state.stats_team_id = tid
                             st.rerun()
