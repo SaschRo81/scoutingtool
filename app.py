@@ -89,17 +89,7 @@ def render_home():
             opacity: 0.7; 
         }
 
-        /* Um die Opazität (Transparenz) zu erreichen, nutzen wir einen Trick mit einem Overlay */
-        .stApp::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.75); /* Weißer Schleier für Transparenz-Effekt */
-            z-index: -1; /* Hinter den Inhalt, aber vor das Hintergrundbild */
-        }
+        
         
         /* Buttons Stylen - Deckend Weiß */
         div.stButton > button {
