@@ -255,9 +255,6 @@ def fetch_team_data(team_id, season_id):
             df["OR"] = get_n("offensivereboundspergame")
             
             total_att = a2 + a3
-            # --- ENDE KORRIGIERTER BLOCK ---
-            
-            total_att = a2 + a3
             df["FG%"] = pd.Series([0.0]*len(df), index=df.index)
             mask_att = total_att > 0
             df.loc[mask_att, "FG%"] = ((m2[mask_att]+m3[mask_att]) / total_att[mask_att] * 100).round(1)
