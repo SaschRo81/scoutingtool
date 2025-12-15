@@ -15,8 +15,8 @@ except ImportError:
     HAS_PDFKIT = False
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-# Wir importieren utils, nutzen aber für die Logos eine robustere Logik direkt hier
-from src.utils import get_logo_url, optimize_image_base64
+# Wir nutzen utils nur noch für Basis-Sachen
+from src.utils import get_logo_url 
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
@@ -36,72 +36,54 @@ from src.analysis_ui import (
 )
 
 # --- KONFIGURATION ---
+# Die URL Struktur erzwingt 2025, wie von dir gewünscht
 CURRENT_SEASON_ID = "2025" 
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
-# --- HELPER FÜR BILDER & API (LOKAL IN APP.PY FÜR MAXIMALE KONTROLLE) ---
+# --- BILDER LADE LOGIK ---
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_real_logo_urls():
+def get_best_team_logo(team_id):
     """
-    Holt die echten Logo-URLs direkt von den DBBL APIs (Nord und Süd).
-    Das ist notwendig, da die generierten Links oft ins Leere führen.
+    Versucht das Logo exakt unter der URL Struktur zu laden, die du genannt hast.
+    Lädt das Bild im Backend herunter, um Browser-Blockaden zu umgehen.
     """
-    headers = {
-        "accept": "application/json",
-        "X-API-Key": "48673298c840c12a1646b737c83e5e5e"
-    }
+    if not team_id: return None
     
-    # Wir fragen beide Staffeln ab, um alle Teams zu erwischen
-    urls = [
-        f"https://api-s.dbbl.scb.world/teams?seasonId={CURRENT_SEASON_ID}",
-        f"https://api-n.dbbl.scb.world/teams?seasonId={CURRENT_SEASON_ID}"
+    # Priorität 1: Die URL Struktur, die du bestätigt hast (Süd Server)
+    candidates = [
+        f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
+        # Fallback: Nord Server
+        f"https://api-n.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
+        # Fallback: Letztes Jahr (falls Verein noch kein neues Logo hat)
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}"
     ]
-    
-    logo_map = {}
-    
-    for url in urls:
+
+    # Header simulieren einen echten Browser
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+        "Referer": "https://dbbl.de/" 
+    }
+
+    for url in candidates:
         try:
-            response = requests.get(url, headers=headers, timeout=3)
-            if response.status_code == 200:
-                teams_data = response.json()
-                for t in teams_data:
-                    tid = str(t.get("id"))
-                    logo = t.get("logo")
-                    # Nur speichern, wenn Logo vorhanden
-                    if logo and "http" in logo:
-                        logo_map[tid] = logo
-        except Exception:
+            r = requests.get(url, headers=headers, timeout=2)
+            # Prüfen ob Erfolg (200) und ob Daten zurückkamen (> 500 Bytes)
+            if r.status_code == 200 and len(r.content) > 500: 
+                b64 = base64.b64encode(r.content).decode()
+                
+                # MIME Type bestimmen
+                mime = "image/png"
+                if "jpeg" in r.headers.get("Content-Type", ""): mime = "image/jpeg"
+                elif "jpg" in url: mime = "image/jpeg"
+                
+                return f"data:{mime};base64,{b64}"
+        except:
             continue
             
-    return logo_map
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_image_bytes_robust(url):
-    """Lädt Bild-Bytes herunter. Gibt None zurück, wenn es fehlschlägt."""
-    if not url: return None
-    try:
-        # User-Agent faken, falls der Server Browser blockt
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
-        }
-        r = requests.get(url, headers=headers, timeout=2)
-        if r.status_code == 200 and len(r.content) > 100: # Check ob Daten > 100 bytes (kein 1px bild)
-            return r.content
-    except:
-        pass
     return None
-
-def image_to_base64_str(img_bytes):
-    """Wandelt Bytes in Base64 String für HTML/PDF."""
-    if not img_bytes: return ""
-    try:
-        b64 = base64.b64encode(img_bytes).decode()
-        return f"data:image/png;base64,{b64}"
-    except:
-        return ""
 
 # --- SESSION STATE ---
 for key, default in [
@@ -141,7 +123,6 @@ def render_page_header(page_title):
 # SEITE 1: HOME
 # ==========================================
 def render_home():
-    # CSS für Hintergrundbild und Styling
     st.markdown(
         """
         <style>
@@ -229,9 +210,6 @@ def render_home():
 # SEITE: TEAM STATS (LOGOS & DETAILS)
 # ==========================================
 def render_team_stats_page():
-    # 1. Logos holen (API Map)
-    real_logos = fetch_real_logo_urls()
-
     if st.session_state.stats_team_id:
         tid = st.session_state.stats_team_id
         col_back, col_head = st.columns([1, 5])
@@ -247,19 +225,15 @@ def render_team_stats_page():
             t_info = TEAMS_DB.get(tid, {})
             name = t_info.get("name", "Team")
             
-            # Bild laden
-            logo_url = real_logos.get(str(tid))
-            logo_bytes = load_image_bytes_robust(logo_url)
+            # LOGO LADEN
+            logo_b64 = get_best_team_logo(tid)
             
             c1, c2 = st.columns([1, 4])
             with c1: 
-                if logo_bytes:
-                    st.image(logo_bytes, width=120)
-                else:
-                    # FALLBACK BILD, KEIN LEERER PLATZ
-                    st.markdown("🏀", unsafe_allow_html=True)
-
-            with c2: st.title(f"Statistik: {name}")
+                if logo_b64: st.image(logo_b64, width=120)
+                else: st.markdown("🏀", unsafe_allow_html=True)
+            with c2: 
+                st.title(f"Statistik: {name}")
             
             st.divider()
             
@@ -287,7 +261,6 @@ def render_team_stats_page():
             
             st.subheader("Aktueller Kader & Stats")
             display_cols = ["NR", "NAME_FULL", "GP", "MIN_DISPLAY", "PPG", "FG%", "3PCT", "FTPCT", "TOT", "AS", "ST", "TO", "PF"]
-            
             col_config = {
                 "NR": st.column_config.TextColumn("#", width="small"),
                 "NAME_FULL": st.column_config.TextColumn("Name", width="medium"),
@@ -303,7 +276,6 @@ def render_team_stats_page():
                 "TO": st.column_config.NumberColumn("TO", format="%.1f"),
                 "PF": st.column_config.NumberColumn("PF", format="%.1f"),
             }
-            
             st.dataframe(df[display_cols], column_config=col_config, hide_index=True, use_container_width=True, height=600)
         else:
             st.error("Daten konnten nicht geladen werden.")
@@ -318,16 +290,11 @@ def render_team_stats_page():
                 col = cols[idx % 5]
                 with col:
                     with st.container(border=True):
-                        # 1. URL aus Map
-                        logo_url = real_logos.get(str(tid))
-                        # 2. Laden
-                        logo_bytes = load_image_bytes_robust(logo_url)
+                        # AGGRESSIVES LADEN
+                        logo_b64 = get_best_team_logo(tid)
                         
-                        if logo_bytes:
-                             st.image(logo_bytes, use_container_width=True)
-                        else:
-                             # FALLBACK
-                             st.markdown(f"<div style='font-size: 50px; text-align:center;'>🏀</div>", unsafe_allow_html=True)
+                        if logo_b64: st.image(logo_b64, use_container_width=True)
+                        else: st.markdown(f"<div style='font-size: 50px; text-align:center;'>🏀</div>", unsafe_allow_html=True)
                         
                         st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center;'>{info['name']}</div>", unsafe_allow_html=True)
                         if st.button("Stats anzeigen", key=f"btn_stats_{tid}", use_container_width=True):
@@ -343,7 +310,6 @@ def render_team_stats_page():
 
 def render_comparison_page():
     render_page_header("📊 Head-to-Head Vergleich") 
-    real_logos = fetch_real_logo_urls()
     c1, c2, c3 = st.columns([1, 2, 2])
     with c1: 
         staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="comp_staffel")
@@ -352,14 +318,14 @@ def render_comparison_page():
     with c2:
         h_name = st.selectbox("Heim:", list(team_opts.keys()), 0, key="comp_home")
         h_id = team_opts[h_name]
-        l_bytes = load_image_bytes_robust(real_logos.get(str(h_id)))
-        if l_bytes: st.image(l_bytes, width=80)
+        l_b64 = get_best_team_logo(h_id)
+        if l_b64: st.image(l_b64, width=80)
         else: st.markdown("🏀")
     with c3:
         g_name = st.selectbox("Gast:", list(team_opts.keys()), 1, key="comp_guest")
         g_id = team_opts[g_name]
-        l_bytes = load_image_bytes_robust(real_logos.get(str(g_id)))
-        if l_bytes: st.image(l_bytes, width=80)
+        l_b64 = get_best_team_logo(g_id)
+        if l_b64: st.image(l_b64, width=80)
         else: st.markdown("🏀")
     st.divider()
     if st.button("Vergleich starten", type="primary"):
@@ -499,95 +465,7 @@ def render_live_page():
                             st.session_state.live_game_id = game['id']
                             st.rerun()
 
-def render_game_venue_page():
-    render_page_header("📍 Spielorte der Teams") 
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="venue_staffel")
-        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-        to = {v["name"]: k for k, v in t.items()}
-    with c2:
-        tn = st.selectbox("Wähle ein Team:", list(to.keys()), key="venue_team_select")
-        tid = to[tn]
-    st.divider()
-    if tid:
-        st.subheader(f"Standard-Heimspielort von {tn}")
-        with st.spinner(f"Lade Daten..."):
-            info = fetch_team_info_basic(tid)
-            venue = info.get("venue") if info else None
-            if venue:
-                st.markdown(f"**Halle:** {venue.get('name', 'N/A')}"); st.markdown(f"**Adresse:** {venue.get('address', 'N/A')}")
-                if venue.get('address'):
-                    u = f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{venue.get('name', '')}, {venue.get('address', '')}')}"
-                    st.markdown(f"**Route:** [Google Maps öffnen]({u})", unsafe_allow_html=True)
-            else: st.warning("Nicht gefunden.")
-        st.divider()
-        st.subheader(f"Alle Spiele von {tn}")
-        games = fetch_schedule(tid, CURRENT_SEASON_ID)
-        if games:
-            games.sort(key=lambda x: datetime.strptime(x['date'], "%d.%m.%Y %H:%M"), reverse=True)
-            for g in games:
-                gid = g.get("id")
-                if str(g.get("homeTeamId")) == str(tid):
-                    with st.expander(f"🏟️ Heim: {g.get('date')} vs {g.get('guest')} ({g.get('score')})"):
-                        if gid:
-                            d = fetch_game_details(gid)
-                            if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
-                else:
-                    with st.expander(f"🚌 Gast: {g.get('date')} bei {g.get('home')} ({g.get('score')})"):
-                        if gid:
-                            d = fetch_game_details(gid)
-                            if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
-
-def render_analysis_page():
-    render_page_header("🎥 Spielnachbereitung") 
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
-        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-        to = {v["name"]: k for k, v in t.items()}
-    with c2:
-        tn = st.selectbox("Dein Team:", list(to.keys()), key="ana_team")
-        tid = to[tn]
-    if tid:
-        games = fetch_schedule(tid, CURRENT_SEASON_ID)
-        if games:
-            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in games}
-            sel = st.selectbox("Wähle ein Spiel:", list(opts.keys()), key="ana_game_select")
-            gid = opts[sel]
-            if st.button("Analyse laden", type="primary"):
-                st.session_state.selected_game_id = gid
-                if "generated_ai_report" in st.session_state: del st.session_state["generated_ai_report"]
-            if st.session_state.selected_game_id == gid:
-                st.divider()
-                with st.spinner("Lade Daten..."):
-                    box = fetch_game_boxscore(gid); details = fetch_game_details(gid)
-                    if box and details: 
-                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("referee1"); box["referee2"] = details.get("referee2"); box["referee3"] = details.get("referee3"); box["scheduledTime"] = details.get("scheduledTime"); box["attendance"] = details.get("result", {}).get("spectators"); box["id"] = details.get("id") 
-                        render_game_header(box)
-                        st.markdown("### 📝 Spielberichte & PBP")
-                        t1, t2, t3 = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
-                        with t1:
-                            st.markdown(generate_game_summary(box)); st.divider()
-                            hn = get_team_name(box.get("homeTeam", {}), "Heim"); gn = get_team_name(box.get("guestTeam", {}), "Gast")
-                            hc = box.get("homeTeam", {}).get("headCoachName", "-"); gc = box.get("guestTeam", {}).get("headCoachName", "-")
-                            render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), box.get("homeTeam", {}).get("gameStat", {}), hn, hc)
-                            st.write(""); render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), box.get("guestTeam", {}).get("gameStat", {}), gn, gc)
-                            st.divider(); render_game_top_performers(box); st.divider(); render_charts_and_stats(box)
-                        with t2:
-                            st.info("ChatGPT Prompt:"); st.code(generate_complex_ai_prompt(box), language="text")
-                        with t3: render_full_play_by_play(box)
-                    else: st.error("Fehler beim Laden.")
-        else: st.warning("Keine Spiele.")
-
 def render_scouting_page():
-    # 1. Logos holen (zentral)
-    real_logos = fetch_real_logo_urls()
-
     render_page_header("📝 PreGame Report") 
     if st.session_state.print_mode:
         st.subheader("Vorschau & Export")
@@ -619,32 +497,24 @@ def render_scouting_page():
             if "home_name" in st.session_state.game_meta and st.session_state.game_meta["home_name"] in to: idx = list(to.keys()).index(st.session_state.game_meta["home_name"])
             hn = st.selectbox("Heim:", list(to.keys()), index=idx, key="sel_home"); hid = to[hn]
             
-            # LOGO FIX REPORT
+            # AGGRESSIVES LADEN
             if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != hn: 
-                l_url = real_logos.get(str(hid))
-                l_bytes = load_image_bytes_robust(l_url)
-                st.session_state.logo_h = image_to_base64_str(l_bytes) 
+                st.session_state.logo_h = get_best_team_logo(hid)
             
-            if st.session_state.logo_h:
-                st.markdown(f"<img src='{st.session_state.logo_h}' width='80'>", unsafe_allow_html=True)
-            else:
-                st.write(hn) # Fallback Name
+            if st.session_state.logo_h: st.image(st.session_state.logo_h, width=80)
+            else: st.markdown("🏀")
 
         with c3:
             idxg = 1
             if "guest_name" in st.session_state.game_meta and st.session_state.game_meta["guest_name"] in to: idxg = list(to.keys()).index(st.session_state.game_meta["guest_name"])
             gn = st.selectbox("Gast:", list(to.keys()), index=idxg, key="sel_guest"); gid = to[gn]
             
-            # LOGO FIX REPORT
+            # AGGRESSIVES LADEN
             if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != gn: 
-                l_url = real_logos.get(str(gid))
-                l_bytes = load_image_bytes_robust(l_url)
-                st.session_state.logo_g = image_to_base64_str(l_bytes)
+                st.session_state.logo_g = get_best_team_logo(gid)
 
-            if st.session_state.logo_g:
-                st.markdown(f"<img src='{st.session_state.logo_g}' width='80'>", unsafe_allow_html=True)
-            else:
-                st.write(gn) # Fallback Name
+            if st.session_state.logo_g: st.image(st.session_state.logo_g, width=80)
+            else: st.markdown("🏀")
 
         st.write("---")
         idx_t = 0
