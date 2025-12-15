@@ -16,7 +16,7 @@ def get_base_url(team_id):
         team_info = TEAMS_DB.get(tid)
         if team_info and team_info.get("staffel") == "Nord":
             return "https://api-n.dbbl.scb.world"
-    except:
+    except (ValueError, TypeError):
         pass
     return "https://api-s.dbbl.scb.world"
 
@@ -67,18 +67,11 @@ def get_player_metadata_cached(player_id):
         except: pass
     return {"img": "", "height": 0, "pos": "-", "age": "-", "nationality": "-"}
 
-@st.cache_data(ttl=600)
-def fetch_team_details_raw(team_id, season_id):
-    base = get_base_url(team_id)
-    url = f"{base}/teams/{team_id}/{season_id}"
-    try:
-        resp = requests.get(url, headers=API_HEADERS, timeout=3)
-        if resp.status_code == 200: return resp.json()
-    except: pass
-    return None
-
-# WICHTIG: Cache hier entfernt, da es zu falschen Werten im Vergleich führte
+# KEIN CACHE HIER! Das hat den Fehler im Head-to-Head verursacht.
 def fetch_team_data(team_id, season_id):
+    """
+    Lädt Team- und Spieler-Stats vom korrekten Nord/Süd-Server.
+    """
     base_url = get_base_url(team_id)
     
     api_stats_players = f"{base_url}/teams/{team_id}/{season_id}/player-stats"
@@ -97,6 +90,7 @@ def fetch_team_data(team_id, season_id):
             if isinstance(td, dict):
                 gp = td.get("gamesPlayed") or 1
                 
+                # Absolute Werte für korrekte Prozent-Berechnung
                 fgm = td.get("fieldGoalsMade") or 0
                 fga = td.get("fieldGoalsAttempted") or 0
                 m3 = td.get("threePointShotsMade") or 0
@@ -115,7 +109,7 @@ def fetch_team_data(team_id, season_id):
                     "ftpct": (ftm / fta * 100) if fta > 0 else 0,
                 }
     except Exception as e:
-        print(f"Fehler bei Team Stats API: {e}")
+        print(f"Fehler bei Team Stats API für Team {team_id}: {e}")
 
     # 2. PLAYER STATS LADEN (falls verfügbar)
     try:
@@ -140,15 +134,12 @@ def fetch_team_data(team_id, season_id):
                 col_nr = next((c for c in df.columns if "shirtnumber" in c or "jerseynumber" in c), None)
                 col_id = next((c for c in df.columns if "personid" in c or "seasonplayer.id" in c), None)
 
-                if col_fn and col_ln:
-                    df["NAME_FULL"] = (df[col_fn].astype(str) + " " + df[col_ln].astype(str)).str.strip()
-                else: df["NAME_FULL"] = "Unknown"
-                
+                df["NAME_FULL"] = (df[col_fn].astype(str) + " " + df[col_ln].astype(str)).str.strip() if col_fn and col_ln else "Unknown"
                 df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
                 df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
-                
                 df["GP"] = get_val("gamesplayed").replace(0, 1)
                 
+                # TOTALS
                 df["TOTAL_MINUTES"] = get_val("secondsplayed") / 60
                 df["TOTAL_PTS"] = get_val("points"); df["TOTAL_REB"] = get_val("totalrebounds")
                 df["TOTAL_AST"] = get_val("assists"); df["TOTAL_STL"] = get_val("steals")
@@ -160,6 +151,7 @@ def fetch_team_data(team_id, season_id):
                 df["TOTAL_FTA"] = get_val("freethrowsattempted"); df["TOTAL_2M"] = df["TOTAL_FGM"] - df["TOTAL_3M"]
                 df["TOTAL_2A"] = df["TOTAL_FGA"] - df["TOTAL_3A"]
                 
+                # PER GAME
                 gp_safe = df["GP"].replace(0, 1)
                 df["MIN_DISPLAY"] = (df["TOTAL_MINUTES"] * 60 / gp_safe).apply(format_minutes)
                 df["PPG"] = (df["TOTAL_PTS"] / gp_safe).round(1); df["TOT"] = (df["TOTAL_REB"] / gp_safe).round(1)
@@ -178,38 +170,6 @@ def fetch_team_data(team_id, season_id):
 
     except Exception as e:
         print(f"Error Player Stats ({base_url}): {e}")
-
-    # Fallback Berechnung, wenn Team Stats API leer
-    if not ts and not df.empty:
-        total_games = df["GP"].max() if not df.empty else 1
-        if total_games == 0: total_games = 1
-
-        team_total_pts = df["TOTAL_PTS"].sum()
-        team_total_reb = df["TOTAL_REB"].sum()
-        team_total_ast = df["TOTAL_AST"].sum()
-        team_total_stl = df["TOTAL_STL"].sum()
-        team_total_to = df["TOTAL_TO"].sum()
-        team_total_blk = df["TOTAL_BLK"].sum()
-        team_total_pf = df["TOTAL_PF"].sum()
-        team_total_or = df["TOTAL_OR"].sum()
-        team_total_dr = df["TOTAL_DR"].sum()
-        team_total_fgm = df["TOTAL_FGM"].sum()
-        team_total_fga = df["TOTAL_FGA"].sum()
-        team_total_3m = df["TOTAL_3M"].sum()
-        team_total_3a = df["TOTAL_3A"].sum()
-        team_total_ftm = df["TOTAL_FTM"].sum()
-        team_total_fta = df["TOTAL_FTA"].sum()
-
-        ts = {
-            "ppg": team_total_pts / total_games, "tot": team_total_reb / total_games,
-            "as": team_total_ast / total_games, "st": team_total_stl / total_games,
-            "to": team_total_to / total_games, "bs": team_total_blk / total_games,
-            "pf": team_total_pf / total_games, "or": team_total_or / total_games,
-            "dr": team_total_dr / total_games,
-            "fgpct": (team_total_fgm / team_total_fga * 100) if team_total_fga > 0 else 0,
-            "3pct": (team_total_3m / team_total_3a * 100) if team_total_3a > 0 else 0,
-            "ftpct": (team_total_ftm / team_total_fta * 100) if team_total_fta > 0 else 0,
-        }
 
     return df, ts
 
