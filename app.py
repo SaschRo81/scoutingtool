@@ -541,23 +541,23 @@ def render_scouting_page():
                         html += generate_custom_sections_html(eo, ed, ea)
                         st.session_state.final_html = html
                         
-                        if HAS_PDFKIT:
+                         if HAS_PDFKIT:
                             try:
-                                opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42", "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
-                                st.session_state.pdf_bytes = pdfkit.from_string(
-                                    f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", 
-                                    False, options=opts
-                                )
+                                full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
+                                opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", 
+                                        "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42",
+                                        "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
+                                st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
                                 st.session_state.print_mode = True
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"PDF Error: {e}")
-                                st.session_state.pdf_bytes = None
-                                st.session_state.print_mode = True
+                            except Exception as e: 
+                                st.error(f"PDF Error: {e}. PDF-Datei konnte nicht generiert werden.")
+                                st.session_state.pdf_bytes = None 
+                                st.session_state.print_mode = True 
                                 st.rerun()
                         else:
-                            st.warning("PDFKit fehlt.")
-                            st.session_state.pdf_bytes = None
+                            st.warning("PDFKit oder wkhtmltopdf ist nicht installiert. PDF-Export nicht verfügbar.")
+                            st.session_state.pdf_bytes = None 
                             st.session_state.print_mode = True
                             st.rerun()
 
