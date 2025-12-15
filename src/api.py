@@ -382,3 +382,25 @@ def fetch_season_games(season_id):
             return clean
     except: pass
     return []
+
+# --- IN src/api.py AM ENDE HINZUFÜGEN ---
+
+@st.cache_data(ttl=3600)
+def fetch_standings(season_id):
+    """Lädt die Tabelle(n) der Saison."""
+    url = f"https://api-s.dbbl.scb.world/seasons/{season_id}/groups"
+    try:
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            groups = resp.json()
+            # Wir bauen ein Dictionary: { team_id: standings_entry }
+            standings_map = {}
+            for group in groups:
+                entries = group.get("standings", [])
+                for entry in entries:
+                    tid = str(entry.get("team", {}).get("id", ""))
+                    if tid:
+                        standings_map[tid] = entry
+            return standings_map
+    except: pass
+    return {}
