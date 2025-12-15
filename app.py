@@ -2,6 +2,7 @@
 
 import streamlit as st
 import pandas as pd
+import requests  # NEU: Wichtig für den Bild-Download mit Headern
 from datetime import datetime, date, time 
 import time as time_module 
 from urllib.parse import quote_plus 
@@ -34,6 +35,25 @@ from src.analysis_ui import (
 )
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
+
+# --- HELPER FÜR BILDER ---
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_image_robust(url):
+    """Lädt ein Bild herunter und nutzt einen Fake-User-Agent, um Blockaden zu umgehen."""
+    if not url: 
+        return None
+    try:
+        # Browser-Header simulieren
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
+        }
+        r = requests.get(url, headers=headers, timeout=2)
+        if r.status_code == 200:
+            return r.content # Gibt die Bild-Bytes zurück
+    except Exception:
+        pass
+    return None
 
 # --- SESSION STATE ---
 for key, default in [
@@ -187,7 +207,6 @@ def render_team_stats_page():
                 st.rerun()
         
         # Daten laden
-        # Hinweis: Nutzt im Hintergrund endpoint /statistics/season
         with st.spinner("Lade Team Statistiken..."):
             df, ts = fetch_team_data(tid, SEASON_ID)
             
@@ -197,13 +216,13 @@ def render_team_stats_page():
             name = t_info.get("name", "Team")
             
             logo_url = get_logo_url(tid, SEASON_ID)
-            logo_img = optimize_image_base64(logo_url)
+            # Nutze die neue robuste Ladefunktion
+            logo_bytes = load_image_robust(logo_url)
             
             c1, c2 = st.columns([1, 4])
             with c1: 
-                # Auch hier Container nutzen, falls Logo fehlt
-                if logo_img:
-                    st.image(logo_img, width=120)
+                if logo_bytes:
+                    st.image(logo_bytes, width=120)
                 else:
                      st.markdown(f"**{name}**")
 
@@ -275,29 +294,26 @@ def render_team_stats_page():
         def render_logo_grid(staffel_name):
             teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel_name}
             
-            # Grid mit 5 Spalten
             cols = st.columns(5)
             
             for idx, (tid, info) in enumerate(teams.items()):
                 col = cols[idx % 5]
                 with col:
-                    # FIX: Rahmen um die ganze Karte ziehen, damit man was sieht, auch ohne Logo
                     with st.container(border=True):
-                        # Bild laden und optimieren
+                        # Bild laden mit neuer Funktion
                         logo_url = get_logo_url(tid, SEASON_ID)
-                        logo_img = optimize_image_base64(logo_url)
                         
-                        # Versuch das Bild anzuzeigen, sonst Platzhalter
-                        if logo_img:
-                             st.image(logo_img, use_container_width=True)
+                        # Hier nutzen wir die robuste Funktion statt utils
+                        logo_bytes = load_image_robust(logo_url)
+                        
+                        if logo_bytes:
+                             st.image(logo_bytes, use_container_width=True)
                         else:
-                             # Fallback, wenn Logo URL 404/leer
-                             st.markdown(f"<div style='height:100px; display:flex; align-items:center; justify-content:center; background:#eee; color:#aaa;'>Kein Logo</div>", unsafe_allow_html=True)
+                             # Fallback: Basketball Icon
+                             st.markdown(f"<div style='font-size: 50px; text-align:center;'>🏀</div>", unsafe_allow_html=True)
                         
-                        # Name IMMER anzeigen, damit man weiß, wer es ist
                         st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center;'>{info['name']}</div>", unsafe_allow_html=True)
                         
-                        # Button volle Breite
                         if st.button("Stats anzeigen", key=f"btn_stats_{tid}", use_container_width=True):
                             st.session_state.stats_team_id = tid
                             st.rerun()
