@@ -462,7 +462,6 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
         
         standings_map = fetch_standings(SEASON_ID, staffel)
         
-        # VERBESSERTE PRÜFUNG UND FEHLERMELDUNG
         if standings_map:
             team_stat = standings_map.get(str(team_id))
             if team_stat:
@@ -496,7 +495,7 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
             else:
                  st.warning(f"Team (ID: {team_id}) nicht in den Tabellendaten für Staffel '{staffel}' (Saison {SEASON_ID}) gefunden.")
         else:
-            st.warning(f"Tabellendaten für Staffel '{staffel}' (Saison {SEASON_ID}) konnten nicht geladen werden. Bitte prüfen Sie die `SEASON_ID` in der Konfiguration.")
+            st.warning(f"Tabellendaten für Staffel '{staffel}' (Saison {SEASON_ID}) konnten nicht geladen werden. Bitte prüfen Sie die `SEASON_ID` und die Netzwerkverbindung.")
 
 def render_live_view(box):
     """Zeigt Live Stats und PBP nebeneinander für Mobile optimiert."""
