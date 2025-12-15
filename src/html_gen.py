@@ -2,8 +2,8 @@
 import pandas as pd
 
 def generate_header_html(meta):
-    return f"""
-    <div style='text-align:center; padding-bottom:10px; border-bottom:2px solid #333; margin-bottom:20px;'>
+    # KORREKTUR: Kein Zeilenumbruch/Leerzeichen am Anfang des Strings
+    return f"""<div style='text-align:center; padding-bottom:10px; border-bottom:2px solid #333; margin-bottom:20px;'>
         <div style='display:flex; justify-content:space-between; align-items:center;'>
             <div style='width:20%; text-align:left;'><img src='{meta.get('home_logo', '')}' style='max-height:80px; max-width:100%;'></div>
             <div style='width:60%; text-align:center;'>
@@ -13,23 +13,18 @@ def generate_header_html(meta):
             </div>
             <div style='width:20%; text-align:right;'><img src='{meta.get('guest_logo', '')}' style='max-height:80px; max-width:100%;'></div>
         </div>
-    </div>
-    """
+    </div>"""
 
 def generate_top3_html(df: pd.DataFrame) -> str:
     if df is None or df.empty: return ""
     
-    # Sicherstellen, dass Spalten existieren (Fallback)
     for col in ["PPG", "TOT", "3M", "3PCT", "FTA", "FTPCT", "DR", "OR"]:
         if col not in df.columns: df[col] = 0
 
     scorers = df.sort_values(by="PPG", ascending=False).head(3)
     rebounders = df.sort_values(by="TOT", ascending=False).head(3)
-    
-    # Shooter: Mind. 0.5 Treffer pro Spiel, sortiert nach Quote
     shooters = df[df["3M"] >= 0.5].sort_values(by="3PCT", ascending=False).head(3)
     if shooters.empty: shooters = df.sort_values(by="3PCT", ascending=False).head(3)
-    
     fts = df.sort_values(by="FTPCT", ascending=False).head(3)
 
     def build_box(d, keys, cols, bolds=[], color="#333", title=""):
@@ -43,24 +38,20 @@ def generate_top3_html(df: pd.DataFrame) -> str:
                 val = r[k]
                 style = f"padding:4px; border-bottom:1px solid #eee; text-align:center;"
                 if i in bolds: style += " font-weight:bold;"
-                
-                # Name abkürzen
                 if k == "NAME_FULL": 
                     parts = str(val).split(" ")
-                    val = parts[-1] if parts else val # Nur Nachname
+                    val = parts[-1] if parts else val 
                     style += " text-align:left;"
-                
-                # Zahlen formatieren
                 if isinstance(val, float):
                     if k in ["3PCT", "FTPCT", "2PCT", "FG%"]: val = f"{int(val)}%"
                     else: val = round(val, 1)
-                
                 h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
         h += "</table></div>"
         return h
 
-    html = "<h3 style='margin-top:0; border-bottom:1px solid #ccc; padding-bottom:5px;'>Key Stats Leader</h3>"
+    # KORREKTUR: HTML beginnt direkt ohne Einrückung
+    html = """<h3 style='margin-top:0; border-bottom:1px solid #ccc; padding-bottom:5px;'>Key Stats Leader</h3>"""
     html += "<div style='display:flex; justify-content:space-between; margin-bottom:20px;'>"
     html += build_box(scorers, ["#", "Name", "PPG", "FG%"], ["NR", "NAME_FULL", "PPG", "FG%"], [2], "#e35b00", "Top Scorer")
     html += build_box(rebounders, ["#", "Name", "D", "O", "TOT"], ["NR", "NAME_FULL", "DR", "OR", "TOT"], [4], "#0055ff", "Rebounding")
@@ -69,10 +60,6 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     return html
 
 def generate_card_html(row, meta, notes, color_code):
-    """
-    Erzeugt die HTML-Karte für einen Spieler.
-    Bildgröße ist begrenzt und fixiert, damit Layout stabil bleibt.
-    """
     full_name = row.get("NAME_FULL", "Unknown")
     img_src = meta.get('img')
     if not img_src:
@@ -89,11 +76,10 @@ def generate_card_html(row, meta, notes, color_code):
             <td style='border:1px solid #ddd; padding:4px; font-size:11px; color:#666; width:15%; vertical-align:top;'>{label}</td>
             <td style='border:1px solid #ddd; padding:4px; font-size:12px; width:42%; vertical-align:top; background:#fff;'>{val_l}</td>
             <td style='border:1px solid #ddd; padding:4px; font-size:12px; width:43%; vertical-align:top; background:#fff;'>{val_r}</td>
-        </tr>
-        """
+        </tr>"""
 
-    html = f"""
-    <div style='border:1px solid #999; margin-bottom:15px; page-break-inside:avoid; background-color:#fff; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);'>
+    # KORREKTUR: HTML beginnt direkt ohne Einrückung
+    html = f"""<div style='border:1px solid #999; margin-bottom:15px; page-break-inside:avoid; background-color:#fff; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);'>
         <div style='background-color:{color_code}; color:white; padding:5px 10px; font-weight:bold; font-size:14px; border-bottom:1px solid #666;'>
             #{row['NR']} {full_name} <span style='float:right; font-weight:normal; font-size:12px;'>{row.get('POS', '')} | {meta.get('height','-')} | {meta.get('age','-')} J</span>
         </div>
@@ -143,15 +129,14 @@ def generate_card_html(row, meta, notes, color_code):
                 </td>
             </tr>
         </table>
-    </div>
-    """
+    </div>"""
     return html
 
 def generate_team_stats_html(ts):
     if not ts: return ""
     def r(v): return round(v, 1) if isinstance(v, float) else v
-    html = """
-    <div style='page-break-before:always; margin-top:20px;'>
+    # KORREKTUR: HTML beginnt direkt ohne Einrückung
+    html = """<div style='page-break-before:always; margin-top:20px;'>
         <h2 style='border-bottom:2px solid #333; padding-bottom:5px;'>Team Statistiken (Saison Durchschnitt)</h2>
         <table style='width:100%; border-collapse:collapse; font-size:14px;'>
             <tr style='background-color:#333; color:white;'>
@@ -159,8 +144,7 @@ def generate_team_stats_html(ts):
                 <th style='padding:8px; text-align:center;'>Wert</th>
                 <th style='padding:8px; text-align:left; border-left:1px solid #555;'>Kategorie</th>
                 <th style='padding:8px; text-align:center;'>Wert</th>
-            </tr>
-    """
+            </tr>"""
     data = [
         ("Punkte", ts.get("ppg"), "Rebounds Total", ts.get("tot")),
         ("FG %", ts.get("2pct"), "Defensive Reb", ts.get("dr")),
@@ -177,8 +161,7 @@ def generate_team_stats_html(ts):
             <td style='padding:8px; text-align:center;'>{r(v1)}</td>
             <td style='padding:8px; border-left:1px solid #ddd;'><b>{l2}</b></td>
             <td style='padding:8px; text-align:center;'>{r(v2)}</td>
-        </tr>
-        """
+        </tr>"""
     html += "</table></div>"
     return html
 
@@ -209,7 +192,6 @@ def generate_custom_sections_html(df_off, df_def, df_about):
     html += "</div>"
     return html
 
-# --- WIEDER HINZUGEFÜGT: ---
 def generate_comparison_html(ts_h, ts_g, name_h, name_g):
     if not ts_h or not ts_g: return "<div>Keine Daten verfügbar</div>"
     
@@ -230,16 +212,15 @@ def generate_comparison_html(ts_h, ts_g, name_h, name_g):
         ("FT %", "ftpct", False)
     ]
 
-    html = f"""
-    <div style='background-color:white; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); max-width:800px; margin:0 auto;'>
+    # KORREKTUR: HTML beginnt direkt ohne Einrückung
+    html = f"""<div style='background-color:white; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); max-width:800px; margin:0 auto;'>
         <h2 style='text-align:center; margin-bottom:20px;'>Vergleich: {name_h} vs {name_g}</h2>
         <table style='width:100%; border-collapse:collapse; font-family:sans-serif;'>
             <tr style='background-color:#333; color:white;'>
                 <th style='padding:10px; text-align:center; width:30%;'>{name_h}</th>
                 <th style='padding:10px; text-align:center; width:40%;'>Kategorie</th>
                 <th style='padding:10px; text-align:center; width:30%;'>{name_g}</th>
-            </tr>
-    """
+            </tr>"""
 
     for i, (label, key, is_inverse) in enumerate(metrics):
         val_h = sf(ts_h.get(key, 0))
@@ -271,8 +252,7 @@ def generate_comparison_html(ts_h, ts_g, name_h, name_g):
             <td style='padding:8px; text-align:center; {style_h}'>{d_h}</td>
             <td style='padding:8px; text-align:center; font-weight:bold; color:#555;'>{label}</td>
             <td style='padding:8px; text-align:center; {style_g}'>{d_g}</td>
-        </tr>
-        """
+        </tr>"""
         
     html += "</table></div>"
     return html
