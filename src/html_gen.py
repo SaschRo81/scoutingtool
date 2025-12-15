@@ -30,8 +30,6 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     shooters = df[df["3M"] >= 0.5].sort_values(by="3PCT", ascending=False).head(3)
     if shooters.empty: shooters = df.sort_values(by="3PCT", ascending=False).head(3)
     
-    fts = df[df["FTA"] >= 1.0].sort_values(by="FTPCT", ascending=True).head(3) # Schlechteste Werfer zuerst? Oder beste? Hier ascending=True -> Schlechteste (Hack-a-Shaq) oder Beste? 
-    # Üblicherweise Top 3 -> Beste. Also ascending=False
     fts = df.sort_values(by="FTPCT", ascending=False).head(3)
 
     def build_box(d, keys, cols, bolds=[], color="#333", title=""):
@@ -73,24 +71,18 @@ def generate_top3_html(df: pd.DataFrame) -> str:
 def generate_card_html(row, meta, notes, color_code):
     """
     Erzeugt die HTML-Karte für einen Spieler.
-    FIX: Bildgröße begrenzt, damit es nicht verzerrt.
+    Bildgröße ist begrenzt und fixiert, damit Layout stabil bleibt.
     """
-    # Name formatieren
     full_name = row.get("NAME_FULL", "Unknown")
-    
-    # Image Handling
     img_src = meta.get('img')
     if not img_src:
-        # Fallback Placeholder (Graues Männchen)
         img_src = "https://via.placeholder.com/150x200/cccccc/ffffff?text=No+Img"
 
-    # Tabellen-Styling für Stats
     def td(v, b=False): 
         s = "padding:3px 5px; border:1px solid #ccc; text-align:center; font-size:12px;"
         if b: s+= " font-weight:bold; background-color:#f9f9f9;"
         return f"<td style='{s}'>{v}</td>"
 
-    # Notizen Felder
     def note_row(label, val_l, val_r):
         return f"""
         <tr>
@@ -102,18 +94,13 @@ def generate_card_html(row, meta, notes, color_code):
 
     html = f"""
     <div style='border:1px solid #999; margin-bottom:15px; page-break-inside:avoid; background-color:#fff; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);'>
-        <!-- Header Leiste mit Farbe -->
         <div style='background-color:{color_code}; color:white; padding:5px 10px; font-weight:bold; font-size:14px; border-bottom:1px solid #666;'>
             #{row['NR']} {full_name} <span style='float:right; font-weight:normal; font-size:12px;'>{row.get('POS', '')} | {meta.get('height','-')} | {meta.get('age','-')} J</span>
         </div>
-        
         <table style='width:100%; border-collapse:collapse;'>
             <tr>
-                <!-- LINKE SPALTE: BILD -->
-                <!-- WICHTIG: width festlegen und vertical-align top, damit das Bild nicht mittig schwimmt -->
                 <td style='width:130px; vertical-align:top; padding:0; border-right:1px solid #ccc; background-color:#f0f0f0;'>
                     <div style='width:130px; height:180px; overflow:hidden; display:flex; justify-content:center; align-items:start;'>
-                        <!-- Bild CSS: width:100% füllt die 130px. height:auto erhält Aspect Ratio. min-height sorgt dafür, dass es nicht zu klein ist. -->
                         <img src='{img_src}' style='width:100%; height:auto; object-fit:cover; object-position:top;'>
                     </div>
                     <div style='padding:5px; text-align:center; font-size:11px; color:#333; border-top:1px solid #ccc;'>
@@ -121,10 +108,7 @@ def generate_card_html(row, meta, notes, color_code):
                         <b>MIN:</b> {row.get('MIN_DISPLAY','-')}
                     </div>
                 </td>
-
-                <!-- RECHTE SPALTE: STATS & NOTIZEN -->
                 <td style='vertical-align:top; padding:0;'>
-                    <!-- STATS TABELLE -->
                     <table style='width:100%; border-collapse:collapse; margin-bottom:5px;'>
                         <tr style='background-color:#eee; font-size:11px;'>
                             <th style='border:1px solid #ccc; padding:3px;'>PPG</th>
@@ -150,8 +134,6 @@ def generate_card_html(row, meta, notes, color_code):
                             {td(row['TOT'], True)} {td(row['AS'])} {td(row['TO'])}
                         </tr>
                     </table>
-
-                    <!-- NOTIZEN TABELLE -->
                     <table style='width:100%; border-collapse:collapse; margin-top:0;'>
                         {note_row("Off / Def", notes.get(f"l1_{row['PLAYER_ID']}",""), notes.get(f"r1_{row['PLAYER_ID']}",""))}
                         {note_row("Stärken", notes.get(f"l2_{row['PLAYER_ID']}",""), notes.get(f"r2_{row['PLAYER_ID']}",""))}
@@ -167,9 +149,7 @@ def generate_card_html(row, meta, notes, color_code):
 
 def generate_team_stats_html(ts):
     if not ts: return ""
-    
     def r(v): return round(v, 1) if isinstance(v, float) else v
-    
     html = """
     <div style='page-break-before:always; margin-top:20px;'>
         <h2 style='border-bottom:2px solid #333; padding-bottom:5px;'>Team Statistiken (Saison Durchschnitt)</h2>
@@ -181,7 +161,6 @@ def generate_team_stats_html(ts):
                 <th style='padding:8px; text-align:center;'>Wert</th>
             </tr>
     """
-    
     data = [
         ("Punkte", ts.get("ppg"), "Rebounds Total", ts.get("tot")),
         ("FG %", ts.get("2pct"), "Defensive Reb", ts.get("dr")),
@@ -190,7 +169,6 @@ def generate_team_stats_html(ts):
         ("Turnovers", ts.get("to"), "Steals", ts.get("st")),
         ("Fouls", ts.get("pf"), "Blocks", ts.get("bs"))
     ]
-    
     for i, (l1, v1, l2, v2) in enumerate(data):
         bg = "#f9f9f9" if i % 2 == 0 else "#fff"
         html += f"""
@@ -201,20 +179,16 @@ def generate_team_stats_html(ts):
             <td style='padding:8px; text-align:center;'>{r(v2)}</td>
         </tr>
         """
-        
     html += "</table></div>"
     return html
 
 def generate_custom_sections_html(df_off, df_def, df_about):
     html = "<div style='margin-top:30px;'>"
-    
     def render_section(title, df, color):
         if df is None or df.empty: return ""
-        # Prüfen ob Inhalte da sind (manchmal ist df nicht empty, hat aber leere rows)
         has_content = False
         for c in df.columns:
             if df[c].astype(str).str.strip().str.len().sum() > 0: has_content = True
-        
         if not has_content: return ""
 
         h = f"<h3 style='border-bottom:2px solid {color}; color:{color}; margin-top:20px;'>{title}</h3>"
@@ -233,5 +207,73 @@ def generate_custom_sections_html(df_off, df_def, df_about):
     html += render_section("Defense Keys", df_def, "#0055ff")
     html += render_section("General / About", df_about, "#333333")
     html += "</div>"
+    return html
+
+# --- DIESE FUNKTION HATTE GEFEHLT: ---
+def generate_comparison_html(ts_h, ts_g, name_h, name_g):
+    if not ts_h or not ts_g: return "<div>Keine Daten verfügbar</div>"
+    
+    def sf(val): 
+        try: return float(val) 
+        except: return 0.0
+
+    metrics = [
+        ("Punkte", "ppg", False),
+        ("Rebounds", "tot", False),
+        ("Assists", "as", False),
+        ("Steals", "st", False),
+        ("Blocks", "bs", False),
+        ("Turnover", "to", True),
+        ("Fouls", "pf", True),
+        ("2P %", "2pct", False),
+        ("3P %", "3pct", False),
+        ("FT %", "ftpct", False)
+    ]
+
+    html = f"""
+    <div style='background-color:white; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); max-width:800px; margin:0 auto;'>
+        <h2 style='text-align:center; margin-bottom:20px;'>Vergleich: {name_h} vs {name_g}</h2>
+        <table style='width:100%; border-collapse:collapse; font-family:sans-serif;'>
+            <tr style='background-color:#333; color:white;'>
+                <th style='padding:10px; text-align:center; width:30%;'>{name_h}</th>
+                <th style='padding:10px; text-align:center; width:40%;'>Kategorie</th>
+                <th style='padding:10px; text-align:center; width:30%;'>{name_g}</th>
+            </tr>
+    """
+
+    for i, (label, key, is_inverse) in enumerate(metrics):
+        val_h = sf(ts_h.get(key, 0))
+        val_g = sf(ts_g.get(key, 0))
+        
+        if "pct" in key:
+            d_h = f"{round(val_h * 100 if val_h <= 1 else val_h, 1)}%"
+            d_g = f"{round(val_g * 100 if val_g <= 1 else val_g, 1)}%"
+        else:
+            d_h = f"{round(val_h, 1)}"
+            d_g = f"{round(val_g, 1)}"
+
+        style_h = ""
+        style_g = ""
+        bold = "font-weight:bold; color:#000;"
+        muted = "color:#666;"
+
+        if val_h == val_g:
+            style_h = muted; style_g = muted
+        elif (val_h > val_g and not is_inverse) or (val_h < val_g and is_inverse):
+            style_h = bold; style_g = muted
+        else:
+            style_h = muted; style_g = bold
+            
+        bg = "#f9f9f9" if i % 2 == 0 else "#ffffff"
+        
+        html += f"""
+        <tr style='background-color:{bg}; border-bottom:1px solid #eee;'>
+            <td style='padding:8px; text-align:center; {style_h}'>{d_h}</td>
+            <td style='padding:8px; text-align:center; font-weight:bold; color:#555;'>{label}</td>
+            <td style='padding:8px; text-align:center; {style_g}'>{d_g}</td>
+        </tr>
+        """
+        
+    html += "</table></div>"
     return html
 # --- END OF FILE src/html_gen.py ---
