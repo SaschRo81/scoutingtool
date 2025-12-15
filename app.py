@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime, date, time 
 import time as time_module 
 from urllib.parse import quote_plus 
+import base64  # <--- HINZUGEFÜGT: Fehlte für Bild-Uploads im PDF
 
 try:
     import pdfkit
@@ -501,7 +502,9 @@ def render_scouting_page():
                         for item in res:
                             st.session_state.saved_colors[item["pid"]] = item["color"]; 
                             for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
-                        tn = (guest_name_selected if target_radio_selection == "Gastteam (Gegner)" else home_name_selected).replace(" ", "_")
+                        # --- FEHLERBEHEBUNG HIER ---
+                        # Alte Variablennamen ersetzt: guest_name_selected -> gn, target_radio_selection -> target, home_name_selected -> hn
+                        tn = (gn if target == "Gastteam (Gegner)" else hn).replace(" ", "_")
                         st.session_state.report_filename = f"Scouting_Report_{tn}_{d_inp.strftime('%d.%m.%Y')}.pdf"
                         html = generate_header_html(st.session_state.game_meta); html += generate_top3_html(st.session_state.roster_df)
                         for item in res: meta = get_player_metadata_cached(item["pid"]); html += generate_card_html(item["row"].to_dict(), meta, item["notes"], cmap[item["color"]])
