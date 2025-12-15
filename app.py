@@ -551,7 +551,7 @@ def render_scouting_page():
                                     "margin-bottom": "5mm", 
                                     "margin-left": "5mm", 
                                     "encoding": "UTF-8", 
-                                    "zoom": "0.7",  # Angepasst auf 0.6 damit es nicht zu groß ist
+                                    "zoom": "0.6",  # Angepasst auf 0.6 damit es nicht zu groß ist
                                     "load-error-handling": "ignore", 
                                     "load-media-error-handling": "ignore", 
                                     "javascript-delay": "1000"
