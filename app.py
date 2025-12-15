@@ -36,6 +36,7 @@ from src.analysis_ui import (
 )
 
 # --- KONFIGURATION ---
+# Standard-Saison (wird aber durch Fallback überschrieben falls leer)
 CURRENT_SEASON_ID = "2025" 
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
@@ -209,7 +210,14 @@ def render_team_stats_page():
                 st.rerun()
         
         with st.spinner("Lade Team Statistiken..."):
-            df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
+            # 1. VERSUCH: SAISON 2025
+            active_season = "2025"
+            df, ts = fetch_team_data(tid, active_season)
+            
+            # 2. VERSUCH: FALLBACK AUF 2024, falls 2025 leer ist
+            if df is None or df.empty:
+                active_season = "2024"
+                df, ts = fetch_team_data(tid, active_season)
             
         if df is not None and not df.empty:
             t_info = TEAMS_DB.get(tid, {})
@@ -219,14 +227,16 @@ def render_team_stats_page():
             
             c1, c2 = st.columns([1, 4])
             with c1: 
-                if logo_b64: st.image(logo_b64, width=100) # Kleinere Darstellung
+                if logo_b64: st.image(logo_b64, width=100)
                 else: st.markdown("🏀", unsafe_allow_html=True)
             with c2: 
                 st.title(f"Statistik: {name}")
+                if active_season != CURRENT_SEASON_ID:
+                    st.warning(f"Hinweis: Daten für Saison 2025 noch nicht verfügbar. Zeige Daten der Saison {active_season}.")
             
             st.divider()
             
-            st.subheader(f"Saison Durchschnittswerte (Saison {CURRENT_SEASON_ID})")
+            st.subheader(f"Saison Durchschnittswerte (Saison {active_season})")
             if ts:
                 m1, m2, m3, m4, m5, m6 = st.columns(6)
                 m1.metric("Punkte", f"{ts.get('ppg', 0):.1f}")
@@ -267,7 +277,7 @@ def render_team_stats_page():
             }
             st.dataframe(df[display_cols], column_config=col_config, hide_index=True, use_container_width=True, height=600)
         else:
-            st.error("Daten konnten nicht geladen werden.")
+            st.error(f"Daten konnten weder für Saison 2025 noch für 2024 geladen werden (Team-ID: {tid}).")
     else:
         render_page_header("📈 Team Statistiken")
         tab_nord, tab_sued = st.tabs(["Nord", "Süd"])
@@ -279,21 +289,16 @@ def render_team_stats_page():
                 col = cols[idx % 5]
                 with col:
                     with st.container(border=True):
-                        # Bild laden
+                        # AGGRESSIVES LADEN
                         logo_b64 = get_best_team_logo(tid)
                         
-                        # Zentrierung mittels Spalten (1,2,1) Trick für Streamlit
-                        c_left, c_mid, c_right = st.columns([1, 2, 1])
-                        with c_mid:
-                            if logo_b64: 
-                                # HIER DIE GRÖSSE ANPASSEN (width=100)
-                                st.image(logo_b64, width=100) 
-                            else: 
-                                st.markdown(f"<div style='font-size: 40px; text-align:center;'>🏀</div>", unsafe_allow_html=True)
+                        # ZENTRIEREN MIT STREAMLIT COLUMNS
+                        c_l, c_m, c_r = st.columns([1, 2, 1])
+                        with c_m:
+                            if logo_b64: st.image(logo_b64, width=100)
+                            else: st.markdown(f"<div style='font-size: 40px; text-align:center;'>🏀</div>", unsafe_allow_html=True)
                         
-                        st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center; margin-bottom: 10px;'>{info['name']}</div>", unsafe_allow_html=True)
-                        
-                        # Button volle Breite
+                        st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center;'>{info['name']}</div>", unsafe_allow_html=True)
                         if st.button("Stats anzeigen", key=f"btn_stats_{tid}", use_container_width=True):
                             st.session_state.stats_team_id = tid
                             st.rerun()
@@ -526,7 +531,12 @@ def render_scouting_page():
         
         if click_load or (st.session_state.roster_df is None and cur_tid != tid) or (st.session_state.roster_df is not None and cur_tid != tid):
             with st.spinner("Lade Daten..."):
-                df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
+                # VERSUCH 1: 2025
+                df, ts = fetch_team_data(tid, "2025")
+                # VERSUCH 2: 2024
+                if df is None or df.empty:
+                    df, ts = fetch_team_data(tid, "2024")
+
                 if df is not None and not df.empty: 
                     st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
                     st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
