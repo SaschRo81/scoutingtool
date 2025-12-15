@@ -84,6 +84,8 @@ def render_home():
             background-position: center;
             background-repeat: no-repeat;
             background-attachment: fixed;
+            /* 30% Transparenz bedeutet 0.7 (70%) Deckkraft */
+            opacity: 0.7; 
         }
 
         /* Um die Opazität (Transparenz) zu erreichen, nutzen wir einen Trick mit einem Overlay */
