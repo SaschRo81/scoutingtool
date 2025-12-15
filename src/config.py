@@ -1,7 +1,7 @@
 import streamlit as st
 
 # Version
-VERSION = "v5.0"
+VERSION = "v4.3 (Secure Mode)"
 
 # --- API KONFIGURATION ---
 try:
@@ -56,63 +56,127 @@ TEAMS_DB = {
 }
 
 # Zentrales CSS
-# --- CSS STYLES ---
 CSS_STYLES = """
 <style>
-    @page { margin: 5mm; size: A4 portrait; }
-    body { font-family: sans-serif; -webkit-print-color-adjust: exact; }
+    body { font-family: 'Arial', sans-serif; font-size: 12px; }
     
-    /* HEADER */
-    .report-header { text-align: center; border-bottom: 3px solid #333; margin-bottom: 20px; padding-bottom: 10px; }
-    .report-title { margin: 5px 0; font-size: 24px; text-transform: uppercase; }
-    .matchup-container { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding: 0 20px; }
-    .team-logo-box { width: 25%; text-align: center; }
+    /* --- HEADER BEREICH --- */
+    .report-header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
     
-    /* Logos festnageln */
-    .team-logo-img { height: 80px; width: auto; display: block; margin: 0 auto; }
+    /* Scouting Report Titel größer (H1) */
+    .report-title { font-size: 32px; font-weight: bold; margin: 0 0 10px 0; color: #000; }
     
-    .team-name-text { font-weight: bold; margin-top: 5px; font-size: 14px; }
-    .vs-text { font-size: 28px; font-weight: bold; color: #555; width: 10%; text-align: center; }
+    .matchup-container { display: flex; align-items: center; justify-content: center; gap: 50px; margin-top: 15px; }
+    .team-logo-box { text-align: center; }
+    
+    /* Logos größer */
+    .team-logo-img { height: 90px; max-width: 200px; object-fit: contain; }
+    
+    /* Teamnamen größer */
+    .team-name-text { font-size: 18px; font-weight: bold; margin-top: 8px; }
+    
+    .vs-text { font-size: 30px; font-weight: bold; color: #333; }
 
-    /* TOP 3 BOXES */
-    .top3-container { display: flex; gap: 10px; margin-bottom: 15px; }
-    .stat-box { flex: 1; border: 1px solid #ccc; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); }
-    .stat-title { background: #f9f9f9; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 14px !important; }
-    .top3-table th { background: #eee; font-size: 10px; text-align: center; }
-    .top3-table td { text-align: center; padding: 4px; font-size: 11px; }
+    /* --- TOP 3 BOXEN --- */
+    .top3-container { display: flex; flex-direction: row; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; }
+    .stat-box { flex: 1; border: 1px solid #ccc; }
+    .top3-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
+    .top3-table td { text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
 
-    /* PLAYER CARD */
-    .player-card { border: 1px solid #999; margin-bottom: 15px; page-break-inside: avoid; background-color: #fff; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
-    .card-header { color: white; padding: 6px 10px; font-weight: bold; font-size: 14px; border-bottom: 1px solid #666; display: flex; justify-content: space-between; }
-    
-    .layout-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    
-    /* BILD STEUERUNG */
-    /* Wir nutzen jetzt background-image im HTML, daher ist die img Klasse weniger wichtig, 
-       aber die Zelle muss die Größe erzwingen */
-    .layout-img-cell { 
-        width: 130px; 
-        height: 160px;
-        vertical-align: top; 
-        padding: 0; 
-        background-color: #f0f0f0; 
-        border-right: 1px solid #ccc; 
-        overflow: hidden; /* WICHTIG: Alles was übersteht abschneiden */
+    /* --- SPIELER KARTE --- */
+    .player-card { 
+        border: 1px solid #ccc; margin-bottom: 15px; 
+        background-color: white; page-break-inside: avoid; 
+        font-family: Arial, sans-serif;
     }
     
-    /* STATS TABELLE */
-    .layout-stats-cell { vertical-align: top; padding: 0; }
-    .stats-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .stats-table th, .stats-table td { border: 1px solid #ccc; padding: 4px; text-align: center; }
-    .bg-gray { background-color: #eee; }
+    /* Header (Farb-Balken): Text größer & vertikal zentriert */
+    .card-header { 
+        color: white; 
+        padding: 5px 12px; /* Mehr Padding */
+        font-weight: bold; 
+        font-size: 18px;   /* Größere Schrift */
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; /* Vertikal zentrieren */
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        line-height: 1.2;
+    }
+
+    .card-body { width: 100%; }
+    
+    /* Layout Tabelle (Bild links, Stats rechts) */
+    .layout-table {
+        width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;
+    }
+    .layout-img-cell {
+        width: 160px;
+        min-width: 160px;
+        max-width: 160px;
+        vertical-align: top;
+        padding: 0;
+        border-right: 1px solid #ccc;
+    }
+    .layout-stats-cell {
+        vertical-align: top;
+        padding: 0;
+        width: auto;
+    }
+    /* Das Bild selbst */
+    .player-img { 
+        width: 100%; 
+        height: 100%;      /* <--- HIER ERHÖHEN (z.B. auf 160px oder 180px) */
+        object-fit: cover; 
+        display: block; 
+    }
+    
+    /* Stats Tabelle */
+    .stats-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        font-size: 16px; 
+        text-align: center; 
+        color: black; 
+    }
+    
+    /* HIER GEÄNDERT: Mehr Platz und vertikale Zentrierung */
+    .stats-table th, .stats-table td { 
+        border: 1px solid #ccc; 
+        padding: 5px 0px;       /* Vorher 2px -> Jetzt 5px für mehr Luft oben/unten */
+        vertical-align: middle; /* Zwingt den Text in die vertikale Mitte */
+        letter-spacing: -0.5px;
+    }
+
+    .bg-gray { 
+        background-color: #e6e6e6; 
+        -webkit-print-color-adjust: exact; 
+    }
+    
     .font-bold { font-weight: bold; }
     
-    /* NOTIZEN */
-    .note-row td { text-align: left; vertical-align: top; border: 1px solid #ddd; padding: 4px; height: 18px; }
-    .note-left { font-size: 11px; color: #666; background: #fcfcfc; font-weight: bold; }
-    .note-right { font-size: 12px; background: #fff; }
+    /* HIER GEÄNDERT: Schriftgröße für die manuellen Notizen (asdf...) */
+    .note-row td { 
+        height: 24px;           /* Zeile etwas höher machen */
+        text-align: left; 
+        padding-left: 5px;
+        font-size: 20px;        /* Schriftgröße explizit erhöht (wie Header) */
+        vertical-align: middle; /* Auch hier schön mittig */
+    }
+    
+    .note-left { font-weight: normal; }
+    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; }
 
-    /* TEAM STATS */
-    .team-stats-container { margin-top: 20px; page-break-before: always; }
+    .font-bold { font-weight: bold; }
+    .note-row td { height: 20px; text-align: left; padding-left: 5px; }
+    .note-left { font-weight: normal; }
+    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; }
+
+    .team-stats-container { margin-top: 30px; page-break-inside: avoid; }
+    
+    @media print {
+        body { -webkit-print-color-adjust: exact; zoom: 0.44; }
+        .no-print { display: none; }
+    }
 </style>
 """
