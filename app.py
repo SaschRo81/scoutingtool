@@ -36,7 +36,6 @@ from src.analysis_ui import (
 )
 
 # --- KONFIGURATION ---
-# Standard-Saison (wird aber durch Fallback überschrieben falls leer)
 CURRENT_SEASON_ID = "2025" 
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
@@ -211,10 +210,10 @@ def render_team_stats_page():
         
         with st.spinner("Lade Team Statistiken..."):
             # 1. VERSUCH: SAISON 2025
-            active_season = "2025"
+            active_season = CURRENT_SEASON_ID
             df, ts = fetch_team_data(tid, active_season)
             
-            # 2. VERSUCH: FALLBACK AUF 2024, falls 2025 leer ist
+            # 2. VERSUCH: FALLBACK AUF 2024
             if df is None or df.empty:
                 active_season = "2024"
                 df, ts = fetch_team_data(tid, active_season)
@@ -232,7 +231,7 @@ def render_team_stats_page():
             with c2: 
                 st.title(f"Statistik: {name}")
                 if active_season != CURRENT_SEASON_ID:
-                    st.warning(f"Hinweis: Daten für Saison 2025 noch nicht verfügbar. Zeige Daten der Saison {active_season}.")
+                    st.caption(f"Daten aus Saison {active_season} geladen.")
             
             st.divider()
             
@@ -292,7 +291,6 @@ def render_team_stats_page():
                         # AGGRESSIVES LADEN
                         logo_b64 = get_best_team_logo(tid)
                         
-                        # ZENTRIEREN MIT STREAMLIT COLUMNS
                         c_l, c_m, c_r = st.columns([1, 2, 1])
                         with c_m:
                             if logo_b64: st.image(logo_b64, width=100)
@@ -531,17 +529,23 @@ def render_scouting_page():
         
         if click_load or (st.session_state.roster_df is None and cur_tid != tid) or (st.session_state.roster_df is not None and cur_tid != tid):
             with st.spinner("Lade Daten..."):
-                # VERSUCH 1: 2025
-                df, ts = fetch_team_data(tid, "2025")
-                # VERSUCH 2: 2024
+                # NEU: HIER AUCH FALLBACK LOGIK EINGEBAUT
+                active_season = CURRENT_SEASON_ID
+                df, ts = fetch_team_data(tid, active_season)
+                
                 if df is None or df.empty:
-                    df, ts = fetch_team_data(tid, "2024")
+                    active_season = "2024"
+                    df, ts = fetch_team_data(tid, active_season)
 
                 if df is not None and not df.empty: 
                     st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
                     st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
                     st.session_state.print_mode = False 
-                else: st.error("Fehler API."); st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
+                    if active_season != CURRENT_SEASON_ID:
+                        st.toast(f"Hinweis: Kader aus Saison {active_season} geladen (2025 leer).", icon="⚠️")
+                else: 
+                    st.error("Fehler API: Keine Daten für 2025 oder 2024 gefunden."); 
+                    st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
         elif st.session_state.roster_df is None or st.session_state.roster_df.empty: st.info("Bitte laden.")
         
         if st.session_state.roster_df is not None and not st.session_state.roster_df.empty: 
