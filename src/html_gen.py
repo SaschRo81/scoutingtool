@@ -209,7 +209,7 @@ def generate_custom_sections_html(df_off, df_def, df_about):
     html += "</div>"
     return html
 
-# --- DIESE FUNKTION HATTE GEFEHLT: ---
+# --- WIEDER HINZUGEFÜGT: ---
 def generate_comparison_html(ts_h, ts_g, name_h, name_g):
     if not ts_h or not ts_g: return "<div>Keine Daten verfügbar</div>"
     
