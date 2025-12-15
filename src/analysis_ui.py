@@ -5,6 +5,8 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
+from src.config import SEASON_ID # <--- NEU IMPORTIERT
+from src.api import fetch_standings # <--- NEU IMPORTIERT
 
 # --- KONSTANTEN & HELPERS ---
 
@@ -320,21 +322,6 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
     st.markdown(f"#### {team_name}"); calc_height = (len(df) + 1) * 35 + 3; st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
     if coach_name and coach_name != "-": st.markdown(f"*Head Coach: {coach_name}*")
 
-def render_game_top_performers(box):
-    h_data = box.get("homeTeam", {}); g_data = box.get("guestTeam", {}); h_name = get_team_name(h_data, "Heim"); g_name = get_team_name(g_data, "Gast")
-    def get_top3(stats_list, key="points"):
-        active = [p for p in stats_list if safe_int(p.get("secondsPlayed")) > 0]
-        return sorted(active, key=lambda x: safe_int(x.get(key)), reverse=True)[:3]
-    def mk_box(players, title, color, val_key="points"):
-        html = f"<div style='flex:1; border:1px solid #ccc; margin:5px;'><div style='background:{color}; color:white; padding:5px; font-weight:bold; text-align:center;'>{title}</div><table style='width:100%; border-collapse:collapse;'>"
-        for p in players:
-             name = f"{p.get('seasonPlayer', {}).get('lastName', '')}"; val = safe_int(p.get(val_key))
-             html += f"<tr><td style='padding:6px; font-size:16px;'>{name}</td><td style='padding:6px; text-align:right; font-weight:bold; font-size:16px;'>{val}</td></tr>"
-        return html + "</table></div>"
-    st.markdown("#### Top Performer")
-    html = f"""<div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">{mk_box(get_top3(h_data.get("playerStats", []), "points"), f"Points ({h_name})", "#e35b00", "points")}{mk_box(get_top3(g_data.get("playerStats", []), "points"), f"Points ({g_name})", "#e35b00", "points")}</div><div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">{mk_box(get_top3(h_data.get("playerStats", []), "totalRebounds"), f"Rebounds ({h_name})", "#0055ff", "totalRebounds")}{mk_box(get_top3(g_data.get("playerStats", []), "totalRebounds"), f"Rebounds ({g_name})", "#0055ff", "totalRebounds")}</div>"""
-    st.markdown(html, unsafe_allow_html=True)
-
 def render_charts_and_stats(box):
     h = box.get("homeTeam", {}).get("gameStat", {}); g = box.get("guestTeam", {}).get("gameStat", {}); h_name = get_team_name(box.get("homeTeam", {}), "Heim"); g_name = get_team_name(box.get("guestTeam", {}), "Gast"); actions = box.get("actions", []); hid = str(box.get("homeTeam", {}).get("seasonTeam", {}).get("seasonTeamId", "0")); gid = str(box.get("guestTeam", {}).get("seasonTeam", {}).get("seasonTeamId", "0")); cs = calculate_advanced_stats_from_actions(actions, hid, gid)
     def mk_label(pct, made, att): return f"{pct}% ({made}/{att})"
@@ -405,8 +392,6 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                     img_url = None
                     if metadata_callback:
                         # Wir rufen ab, wenn Daten fehlen ODER Bild fehlt
-                        # Aber Achtung: Callback ist teuer, daher Logik beachten
-                        # Einfachste Logik: Wenn irgendwas fehlt, Callback
                         meta = None
                         if age in ["-", ""] or nat in ["-", ""] or height in ["-", ""] or not row.get("img"):
                             meta = metadata_callback(row["PLAYER_ID"])
@@ -420,7 +405,6 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                             img_url = row.get("img")
                     else:
                         img_url = row.get("img")
-
 
                     with col_img:
                         if img_url:
@@ -466,6 +450,79 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                         st.markdown(f"<div style='background-color:{color};color:white;text-align:center;padding:10px;border-radius:5px;font-weight:bold;' title='{g['date']}\n{g['home']} vs {g['guest']}\n{g['score']}'>{char}</div>", unsafe_allow_html=True)
             else: st.info("Keine gespielten Spiele.")
         else: st.info("Keine Spiele.")
+        
+        # --- TABELLE EINFÜGEN ---
+        st.write("")
+        st.markdown("#### Aktueller Tabellenplatz")
+        
+        # Tabelle laden (cached)
+        standings_map = fetch_standings(SEASON_ID)
+        team_stat = standings_map.get(str(team_id))
+        
+        if team_stat:
+            # Daten extrahieren
+            rank = team_stat.get("rank", "-")
+            team_n = team_stat.get("team", {}).get("name", team_name)
+            played = team_stat.get("matchesPlayed", 0)
+            wins = team_stat.get("wins", 0)
+            losses = team_stat.get("losses", 0)
+            pts = team_stat.get("points", 0)
+            
+            p_scored = team_stat.get("pointsScored", 0)
+            p_conceded = team_stat.get("pointsConceded", 0)
+            diff = team_stat.get("pointsDifference", 0)
+            streak = team_stat.get("streak", "-")
+            
+            # Heim/Gast Statistik (falls in der API, oft nested, hier vereinfacht falls nicht verfügbar)
+            # Wir nehmen erstmal an, dass wir nur Overall haben, da die API Struktur variieren kann
+            # Wenn Home/Away Record verfügbar ist, nutzen wir ihn (oft unter "homePerformance")
+            home_w = team_stat.get("homePerformance", {}).get("wins", "-")
+            home_l = team_stat.get("homePerformance", {}).get("losses", "-")
+            home_str = f"{home_w}-{home_l}" if home_w != "-" else "-"
+            
+            guest_w = team_stat.get("guestPerformance", {}).get("wins", "-")
+            guest_l = team_stat.get("guestPerformance", {}).get("losses", "-")
+            guest_str = f"{guest_w}-{guest_l}" if guest_w != "-" else "-"
+            
+            # Last 10 ist in der einfachen API oft nicht drin, wir nehmen Streak oder "-"
+            last10 = "-" 
+            
+            # HTML Table
+            html_table = f"""
+            <table style="width:100%; font-size:12px; border-collapse: collapse; text-align: center;">
+                <tr style="background-color: #f0f0f0; border-bottom: 1px solid #ddd;">
+                    <th style="padding: 5px;">PL</th>
+                    <th style="padding: 5px; text-align: left;">Team</th>
+                    <th style="padding: 5px;">G</th>
+                    <th style="padding: 5px;">S</th>
+                    <th style="padding: 5px;">N</th>
+                    <th style="padding: 5px;">PKT</th>
+                    <th style="padding: 5px;">+/-</th>
+                    <th style="padding: 5px;">Diff</th>
+                    <th style="padding: 5px;">Heim</th>
+                    <th style="padding: 5px;">Gast</th>
+                    <th style="padding: 5px;">Last 10</th>
+                    <th style="padding: 5px;">Serie</th>
+                </tr>
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 5px; font-weight: bold;">{rank}</td>
+                    <td style="padding: 5px; text-align: left;">{team_n}</td>
+                    <td style="padding: 5px;">{played}</td>
+                    <td style="padding: 5px; color: green;">{wins}</td>
+                    <td style="padding: 5px; color: red;">{losses}</td>
+                    <td style="padding: 5px; font-weight: bold;">{pts}</td>
+                    <td style="padding: 5px;">{p_scored}:{p_conceded}</td>
+                    <td style="padding: 5px;">{diff}</td>
+                    <td style="padding: 5px;">{home_str}</td>
+                    <td style="padding: 5px;">{guest_str}</td>
+                    <td style="padding: 5px;">{last10}</td>
+                    <td style="padding: 5px;">{streak}</td>
+                </tr>
+            </table>
+            """
+            st.markdown(html_table, unsafe_allow_html=True)
+        else:
+            st.info("Tabellendaten nicht verfügbar.")
 
 def render_live_view(box):
     """Zeigt Live Stats und PBP nebeneinander für Mobile optimiert."""
