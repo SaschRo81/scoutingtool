@@ -238,19 +238,24 @@ def fetch_team_data(team_id, season_id):
             df["PPG"] = get_n("pointspergame"); df["TOT"] = get_n("totalreboundspergame"); df["AS"] = get_n("assistspergame")
             df["TO"] = get_n("turnoverspergame"); df["ST"] = get_n("stealspergame"); df["BS"] = get_n("blockspergame"); df["PF"] = get_n("foulscommittedpergame")
             
+            # --- START KORRIGIERTER BLOCK ---
             m2 = get_n("twopointshotsmadepergame"); a2 = get_n("twopointshotsattemptedpergame")
             m3 = get_n("threepointshotsmadepergame"); a3 = get_n("threepointshotsattemptedpergame")
             
-            # --- KORREKTUR START: Spalten explizit zuweisen ---
+            # Spalten explizit zuweisen
             df["2M"] = m2
             df["2A"] = a2
-            df["3M"] = m3  # <-- Das hat gefehlt und den Fehler verursacht
+            df["3M"] = m3
             df["3A"] = a3
             df["FTM"] = get_n("freethrowsmadepergame")
             df["FTA"] = get_n("freethrowsattemptedpergame")
-            # --- KORREKTUR ENDE ---
-
+            
+            # DIESE ZEILEN HABEN GEFEHLT (Fix für KeyError 'DR' und 'OR'):
+            df["DR"] = get_n("defensivereboundspergame")
+            df["OR"] = get_n("offensivereboundspergame")
+            
             total_att = a2 + a3
+            # --- ENDE KORRIGIERTER BLOCK ---
             
             total_att = a2 + a3
             df["FG%"] = pd.Series([0.0]*len(df), index=df.index)
