@@ -9,10 +9,14 @@ from src.config import API_HEADERS, SEASON_ID
 
 # Lokale Hilfsfunktionen
 def optimize_image_base64(url): return url 
+
 def format_minutes(seconds):
     if seconds is None: return "00:00"
     try:
-        sec = int(seconds); m = sec // 60; s = sec % 60; return f"{m:02d}:{s:02d}"
+        sec = int(seconds)
+        m = sec // 60
+        s = sec % 60
+        return f"{m:02d}:{s:02d}"
     except: return "00:00"
 
 def calculate_age(birthdate_str):
@@ -182,7 +186,7 @@ def fetch_team_data(team_id, season_id):
                 "lastname": ["seasonplayer.person.lastname", "person.lastname", "lastname"],
                 "shirtnumber": ["seasonplayer.shirtnumber", "jerseynumber", "shirtnumber", "no"], 
                 "id": ["seasonplayer.personid", "seasonplayer.id", "playerid", "person.id", "id"],
-                "position": ["seasonplayer.position", "position"] # Position Mapping hinzugefügt
+                "position": ["seasonplayer.position", "position"] 
             }
             final_cols = {}
             for target, opts in col_map.items():
@@ -221,7 +225,6 @@ def fetch_team_data(team_id, season_id):
             # Priorisiere Roster-Position, falls API-Position leer/komisch ist
             df["POS"] = df.apply(lambda x: x["POS_ROSTER"] if x["POS_ROSTER"] != "-" else x["POS"], axis=1)
 
-            
             # Stats
             df["GP"] = get_n("gamesplayed").replace(0,1)
             min_raw = get_n("minutespergame")
@@ -235,32 +238,43 @@ def fetch_team_data(team_id, season_id):
                     df.loc[mask_zero, "MIN_FINAL"] = sec_series[mask_zero] / df.loc[mask_zero, "GP"]
             
             df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
-            df["PPG"] = get_n("pointspergame"); df["TOT"] = get_n("totalreboundspergame"); df["AS"] = get_n("assistspergame")
-            df["TO"] = get_n("turnoverspergame"); df["ST"] = get_n("stealspergame"); df["BS"] = get_n("blockspergame"); df["PF"] = get_n("foulscommittedpergame")
             
-            # --- START KORRIGIERTER BLOCK ---
-            m2 = get_n("twopointshotsmadepergame"); a2 = get_n("twopointshotsattemptedpergame")
-            m3 = get_n("threepointshotsmadepergame"); a3 = get_n("threepointshotsattemptedpergame")
+            # BASIS STATS
+            df["PPG"] = get_n("pointspergame")
+            df["TOT"] = get_n("totalreboundspergame")
+            df["AS"] = get_n("assistspergame")
+            df["TO"] = get_n("turnoverspergame")
+            df["ST"] = get_n("stealspergame")
+            df["BS"] = get_n("blockspergame")
+            df["PF"] = get_n("foulscommittedpergame")
             
-            # Spalten explizit zuweisen
+            # DETAIL STATS - Explizite Zuweisung für HTML Generator
+            m2 = get_n("twopointshotsmadepergame")
+            a2 = get_n("twopointshotsattemptedpergame")
+            m3 = get_n("threepointshotsmadepergame")
+            a3 = get_n("threepointshotsattemptedpergame")
+            
             df["2M"] = m2
             df["2A"] = a2
             df["3M"] = m3
             df["3A"] = a3
             df["FTM"] = get_n("freethrowsmadepergame")
             df["FTA"] = get_n("freethrowsattemptedpergame")
-            
-            # DIESE ZEILEN HABEN GEFEHLT (Fix für KeyError 'DR' und 'OR'):
             df["DR"] = get_n("defensivereboundspergame")
             df["OR"] = get_n("offensivereboundspergame")
-            
+
             total_att = a2 + a3
             df["FG%"] = pd.Series([0.0]*len(df), index=df.index)
             mask_att = total_att > 0
             df.loc[mask_att, "FG%"] = ((m2[mask_att]+m3[mask_att]) / total_att[mask_att] * 100).round(1)
             
-            df["3PCT"] = get_n("threepointshotsuccesspercent").apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
-            df["FTPCT"] = get_n("freethrowssuccesspercent").apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
+            # PROZENTE (Wenn < 1 dann * 100, sonst runden)
+            def fix_pct(x):
+                return round(x*100, 1) if x <= 1 else round(x, 1)
+
+            df["2PCT"] = get_n("twopointshotsuccesspercent").apply(fix_pct)
+            df["3PCT"] = get_n("threepointshotsuccesspercent").apply(fix_pct)
+            df["FTPCT"] = get_n("freethrowssuccesspercent").apply(fix_pct)
             
             df["select"] = False
         else:
