@@ -98,7 +98,6 @@ def fetch_team_data(team_id, season_id):
                 df = pd.json_normalize(p_list)
                 df.columns = [str(c).lower() for c in df.columns]
                 
-                # Helfer zum sicheren Abrufen von Werten
                 def get_val(key, default=0.0):
                     matches = [c for c in df.columns if key == c or (key in c and 'pergame' not in c and 'percent' not in c)]
                     if matches:
@@ -106,7 +105,14 @@ def fetch_team_data(team_id, season_id):
                         return pd.to_numeric(df[c], errors="coerce").fillna(default)
                     return pd.Series([default]*len(df), index=df.index)
 
-                # Basis Daten
+                def get_pct(key, default=0.0):
+                    matches = [c for c in df.columns if key in c and 'percent' in c]
+                    if matches:
+                        c = sorted(matches, key=len)[0]
+                        s = pd.to_numeric(df[c], errors="coerce").fillna(default)
+                        return s.apply(lambda x: round(x, 1) if x > 1 else round(x * 100, 1))
+                    return pd.Series([default]*len(df), index=df.index)
+
                 col_fn = next((c for c in df.columns if "firstname" in c), None)
                 col_ln = next((c for c in df.columns if "lastname" in c), None)
                 col_nr = next((c for c in df.columns if "shirtnumber" in c or "jerseynumber" in c), None)
@@ -121,101 +127,76 @@ def fetch_team_data(team_id, season_id):
                 
                 df["GP"] = get_val("gamesplayed").replace(0, 1)
                 
-                # TOTALS (ABSOLUTE WERTE) aus der API ziehen
-                df["TOTAL_MINUTES"] = get_val("secondsplayed") / 60
-                df["TOTAL_PTS"] = get_val("points")
-                df["TOTAL_REB"] = get_val("totalrebounds")
-                df["TOTAL_AST"] = get_val("assists")
-                df["TOTAL_STL"] = get_val("steals")
-                df["TOTAL_TO"] = get_val("turnovers")
-                df["TOTAL_BLK"] = get_val("blocks")
-                df["TOTAL_PF"] = get_val("foulscommitted")
-                df["TOTAL_OR"] = get_val("offensiverebounds")
-                df["TOTAL_DR"] = get_val("defensiverebounds")
+                sec = get_val("secondsplayed")
+                if sec.sum() > 0: df["MIN_FINAL"] = sec / df["GP"]
+                else: df["MIN_FINAL"] = get_val("minutespergame")
+                df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
 
-                df["TOTAL_FGM"] = get_val("fieldgoalsmade")
-                df["TOTAL_FGA"] = get_val("fieldgoalsattempted")
-                df["TOTAL_3M"] = get_val("threepointshotsmade")
-                df["TOTAL_3A"] = get_val("threepointshotsattempted")
-                df["TOTAL_FTM"] = get_val("freethrowsmade")
-                df["TOTAL_FTA"] = get_val("freethrowsattempted")
+                df["TOTAL_PTS"] = get_val("points")
+                df["TOTAL_REB"] = get_val("totalrebounds"); df["TOTAL_AST"] = get_val("assists")
+                df["TOTAL_STL"] = get_val("steals"); df["TOTAL_TO"] = get_val("turnovers")
+                df["TOTAL_BLK"] = get_val("blocks"); df["TOTAL_PF"] = get_val("foulscommitted")
+                df["TOTAL_OR"] = get_val("offensiverebounds"); df["TOTAL_DR"] = get_val("defensiverebounds")
+                df["TOTAL_FGM"] = get_val("fieldgoalsmade"); df["TOTAL_FGA"] = get_val("fieldgoalsattempted")
+                df["TOTAL_3M"] = get_val("threepointshotsmade"); df["TOTAL_3A"] = get_val("threepointshotsattempted")
+                df["TOTAL_FTM"] = get_val("freethrowsmade"); df["TOTAL_FTA"] = get_val("freethrowsattempted")
                 df["TOTAL_2M"] = df["TOTAL_FGM"] - df["TOTAL_3M"]
                 df["TOTAL_2A"] = df["TOTAL_FGA"] - df["TOTAL_3A"]
                 
-                # PER GAME (DURCHSCHNITTSWERTE) für die Tabelle berechnen
-                df["MIN_DISPLAY"] = (df["TOTAL_MINUTES"] * 60 / df["GP"]).apply(format_minutes)
-                df["PPG"] = (df["TOTAL_PTS"] / df["GP"]).round(1)
-                df["TOT"] = (df["TOTAL_REB"] / df["GP"]).round(1)
-                df["AS"] = (df["TOTAL_AST"] / df["GP"]).round(1)
-                df["ST"] = (df["TOTAL_STL"] / df["GP"]).round(1)
-                df["TO"] = (df["TOTAL_TO"] / df["GP"]).round(1)
-                df["BS"] = (df["TOTAL_BLK"] / df["GP"]).round(1)
-                df["PF"] = (df["TOTAL_PF"] / df["GP"]).round(1)
-                df["OR"] = (df["TOTAL_OR"] / df["GP"]).round(1)
-                df["DR"] = (df["TOTAL_DR"] / df["GP"]).round(1)
-                df["2M"] = (df["TOTAL_2M"] / df["GP"]).round(1)
-                df["2A"] = (df["TOTAL_2A"] / df["GP"]).round(1)
-                df["3M"] = (df["TOTAL_3M"] / df["GP"]).round(1)
-                df["3A"] = (df["TOTAL_3A"] / df["GP"]).round(1)
-                df["FTM"] = (df["TOTAL_FTM"] / df["GP"]).round(1)
+                # PER GAME Werte
+                df["PPG"] = (df["TOTAL_PTS"] / df["GP"]).round(1); df["TOT"] = (df["TOTAL_REB"] / df["GP"]).round(1)
+                df["AS"] = (df["TOTAL_AST"] / df["GP"]).round(1); df["ST"] = (df["TOTAL_STL"] / df["GP"]).round(1)
+                df["TO"] = (df["TOTAL_TO"] / df["GP"]).round(1); df["BS"] = (df["TOTAL_BLK"] / df["GP"]).round(1)
+                df["PF"] = (df["TOTAL_PF"] / df["GP"]).round(1); df["OR"] = (df["TOTAL_OR"] / df["GP"]).round(1)
+                df["DR"] = (df["TOTAL_DR"] / df["GP"]).round(1); df["2M"] = (df["TOTAL_2M"] / df["GP"]).round(1)
+                df["2A"] = (df["TOTAL_2A"] / df["GP"]).round(1); df["3M"] = (df["TOTAL_3M"] / df["GP"]).round(1)
+                df["3A"] = (df["TOTAL_3A"] / df["GP"]).round(1); df["FTM"] = (df["TOTAL_FTM"] / df["GP"]).round(1)
                 df["FTA"] = (df["TOTAL_FTA"] / df["GP"]).round(1)
 
                 df["FG%"] = (df["TOTAL_FGM"] / df["TOTAL_FGA"] * 100).round(1).fillna(0)
                 df["3PCT"] = (df["TOTAL_3M"] / df["TOTAL_3A"] * 100).round(1).fillna(0)
                 df["FTPCT"] = (df["TOTAL_FTM"] / df["TOTAL_FTA"] * 100).round(1).fillna(0)
-
                 df["select"] = False
-
     except Exception as e:
         print(f"Error Player Stats ({base_url}): {e}")
 
     # 2. TEAM STATS LADEN ODER BERECHNEN
-    # Priorität 1: Direkten API Call versuchen
     try:
         r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
         if r_team.status_code == 200:
             data = r_team.json()
             td = data[0] if isinstance(data, list) and data else data
             if isinstance(td, dict) and td.get("pointsPerGame") is not None:
-                ts = { "ppg": td.get("pointsPerGame"), "tot": td.get("totalReboundsPerGame"), "as": td.get("assistsPerGame"),
-                       "to": td.get("turnoversPerGame"), "st": td.get("stealsPerGame"), "bs": td.get("blocksPerGame"),
-                       "pf": td.get("foulsCommittedPerGame"), "fgpct": td.get("fieldGoalsSuccessPercent"),
-                       "3pct": td.get("threePointShotsSuccessPercent"), "ftpct": td.get("freeThrowsSuccessPercent"),
-                       "or": td.get("offensiveReboundsPerGame"), "dr": td.get("defensiveReboundsPerGame") }
+                # FIX: Hier wurde der Fehler verursacht. Jeder Wert wird jetzt sicher mit "or 0" abgefangen
+                ts = {
+                    "ppg": td.get("pointsPerGame") or 0, "tot": td.get("totalReboundsPerGame") or 0,
+                    "as": td.get("assistsPerGame") or 0, "to": td.get("turnoversPerGame") or 0,
+                    "st": td.get("stealsPerGame") or 0, "bs": td.get("blocksPerGame") or 0,
+                    "pf": td.get("foulsCommittedPerGame") or 0, "fgpct": td.get("fieldGoalsSuccessPercent") or 0,
+                    "3pct": td.get("threePointShotsSuccessPercent") or 0, "ftpct": td.get("freeThrowsSuccessPercent") or 0,
+                    "or": td.get("offensiveReboundsPerGame") or 0, "dr": td.get("defensiveReboundsPerGame") or 0,
+                }
     except: pass
 
-    # Priorität 2: Aus Spielerdaten berechnen (falls API leer oder fehlerhaft)
+    # Fallback Berechnung, falls API leer
     if not ts and not df.empty:
         total_games = df["GP"].max() if not df.empty else 1
         if total_games == 0: total_games = 1
 
-        # Berechne die Summe der absoluten Stats des gesamten Teams
-        team_total_pts = df["TOTAL_PTS"].sum()
-        team_total_reb = df["TOTAL_REB"].sum()
-        team_total_ast = df["TOTAL_AST"].sum()
-        team_total_stl = df["TOTAL_STL"].sum()
-        team_total_to = df["TOTAL_TO"].sum()
-        team_total_blk = df["TOTAL_BLK"].sum()
-        team_total_pf = df["TOTAL_PF"].sum()
-        team_total_or = df["TOTAL_OR"].sum()
-        team_total_dr = df["TOTAL_DR"].sum()
-        
-        team_total_fgm = df["TOTAL_FGM"].sum()
-        team_total_fga = df["TOTAL_FGA"].sum()
-        team_total_3m = df["TOTAL_3M"].sum()
-        team_total_3a = df["TOTAL_3A"].sum()
-        team_total_ftm = df["TOTAL_FTM"].sum()
+        team_total_pts = df["TOTAL_PTS"].sum(); team_total_reb = df["TOTAL_REB"].sum()
+        team_total_ast = df["TOTAL_AST"].sum(); team_total_stl = df["TOTAL_STL"].sum()
+        team_total_to = df["TOTAL_TO"].sum(); team_total_blk = df["TOTAL_BLK"].sum()
+        team_total_pf = df["TOTAL_PF"].sum(); team_total_or = df["TOTAL_OR"].sum()
+        team_total_dr = df["TOTAL_DR"].sum(); team_total_fgm = df["TOTAL_FGM"].sum()
+        team_total_fga = df["TOTAL_FGA"].sum(); team_total_3m = df["TOTAL_3M"].sum()
+        team_total_3a = df["TOTAL_3A"].sum(); team_total_ftm = df["TOTAL_FTM"].sum()
         team_total_fta = df["TOTAL_FTA"].sum()
 
         ts = {
-            "ppg": team_total_pts / total_games,
-            "tot": team_total_reb / total_games,
-            "as": team_total_ast / total_games,
-            "st": team_total_stl / total_games,
-            "to": team_total_to / total_games,
-            "bs": team_total_blk / total_games,
-            "pf": team_total_pf / total_games,
-            "or": team_total_or / total_games,
+            "ppg": team_total_pts / total_games, "tot": team_total_reb / total_games,
+            "as": team_total_ast / total_games, "st": team_total_stl / total_games,
+            "to": team_total_to / total_games, "bs": team_total_blk / total_games,
+            "pf": team_total_pf / total_games, "or": team_total_or / total_games,
             "dr": team_total_dr / total_games,
             "fgpct": (team_total_fgm / team_total_fga * 100) if team_total_fga > 0 else 0,
             "3pct": (team_total_3m / team_total_3a * 100) if team_total_3a > 0 else 0,
