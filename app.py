@@ -130,7 +130,7 @@ def render_home():
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>🏀 DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
-        # 4 Reihen à 2 Buttons
+        # REIHE 1: Teamvergleich | Spielervergleich
         r1_c1, r1_c2 = st.columns(2)
         with r1_c1: 
             if st.button("📊 Teamvergleich", use_container_width=True): go_comparison(); st.rerun()
@@ -138,27 +138,28 @@ def render_home():
             if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
         st.write("") 
         
+        # REIHE 2: Spielvorbereitung | Spielnachbereitung
         r2_c1, r2_c2 = st.columns(2)
-        with r2_c1: 
-            if st.button("📝 Scouting Report", use_container_width=True): go_scouting(); st.rerun()
+        with r2_c1:
+            if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
         with r2_c2: 
             if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
         st.write("") 
         
+        # REIHE 3: PreGame Report (ehem. Scouting) | Live Game Center
         r3_c1, r3_c2 = st.columns(2)
-        with r3_c1:
-            if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
+        with r3_c1: 
+            if st.button("📝 PreGame Report", use_container_width=True): go_scouting(); st.rerun()
         with r3_c2:
              if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
         st.write("")
         
+        # REIHE 4: Team Stats | Spielorte
         r4_c1, r4_c2 = st.columns(2)
         with r4_c1:
-             if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
-        with r4_c2:
-             # NEUER BUTTON
              if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
-
+        with r4_c2:
+             if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
 # ==========================================
 # NEUE SEITE: TEAM STATS (LOGOS & DETAILS)
 # ==========================================
