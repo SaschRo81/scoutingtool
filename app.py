@@ -240,6 +240,7 @@ def render_prep_page():
     render_page_header("🔮 Spielvorbereitung")
     c1, c2 = st.columns([1, 2])
     with c1:
+        # Hier wird die Staffel "s" ausgewählt
         s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="prep_staffel")
         t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
     with c2:
@@ -249,8 +250,11 @@ def render_prep_page():
         with st.spinner("Lade Daten..."):
             df, _ = fetch_team_data(opp_id, SEASON_ID)
             sched = fetch_schedule(opp_id, SEASON_ID)
-            if df is not None: render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
-            else: st.error("Fehler beim Laden.")
+            if df is not None:
+                # WICHTIGE ÄNDERUNG: Wir geben die Staffel 's' mit an das Dashboard
+                render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached, staffel=s)
+            else:
+                st.error("Fehler beim Laden.")
 
 def render_live_page():
     # Helper Button zum Zurückkehren
