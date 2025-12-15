@@ -73,7 +73,7 @@ def render_page_header(page_title):
 # SEITE 1: HOME
 # ==========================================
 def render_home():
-    # CSS für Hintergrundbild und Styling
+     # CSS für Hintergrundbild und Styling
     st.markdown(
         """
         <style>
