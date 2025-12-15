@@ -175,7 +175,7 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                 with st.container():
                     col_img, col_stats = st.columns([1, 4])
                     
-                    # Alter, Nation, Größe direkt aus dem DataFrame holen (sollte jetzt da sein)
+                    # Alter, Nation, Größe aus dem DataFrame
                     age = row.get('AGE', '-')
                     nat = row.get('NATIONALITY', '-')
                     height = row.get('HEIGHT_ROSTER', '-') 
@@ -209,31 +209,33 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
             
             games_sorted = sorted(played_games, key=lambda x: parse_date(x['date']), reverse=True)[:5]
             if games_sorted:
-                st.write("") # Spacer
+                st.write("") 
                 cols_form = st.columns(len(games_sorted))
                 for idx, g in enumerate(games_sorted):
                     h_score = g.get('home_score', 0)
                     g_score = g.get('guest_score', 0)
                     is_home = (g.get('homeTeamId') == str(team_id))
                     
-                    win = False
-                    if is_home and h_score > g_score: win = True
-                    elif not is_home and g_score > h_score: win = True
+                    win = (is_home and h_score > g_score) or (not is_home and g_score > h_score)
                     
-                    color = "#28a745" if win else "#dc3545" # Grün/Rot
+                    color = "#28a745" if win else "#dc3545" 
                     char = "W" if win else "L"
                     
-                    # Tooltip mit Spieldetails
-                    tooltip_text = f"{g['date']}\n{g['home']} vs {g['guest']}\n{g['score']}"
+                    # FIX: Tooltip mit Spieldetails und Datum anzeigen
+                    date_only = g['date'].split(' ')[0]
+                    tooltip_text = f"{date_only} | {g['home']} vs {g['guest']} ({g['score']})"
 
                     with cols_form[idx]:
-                        st.markdown(f"<div style='background-color:{color};color:white;text-align:center;padding:10px;border-radius:5px;font-weight:bold;' title='{tooltip_text}'>{char}</div>", unsafe_allow_html=True)
+                        # Jedes Element in einen Container packen für den Tooltip
+                        with st.container():
+                            st.markdown(f"<div style='background-color:{color};color:white;text-align:center;padding:10px;border-radius:5px;font-weight:bold;' title='{tooltip_text}'>{char}</div>", unsafe_allow_html=True)
+                            st.caption(f"{date_only}")
             else: st.info("Keine gespielten Spiele.")
         else: st.info("Keine Spiele.")
 
 def render_live_view(box):
     # ... (Rest der Datei unverändert)
-    pass # Platzhalter, da der Code hier nicht relevant war
+    pass 
 
 def render_full_play_by_play(box, height=600):
     pass
