@@ -35,7 +35,7 @@ from src.analysis_ui import (
 
 # --- KONFIGURATION & FALLBACKS ---
 # Fallback Saison ID, falls die globale SEASON_ID keine Ergebnisse liefert
-API_SEASON_ID = "2024" 
+API_SEASON_ID = "2025" 
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
