@@ -40,20 +40,19 @@ CURRENT_SEASON_ID = "2025"
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
-# --- BILDER LADE LOGIK (OPTIMIERT & SCHNELLER) ---
+# --- BILDER LADE LOGIK ---
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_best_team_logo(team_id):
     """
-    Versucht das Logo zu laden. 
-    OPTIMIERUNG: Kürzere Timeouts (0.8s), damit die App nicht einfriert.
+    Versucht das Logo zu laden (Aggressive Suche über mehrere Jahre/URLs).
     """
     if not team_id: return None
     
     candidates = [
         f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
         f"https://api-n.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
-        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}", 
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}", # Fallback Vorjahr
         f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
     ]
 
@@ -65,8 +64,7 @@ def get_best_team_logo(team_id):
 
     for url in candidates:
         try:
-            # Timeout reduziert auf 0.8 Sekunden -> Viel schnellere Reaktion!
-            r = requests.get(url, headers=headers, timeout=0.8)
+            r = requests.get(url, headers=headers, timeout=1.5)
             if r.status_code == 200 and len(r.content) > 500: 
                 b64 = base64.b64encode(r.content).decode()
                 mime = "image/png"
@@ -177,18 +175,21 @@ def render_home():
         with r1_c2: 
             if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
         st.write("") 
+        
         r2_c1, r2_c2 = st.columns(2)
         with r2_c1:
             if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
         with r2_c2: 
             if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
         st.write("") 
+        
         r3_c1, r3_c2 = st.columns(2)
         with r3_c1: 
             if st.button("📝 PreGame Report", use_container_width=True): go_scouting(); st.rerun()
         with r3_c2:
              if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
         st.write("")
+        
         r4_c1, r4_c2 = st.columns(2)
         with r4_c1:
              if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
@@ -228,7 +229,6 @@ def render_team_stats_page():
             
             st.divider()
             
-            # Wenn Team-Stats fehlen, haben wir sie in api.py berechnet
             st.subheader(f"Saison Durchschnittswerte (Saison {CURRENT_SEASON_ID})")
             if ts:
                 m1, m2, m3, m4, m5, m6 = st.columns(6)
@@ -253,6 +253,9 @@ def render_team_stats_page():
             
             st.subheader("Aktueller Kader & Stats")
             if df is not None and not df.empty:
+                # SORTIERUNG HIER EINGEFÜGT:
+                df = df.sort_values(by="PPG", ascending=False)
+
                 display_cols = ["NR", "NAME_FULL", "GP", "MIN_DISPLAY", "PPG", "FG%", "3PCT", "FTPCT", "TOT", "AS", "ST", "TO", "PF"]
                 col_config = {
                     "NR": st.column_config.TextColumn("#", width="small"),
