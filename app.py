@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-import requests  # NEU: Wichtig für den Bild-Download mit Headern
+import requests  # Wichtig für API Calls
 from datetime import datetime, date, time 
 import time as time_module 
 from urllib.parse import quote_plus 
@@ -36,7 +36,35 @@ from src.analysis_ui import (
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
-# --- HELPER FÜR BILDER ---
+# --- HELPER FÜR BILDER & API ---
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_real_logo_urls(season_id):
+    """
+    Holt die echten Logo-URLs direkt von der DBBL API, 
+    da die generierten URLs oft falsch sind.
+    """
+    url = f"https://api-s.dbbl.scb.world/teams?seasonId={season_id}"
+    headers = {
+        "accept": "application/json",
+        "X-API-Key": "48673298c840c12a1646b737c83e5e5e" # Dein API Key
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            teams_data = response.json()
+            # Erstelle ein Dictionary: TeamID (str) -> LogoURL
+            logo_map = {}
+            for t in teams_data:
+                tid = str(t.get("id"))
+                logo = t.get("logo")
+                if logo:
+                    logo_map[tid] = logo
+            return logo_map
+    except Exception as e:
+        print(f"Fehler beim Laden der Logos: {e}")
+    return {}
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_image_robust(url):
     """Lädt ein Bild herunter und nutzt einen Fake-User-Agent, um Blockaden zu umgehen."""
@@ -196,6 +224,10 @@ def render_home():
 # SEITE: TEAM STATS (LOGOS & DETAILS)
 # ==========================================
 def render_team_stats_page():
+    # Zuerst: Hole die echten Logo URLs von der API
+    # Wir nutzen hier den API Key, den du gegeben hast
+    real_logos = fetch_real_logo_urls(SEASON_ID)
+
     # Wenn ein Team ausgewählt wurde, Detailansicht zeigen
     if st.session_state.stats_team_id:
         tid = st.session_state.stats_team_id
@@ -215,8 +247,8 @@ def render_team_stats_page():
             t_info = TEAMS_DB.get(tid, {})
             name = t_info.get("name", "Team")
             
-            logo_url = get_logo_url(tid, SEASON_ID)
-            # Nutze die neue robuste Ladefunktion
+            # Logo aus der API Map holen
+            logo_url = real_logos.get(str(tid))
             logo_bytes = load_image_robust(logo_url)
             
             c1, c2 = st.columns([1, 4])
@@ -224,7 +256,8 @@ def render_team_stats_page():
                 if logo_bytes:
                     st.image(logo_bytes, width=120)
                 else:
-                     st.markdown(f"**{name}**")
+                    # Fallback Text wenn Bild immer noch fehlt
+                    st.markdown(f"**{name}**")
 
             with c2: st.title(f"Statistik: {name}")
             
@@ -300,16 +333,17 @@ def render_team_stats_page():
                 col = cols[idx % 5]
                 with col:
                     with st.container(border=True):
-                        # Bild laden mit neuer Funktion
-                        logo_url = get_logo_url(tid, SEASON_ID)
+                        # API LOGIK: Logo URL aus der echten API Map holen
+                        # tid ist hier oft ein String oder Int, sicherstellen dass es passt
+                        logo_url = real_logos.get(str(tid))
                         
-                        # Hier nutzen wir die robuste Funktion statt utils
+                        # Bild laden
                         logo_bytes = load_image_robust(logo_url)
                         
                         if logo_bytes:
                              st.image(logo_bytes, use_container_width=True)
                         else:
-                             # Fallback: Basketball Icon
+                             # Fallback Basketball
                              st.markdown(f"<div style='font-size: 50px; text-align:center;'>🏀</div>", unsafe_allow_html=True)
                         
                         st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center;'>{info['name']}</div>", unsafe_allow_html=True)
