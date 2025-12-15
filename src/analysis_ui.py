@@ -182,7 +182,6 @@ def render_full_play_by_play(box, height=600):
 
     data = []
     
-    # Laufenden Score berechnen (Chronologisch durchgehen)
     running_h = 0
     running_g = 0
 
@@ -190,7 +189,6 @@ def render_full_play_by_play(box, height=600):
         h_pts = act.get("homeTeamPoints")
         g_pts = act.get("guestTeamPoints")
         
-        # Score aktualisieren, falls im Datensatz vorhanden
         if h_pts is not None: running_h = safe_int(h_pts)
         if g_pts is not None: running_g = safe_int(g_pts)
         
@@ -255,7 +253,6 @@ def render_full_play_by_play(box, height=600):
 
     df = pd.DataFrame(data)
     
-    # WICHTIG: Immer umdrehen, damit die neuste Aktion oben steht
     if not df.empty:
         df = df.iloc[::-1]
 
@@ -463,10 +460,9 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
         st.write("")
         st.markdown("#### Aktueller Tabellenplatz")
         
-        # Die Staffel wird hier an die API-Funktion übergeben
         standings_map = fetch_standings(SEASON_ID, staffel)
         
-        # KORREKTE PRÜFUNG: Zuerst prüfen, ob die Map überhaupt Daten enthält
+        # VERBESSERTE PRÜFUNG UND FEHLERMELDUNG
         if standings_map:
             team_stat = standings_map.get(str(team_id))
             if team_stat:
@@ -476,21 +472,13 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                 wins = team_stat.get("wins", 0)
                 losses = team_stat.get("losses", 0)
                 pts = team_stat.get("points", 0)
-                p_scored = team_stat.get("pointsScored", 0)
-                p_conceded = team_stat.get("pointsConceded", 0)
                 diff = team_stat.get("pointsDifference", 0)
                 streak = team_stat.get("streak", "-")
-                home_w = team_stat.get("homePerformance", {}).get("wins", "-")
-                home_l = team_stat.get("homePerformance", {}).get("losses", "-")
-                home_str = f"{home_w}-{home_l}" if home_w != "-" else "-"
-                guest_w = team_stat.get("guestPerformance", {}).get("wins", "-")
-                guest_l = team_stat.get("guestPerformance", {}).get("losses", "-")
-                guest_str = f"{guest_w}-{guest_l}" if guest_w != "-" else "-"
                 
                 html_table = f"""
                 <table style="width:100%; font-size:12px; border-collapse: collapse; text-align: center;">
                     <tr style="background-color: #f0f0f0; border-bottom: 1px solid #ddd;">
-                        <th>PL</th><th>Team</th><th>G</th><th>S</th><th>N</th><th>PKT</th><th>Diff</th><th>Serie</th>
+                        <th style="padding: 4px;">PL</th><th style="padding: 4px; text-align: left;">Team</th><th>G</th><th>S</th><th>N</th><th>PKT</th><th>Diff</th><th>Serie</th>
                     </tr>
                     <tr style="border-bottom: 1px solid #eee;">
                         <td style="font-weight: bold;">{rank}</td>
@@ -506,19 +494,17 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                 """
                 st.markdown(html_table, unsafe_allow_html=True)
             else:
-                 st.warning(f"Team (ID: {team_id}) nicht in den Tabellendaten für Staffel '{staffel}' gefunden.")
+                 st.warning(f"Team (ID: {team_id}) nicht in den Tabellendaten für Staffel '{staffel}' (Saison {SEASON_ID}) gefunden.")
         else:
-            st.info("Tabellendaten nicht verfügbar.")
+            st.warning(f"Tabellendaten für Staffel '{staffel}' (Saison {SEASON_ID}) konnten nicht geladen werden. Bitte prüfen Sie die `SEASON_ID` in der Konfiguration.")
 
 def render_live_view(box):
     """Zeigt Live Stats und PBP nebeneinander für Mobile optimiert."""
     if not box: return
 
-    # Team Namen
     h_name = get_team_name(box.get("homeTeam", {}), "Heim")
     g_name = get_team_name(box.get("guestTeam", {}), "Gast")
     
-    # Metadaten Score (kann verzögert sein)
     res = box.get("result", {})
     s_h = res.get("homeTeamFinalScore", 0)
     s_g = res.get("guestTeamFinalScore", 0)
@@ -526,13 +512,11 @@ def render_live_view(box):
     actions = box.get("actions", [])
     period = res.get("period") or box.get("period", 1)
     
-    # LOGIK-UPDATE: Wir schauen IMMER in die letzte Aktion für den aktuellsten Score.
     last_h_live = 0
     last_g_live = 0
     found_score = False
 
     if actions:
-        # Rückwärts suchen nach dem letzten validen Punktestand
         for act in reversed(actions):
             if act.get("homeTeamPoints") is not None and act.get("guestTeamPoints") is not None:
                 last_h_live = safe_int(act.get("homeTeamPoints"))
@@ -541,19 +525,16 @@ def render_live_view(box):
                 found_score = True
                 break
     
-    # Wenn wir einen Score aus den Actions haben, nutzen wir diesen bevorzugt für die Anzeige
     if found_score:
         s_h = last_h_live
         s_g = last_g_live
     
-    # Mapping Period
     p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
     if safe_int(period) > 4: p_str = f"OT{safe_int(period)-4}"
     else: p_str = p_map.get(safe_int(period), f"Q{period}") if period else "-"
     
     time_str = convert_elapsed_to_remaining(box.get('gameTime', ''), period)
 
-    # Scoreboard
     st.markdown(f"""
     <div style='text-align: center; background-color: #222; color: #fff; padding: 10px; border-radius: 10px; margin-bottom: 20px;'>
         <div style='font-size: 1.2em;'>{h_name} vs {g_name}</div>
@@ -567,16 +548,13 @@ def render_live_view(box):
     with c1:
         st.subheader("📊 Live Stats")
         
-        # Funktion zum Erstellen der Spieler-Tabelle
         def create_live_player_table(team_data):
             players = team_data.get("playerStats", [])
             data = []
             for p in players:
-                # Stats extrahieren
                 sec = safe_int(p.get("secondsPlayed"))
                 min_s = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "00:00"
                 
-                # Nur Spieler anzeigen, die gespielt haben oder im Boxscore relevant sind
                 if sec > 0 or safe_int(p.get("points")) > 0:
                     data.append({
                         "Nr": p.get('seasonPlayer', {}).get('shirtNumber', '-'),
@@ -586,17 +564,14 @@ def render_live_view(box):
                         "PF": safe_int(p.get("foulsCommitted"))
                     })
             
-            # DataFrame erstellen und sortieren nach PTS
             df = pd.DataFrame(data)
             if not df.empty:
                 df = df.sort_values(by="PTS", ascending=False)
             return df
 
-        # Tabellen erstellen
         df_home = create_live_player_table(box.get("homeTeam", {}))
         df_guest = create_live_player_table(box.get("guestTeam", {}))
 
-        # Anzeigen
         st.markdown(f"**{h_name}**")
         st.dataframe(df_home, hide_index=True, use_container_width=True)
         
