@@ -44,7 +44,7 @@ for key, default in [
     ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
     ("facts_about", pd.DataFrame([{"Fokus": "Together", "Beschreibung": "Fight!"}])),
     ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None),
-    ("stats_team_id", None) # NEU: Für die Team Stats Seite
+    ("stats_team_id", None)
 ]:
     if key not in st.session_state: st.session_state[key] = default
 
@@ -57,7 +57,7 @@ def go_player_comparison(): st.session_state.current_page = "player_comparison"
 def go_game_venue(): st.session_state.current_page = "game_venue" 
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
-def go_team_stats(): st.session_state.current_page = "team_stats" # NEU
+def go_team_stats(): st.session_state.current_page = "team_stats"
 
 # --- STANDARD-SEITENHEADER ---
 def render_page_header(page_title):
@@ -77,17 +77,28 @@ def render_home():
     st.markdown(
         """
         <style>
-        /* FIX: Wir nutzen .stApp statt data-testid und passen den z-index an */
-        .stApp {
+        /* Wir nutzen das Pseudo-Element ::before auf dem Hauptcontainer (.stApp) */
+        .stApp::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            
+            /* Das Bild */
             background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            background-attachment: fixed;
+            
             /* 30% Transparenz bedeutet 0.7 (70%) Deckkraft */
             opacity: 0.7; 
+            
+            /* Damit das Bild HINTER dem Text liegt */
+            z-index: -1;
         }
-
+        
         /* Buttons Stylen - Deckend Weiß */
         div.stButton > button {
             width: 100%;
@@ -160,8 +171,9 @@ def render_home():
              if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
         with r4_c2:
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
+
 # ==========================================
-# NEUE SEITE: TEAM STATS (LOGOS & DETAILS)
+# SEITE: TEAM STATS (LOGOS & DETAILS)
 # ==========================================
 def render_team_stats_page():
     # Wenn ein Team ausgewählt wurde, Detailansicht zeigen
@@ -182,10 +194,13 @@ def render_team_stats_page():
             # Header
             t_info = TEAMS_DB.get(tid, {})
             name = t_info.get("name", "Team")
-            logo = get_logo_url(tid, SEASON_ID)
+            
+            # FIX: Logo laden mit Optimierung, damit es angezeigt wird
+            logo_url = get_logo_url(tid, SEASON_ID)
+            logo_img = optimize_image_base64(logo_url)
             
             c1, c2 = st.columns([1, 4])
-            with c1: st.image(logo, width=120)
+            with c1: st.image(logo_img, width=120)
             with c2: st.title(f"Statistik: {name}")
             
             st.divider()
@@ -216,10 +231,8 @@ def render_team_stats_page():
             # 2. Kader Tabelle
             st.subheader("Aktueller Kader & Stats")
             
-            # Tabelle schön formatieren
             display_cols = ["NR", "NAME_FULL", "GP", "MIN_DISPLAY", "PPG", "FG%", "3PCT", "FTPCT", "TOT", "AS", "ST", "TO", "PF"]
             
-            # Konfiguration für die Spaltenanzeige
             col_config = {
                 "NR": st.column_config.TextColumn("#", width="small"),
                 "NAME_FULL": st.column_config.TextColumn("Name", width="medium"),
@@ -257,15 +270,17 @@ def render_team_stats_page():
             # Filtern nach Staffel
             teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel_name}
             
-            # Grid erstellen (z.B. 4 Spalten)
+            # Grid erstellen (z.B. 5 Spalten)
             cols = st.columns(5)
             
             for idx, (tid, info) in enumerate(teams.items()):
                 col = cols[idx % 5]
                 with col:
-                    # Logo
+                    # FIX: Logo laden mit Optimierung (wichtig für Anzeige!)
                     logo_url = get_logo_url(tid, SEASON_ID)
-                    st.image(logo_url, use_container_width=True)
+                    logo_img = optimize_image_base64(logo_url)
+                    
+                    st.image(logo_img, use_container_width=True)
                     
                     # Button darunter
                     if st.button("Stats anzeigen", key=f"btn_stats_{tid}"):
@@ -541,7 +556,7 @@ def render_analysis_page():
         else: st.warning("Keine Spiele.")
 
 def render_scouting_page():
-    render_page_header("📝 Scouting") 
+    render_page_header("📝 PreGame Report") 
     if st.session_state.print_mode:
         st.subheader("Vorschau & Export")
         c1, c2 = st.columns([1, 4])
