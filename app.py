@@ -533,9 +533,9 @@ def render_scouting_page():
                         if up:
                             html += "<div style='page-break-before:always'><h2>Plays</h2>"
                             for f in up:
-                                # base64 muss ganz oben in app.py importiert sein: import base64
                                 b64 = base64.b64encode(f.getvalue()).decode()
-                                # NEUE ZEILE (Für 1:1 bzw. maximale Breite):
+                                # KORREKTUR: Hier stand vorher fälschlicherweise max-height:80px (vom Header kopiert)
+                                # Jetzt: width:100% und height:auto für volle Breite und korrekte Proportionen
                                 html += f"<div style='margin-bottom:20px; text-align:center;'><img src='data:image/png;base64,{b64}' style='width:100%; height:auto; border:1px solid #ccc;'></div>"
                         
                         html += generate_custom_sections_html(eo, ed, ea)
