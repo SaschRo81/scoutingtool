@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime, date, time 
 import time as time_module 
 from urllib.parse import quote_plus 
-import base64  # <--- HINZUGEFÜGT: Fehlte für Bild-Uploads im PDF
+import base64 
 
 try:
     import pdfkit
@@ -15,7 +15,6 @@ except ImportError:
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url, optimize_image_base64
-# KORREKTUR: Komma hinzugefügt vor fetch_season_games
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
@@ -27,8 +26,6 @@ from src.html_gen import (
     generate_comparison_html
 )
 from src.state_manager import export_session_state, load_session_state
-
-# HIER WERDEN ALLE BENÖTIGTEN FUNKTIONEN AUS analysis_ui IMPORTIERT
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
@@ -46,7 +43,8 @@ for key, default in [
     ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks"}])),
     ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
     ("facts_about", pd.DataFrame([{"Fokus": "Together", "Beschreibung": "Fight!"}])),
-    ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None)
+    ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None),
+    ("stats_team_id", None) # NEU: Für die Team Stats Seite
 ]:
     if key not in st.session_state: st.session_state[key] = default
 
@@ -59,6 +57,7 @@ def go_player_comparison(): st.session_state.current_page = "player_comparison"
 def go_game_venue(): st.session_state.current_page = "game_venue" 
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
+def go_team_stats(): st.session_state.current_page = "team_stats" # NEU
 
 # --- STANDARD-SEITENHEADER ---
 def render_page_header(page_title):
@@ -78,18 +77,27 @@ def render_home():
     st.markdown(
         """
         <style>
-        /* FIX: Wir nutzen .stApp statt data-testid und passen den z-index an */
-        .stApp {
+        /* Wir nutzen das Pseudo-Element ::before auf dem Hauptcontainer (.stApp) */
+        .stApp::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            
+            /* Das Bild */
             background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            background-attachment: fixed;
+            
             /* 30% Transparenz bedeutet 0.7 (70%) Deckkraft */
             opacity: 0.7; 
+            
+            /* Damit das Bild HINTER dem Text liegt */
+            z-index: -1;
         }
-
-        
         
         /* Buttons Stylen - Deckend Weiß */
         div.stButton > button {
@@ -133,27 +141,155 @@ def render_home():
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>🏀 DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
+        # 4 Reihen à 2 Buttons
         r1_c1, r1_c2 = st.columns(2)
         with r1_c1: 
             if st.button("📊 Teamvergleich", use_container_width=True): go_comparison(); st.rerun()
         with r1_c2: 
             if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
         st.write("") 
+        
         r2_c1, r2_c2 = st.columns(2)
         with r2_c1: 
             if st.button("📝 Scouting Report", use_container_width=True): go_scouting(); st.rerun()
         with r2_c2: 
             if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
         st.write("") 
+        
         r3_c1, r3_c2 = st.columns(2)
         with r3_c1:
             if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
         with r3_c2:
              if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
         st.write("")
-        _, c5, _ = st.columns([1, 2, 1])
-        with c5:
+        
+        r4_c1, r4_c2 = st.columns(2)
+        with r4_c1:
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
+        with r4_c2:
+             # NEUER BUTTON
+             if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
+
+# ==========================================
+# NEUE SEITE: TEAM STATS (LOGOS & DETAILS)
+# ==========================================
+def render_team_stats_page():
+    # Wenn ein Team ausgewählt wurde, Detailansicht zeigen
+    if st.session_state.stats_team_id:
+        tid = st.session_state.stats_team_id
+        # Zurück Button
+        col_back, col_head = st.columns([1, 5])
+        with col_back:
+            if st.button("⬅️ Zur Übersicht", key="back_from_stats"):
+                st.session_state.stats_team_id = None
+                st.rerun()
+        
+        # Daten laden
+        with st.spinner("Lade Team Statistiken..."):
+            df, ts = fetch_team_data(tid, SEASON_ID)
+            
+        if df is not None and not df.empty:
+            # Header
+            t_info = TEAMS_DB.get(tid, {})
+            name = t_info.get("name", "Team")
+            logo = get_logo_url(tid, SEASON_ID)
+            
+            c1, c2 = st.columns([1, 4])
+            with c1: st.image(logo, width=120)
+            with c2: st.title(f"Statistik: {name}")
+            
+            st.divider()
+            
+            # 1. Team Stats Metriken
+            st.subheader("Saison Durchschnittswerte (Team)")
+            if ts:
+                m1, m2, m3, m4, m5, m6 = st.columns(6)
+                m1.metric("Punkte", f"{ts.get('ppg', 0):.1f}")
+                m2.metric("Rebounds", f"{ts.get('tot', 0):.1f}")
+                m3.metric("Assists", f"{ts.get('as', 0):.1f}")
+                m4.metric("Steals", f"{ts.get('st', 0):.1f}")
+                m5.metric("Turnovers", f"{ts.get('to', 0):.1f}")
+                m6.metric("FG %", f"{ts.get('fgpct', 0):.1f}%")
+                
+                m1, m2, m3, m4, m5, m6 = st.columns(6)
+                m1.metric("3er %", f"{ts.get('3pct', 0):.1f}%")
+                m2.metric("FW %", f"{ts.get('ftpct', 0):.1f}%")
+                m3.metric("Fouls", f"{ts.get('pf', 0):.1f}")
+                m4.metric("Off. Reb", f"{ts.get('or', 0):.1f}")
+                m5.metric("Def. Reb", f"{ts.get('dr', 0):.1f}")
+                m6.metric("Blocks", f"{ts.get('bs', 0):.1f}")
+            else:
+                st.info("Keine Team-Metriken verfügbar.")
+            
+            st.divider()
+            
+            # 2. Kader Tabelle
+            st.subheader("Aktueller Kader & Stats")
+            
+            # Tabelle schön formatieren
+            display_cols = ["NR", "NAME_FULL", "GP", "MIN_DISPLAY", "PPG", "FG%", "3PCT", "FTPCT", "TOT", "AS", "ST", "TO", "PF"]
+            
+            # Konfiguration für die Spaltenanzeige
+            col_config = {
+                "NR": st.column_config.TextColumn("#", width="small"),
+                "NAME_FULL": st.column_config.TextColumn("Name", width="medium"),
+                "GP": st.column_config.NumberColumn("Spiele"),
+                "MIN_DISPLAY": st.column_config.TextColumn("Min"),
+                "PPG": st.column_config.NumberColumn("PTS", format="%.1f"),
+                "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
+                "3PCT": st.column_config.NumberColumn("3P%", format="%.1f %%"),
+                "FTPCT": st.column_config.NumberColumn("FW%", format="%.1f %%"),
+                "TOT": st.column_config.NumberColumn("REB", format="%.1f"),
+                "AS": st.column_config.NumberColumn("AST", format="%.1f"),
+                "ST": st.column_config.NumberColumn("STL", format="%.1f"),
+                "TO": st.column_config.NumberColumn("TO", format="%.1f"),
+                "PF": st.column_config.NumberColumn("PF", format="%.1f"),
+            }
+            
+            st.dataframe(
+                df[display_cols],
+                column_config=col_config,
+                hide_index=True,
+                use_container_width=True,
+                height=600
+            )
+
+        else:
+            st.error("Daten konnten nicht geladen werden.")
+
+    # Übersicht (Logos Grid)
+    else:
+        render_page_header("📈 Team Statistiken")
+        
+        tab_nord, tab_sued = st.tabs(["Nord", "Süd"])
+        
+        def render_logo_grid(staffel_name):
+            # Filtern nach Staffel
+            teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel_name}
+            
+            # Grid erstellen (z.B. 4 Spalten)
+            cols = st.columns(5)
+            
+            for idx, (tid, info) in enumerate(teams.items()):
+                col = cols[idx % 5]
+                with col:
+                    # Logo
+                    logo_url = get_logo_url(tid, SEASON_ID)
+                    st.image(logo_url, use_container_width=True)
+                    
+                    # Button darunter
+                    if st.button("Stats anzeigen", key=f"btn_stats_{tid}"):
+                        st.session_state.stats_team_id = tid
+                        st.rerun()
+                    st.write("") # Abstand
+        
+        with tab_nord:
+            st.subheader("Teams Nord")
+            render_logo_grid("Nord")
+            
+        with tab_sued:
+            st.subheader("Teams Süd")
+            render_logo_grid("Süd")
 
 def render_comparison_page():
     render_page_header("📊 Head-to-Head Vergleich") 
@@ -499,8 +635,6 @@ def render_scouting_page():
                         for item in res:
                             st.session_state.saved_colors[item["pid"]] = item["color"]; 
                             for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
-                        # --- FEHLERBEHEBUNG HIER ---
-                        # Alte Variablennamen ersetzt: guest_name_selected -> gn, target_radio_selection -> target, home_name_selected -> hn
                         tn = (gn if target == "Gastteam (Gegner)" else hn).replace(" ", "_")
                         st.session_state.report_filename = f"Scouting_Report_{tn}_{d_inp.strftime('%d.%m.%Y')}.pdf"
                         html = generate_header_html(st.session_state.game_meta); html += generate_top3_html(st.session_state.roster_df)
@@ -526,3 +660,4 @@ elif st.session_state.current_page == "player_comparison": render_player_compari
 elif st.session_state.current_page == "game_venue": render_game_venue_page()
 elif st.session_state.current_page == "prep": render_prep_page()
 elif st.session_state.current_page == "live": render_live_page()
+elif st.session_state.current_page == "team_stats": render_team_stats_page()
