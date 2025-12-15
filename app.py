@@ -15,6 +15,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
+# Wir nutzen utils nur noch für Basis-Sachen
 from src.utils import get_logo_url 
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
@@ -46,7 +47,7 @@ def get_best_team_logo(team_id):
     candidates = [
         f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
         f"https://api-n.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
-        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}",
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}", 
         f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
     ]
     headers = { "User-Agent": "Mozilla/5.0", "Accept": "image/*", "Referer": "https://dbbl.de/" }
@@ -167,7 +168,6 @@ def render_team_stats_page():
                 st.rerun()
         
         with st.spinner("Lade Team Statistiken..."):
-            # NUR 2025 LADEN
             df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
             
         has_data = (df is not None and not df.empty) or (ts and len(ts) > 0)
@@ -232,7 +232,7 @@ def render_team_stats_page():
             else:
                 st.info("Keine Spielerdaten verfügbar (Tabelle leer).")
         else:
-            st.error(f"Keine Daten für Saison {CURRENT_SEASON_ID} gefunden. Bitte prüfen, ob die Saison-ID korrekt ist oder die API Daten liefert.")
+            st.error(f"Daten konnten für Saison {CURRENT_SEASON_ID} nicht geladen werden.")
     else:
         render_page_header("📈 Team Statistiken")
         tab_nord, tab_sued = st.tabs(["Nord", "Süd"])
@@ -351,7 +351,6 @@ def render_prep_page():
         with st.spinner("Lade Daten..."):
             df, _ = fetch_team_data(opp_id, CURRENT_SEASON_ID)
             sched = fetch_schedule(opp_id, CURRENT_SEASON_ID)
-            # WICHTIG: df muss existieren, damit es funktioniert
             if df is not None and not df.empty: 
                 render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
             else: 
@@ -421,6 +420,54 @@ def render_live_page():
                             st.session_state.live_game_id = game['id']
                             st.rerun()
 
+def render_analysis_page():
+    render_page_header("🎥 Spielnachbereitung") 
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
+        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
+        to = {v["name"]: k for k, v in t.items()}
+    with c2:
+        tn = st.selectbox("Dein Team:", list(to.keys()), key="ana_team")
+        tid = to[tn]
+    if tid:
+        games = fetch_schedule(tid, CURRENT_SEASON_ID)
+        if games:
+            # FIX: Filtere nur Spiele mit Ergebnis
+            played_games = [g for g in games if g.get('has_result')]
+            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in played_games}
+            
+            if not opts:
+                st.warning("Keine gespielten Spiele für dieses Team in dieser Saison gefunden.")
+                return
+
+            sel = st.selectbox("Wähle ein Spiel:", list(opts.keys()), key="ana_game_select")
+            gid = opts[sel]
+            if st.button("Analyse laden", type="primary"):
+                st.session_state.selected_game_id = gid
+                if "generated_ai_report" in st.session_state: del st.session_state["generated_ai_report"]
+            if st.session_state.selected_game_id == gid:
+                st.divider()
+                with st.spinner("Lade Daten..."):
+                    box = fetch_game_boxscore(gid); details = fetch_game_details(gid)
+                    if box and details: 
+                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("referee1"); box["referee2"] = details.get("referee2"); box["referee3"] = details.get("referee3"); box["scheduledTime"] = details.get("scheduledTime"); box["attendance"] = details.get("result", {}).get("spectators"); box["id"] = details.get("id") 
+                        render_game_header(box)
+                        st.markdown("### 📝 Spielberichte & PBP")
+                        t1, t2, t3 = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
+                        with t1:
+                            st.markdown(generate_game_summary(box)); st.divider()
+                            hn = get_team_name(box.get("homeTeam", {}), "Heim"); gn = get_team_name(box.get("guestTeam", {}), "Gast")
+                            hc = box.get("homeTeam", {}).get("headCoachName", "-"); gc = box.get("guestTeam", {}).get("headCoachName", "-")
+                            render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), box.get("homeTeam", {}).get("gameStat", {}), hn, hc)
+                            st.write(""); render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), box.get("guestTeam", {}).get("gameStat", {}), gn, gc)
+                            st.divider(); render_game_top_performers(box); st.divider(); render_charts_and_stats(box)
+                        with t2:
+                            st.info("ChatGPT Prompt:"); st.code(generate_complex_ai_prompt(box), language="text")
+                        with t3: render_full_play_by_play(box)
+                    else: st.error("Fehler beim Laden.")
+        else: st.warning("Keine Spiele.")
+
 def render_scouting_page():
     render_page_header("📝 PreGame Report") 
     if st.session_state.print_mode:
@@ -453,7 +500,6 @@ def render_scouting_page():
             if "home_name" in st.session_state.game_meta and st.session_state.game_meta["home_name"] in to: idx = list(to.keys()).index(st.session_state.game_meta["home_name"])
             hn = st.selectbox("Heim:", list(to.keys()), index=idx, key="sel_home"); hid = to[hn]
             
-            # AGGRESSIVES LADEN
             if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != hn: 
                 st.session_state.logo_h = get_best_team_logo(hid)
             
@@ -465,7 +511,6 @@ def render_scouting_page():
             if "guest_name" in st.session_state.game_meta and st.session_state.game_meta["guest_name"] in to: idxg = list(to.keys()).index(st.session_state.game_meta["guest_name"])
             gn = st.selectbox("Gast:", list(to.keys()), index=idxg, key="sel_guest"); gid = to[gn]
             
-            # AGGRESSIVES LADEN
             if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != gn: 
                 st.session_state.logo_g = get_best_team_logo(gid)
 
