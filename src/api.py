@@ -10,10 +10,7 @@ from src.config import API_HEADERS, SEASON_ID, TEAMS_DB
 # --- HILFSFUNKTIONEN ---
 
 def get_base_url(team_id):
-    """
-    Ermittelt anhand der Team-ID und der TEAMS_DB, ob der 
-    Nord- oder Süd-Server genutzt werden muss.
-    """
+    """Ermittelt Server (Nord/Süd) anhand der Team-ID."""
     try:
         tid = int(team_id)
         team_info = TEAMS_DB.get(tid)
@@ -21,7 +18,6 @@ def get_base_url(team_id):
             return "https://api-n.dbbl.scb.world"
     except:
         pass
-    # Standard-Fallback auf Süd (oder wenn Team nicht in DB)
     return "https://api-s.dbbl.scb.world"
 
 def format_minutes(seconds):
@@ -54,7 +50,6 @@ def extract_nationality(data_obj):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_player_metadata_cached(player_id):
-    # Spieler-Metadaten können auf beiden Servern liegen. Wir probieren Süd zuerst, dann Nord.
     clean_id = str(player_id).replace(".0", "")
     for subdomain in ["api-s", "api-n"]:
         url = f"https://{subdomain}.dbbl.scb.world/season-players/{clean_id}"
@@ -74,12 +69,7 @@ def get_player_metadata_cached(player_id):
 
 @st.cache_data(ttl=600)
 def fetch_team_details_raw(team_id, season_id):
-    # Richtige Domain wählen
-    base = get_base_url(team_id).replace("api-s", "api-1").replace("api-n", "api-1") 
-    # Hinweis: Manche Endpunkte nutzen api-1, aber meistens ist api-s/api-n sicherer für Split.
-    # Wir nutzen hier die get_base_url Logik aber passen auf api-s/n an.
     base = get_base_url(team_id)
-    
     url = f"{base}/teams/{team_id}/{season_id}"
     try:
         resp = requests.get(url, headers=API_HEADERS, timeout=3)
@@ -89,10 +79,6 @@ def fetch_team_details_raw(team_id, season_id):
 
 @st.cache_data(ttl=300)
 def fetch_team_data(team_id, season_id):
-    """
-    Lädt Spieler-Stats und Team-Stats.
-    Wählt automatisch den richtigen Server (Nord/Süd).
-    """
     base_url = get_base_url(team_id)
     
     api_stats_players = f"{base_url}/teams/{team_id}/{season_id}/player-stats"
@@ -103,21 +89,6 @@ def fetch_team_data(team_id, season_id):
 
     # 1. PLAYER STATS LADEN
     try:
-        roster_lookup = {}
-        raw_details = fetch_team_details_raw(team_id, season_id)
-        if raw_details:
-            squad = raw_details.get("squad", []) if isinstance(raw_details, dict) else []
-            for entry in squad:
-                p = entry.get("person", {})
-                raw_id = p.get("id") or entry.get("id")
-                if raw_id:
-                    pid = str(raw_id).replace(".0", "")
-                    roster_lookup[pid] = {
-                        "birthdate": p.get("birthDate") or entry.get("birthDate"),
-                        "nationality": extract_nationality(p) if extract_nationality(p) != "-" else extract_nationality(entry),
-                        "height": p.get("height", "-")
-                    }
-
         r_stats = requests.get(api_stats_players, headers=API_HEADERS, timeout=4)
         if r_stats.status_code == 200:
             raw_p = r_stats.json()
@@ -127,11 +98,21 @@ def fetch_team_data(team_id, season_id):
                 df = pd.json_normalize(p_list)
                 df.columns = [str(c).lower() for c in df.columns]
                 
+                # Dynamisches Mapping & Datenbereinigung
                 def get_val(key, default=0.0):
-                    matches = [c for c in df.columns if key in c]
+                    matches = [c for c in df.columns if key in c and 'percent' not in c]
                     if matches:
                         c = sorted(matches, key=len)[0]
                         return pd.to_numeric(df[c], errors="coerce").fillna(default)
+                    return pd.Series([default]*len(df), index=df.index)
+
+                def get_pct(key, default=0.0):
+                    matches = [c for c in df.columns if key in c and 'percent' in c]
+                    if matches:
+                        c = sorted(matches, key=len)[0]
+                        s = pd.to_numeric(df[c], errors="coerce").fillna(default)
+                        # Wenn Werte > 1, sind sie schon %, sonst * 100
+                        return s.apply(lambda x: round(x, 1) if x > 1 else round(x * 100, 1))
                     return pd.Series([default]*len(df), index=df.index)
 
                 col_fn = next((c for c in df.columns if "firstname" in c), "")
@@ -146,42 +127,39 @@ def fetch_team_data(team_id, season_id):
                 df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
                 df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
                 
-                df["BIRTHDATE"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("birthdate", ""))
-                df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("nationality", "-"))
-                df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("height", "-"))
-                df["AGE"] = df["BIRTHDATE"].apply(calculate_age)
-
                 df["GP"] = get_val("gamesplayed").replace(0, 1)
-                
                 sec = get_val("secondsplayed")
                 if sec.sum() > 0: df["MIN_FINAL"] = sec / df["GP"]
                 else: df["MIN_FINAL"] = get_val("minutespergame")
                 df["MIN_DISPLAY"] = df["MIN_FINAL"].apply(format_minutes)
 
+                # Stats
                 df["PPG"] = get_val("pointspergame"); df["TOT"] = get_val("totalreboundspergame")
                 df["AS"] = get_val("assistspergame"); df["TO"] = get_val("turnoverspergame")
                 df["ST"] = get_val("stealspergame"); df["BS"] = get_val("blockspergame")
                 df["PF"] = get_val("foulscommittedpergame")
                 
-                m2 = get_val("twopointshotsmadepergame"); a2 = get_val("twopointshotsattemptedpergame")
-                m3 = get_val("threepointshotsmadepergame"); a3 = get_val("threepointshotsattemptedpergame")
-                df["2M"] = m2; df["2A"] = a2; df["3M"] = m3; df["3A"] = a3
-                
-                att = a2 + a3
+                # Shooting Made/Attempted
+                df["2M"] = get_val("twopointshotsmade"); df["2A"] = get_val("twopointshotsattempted")
+                df["3M"] = get_val("threepointshotsmade"); df["3A"] = get_val("threepointshotsattempted")
+                df["FTM"] = get_val("freethrowsmade"); df["FTA"] = get_val("freethrowsattempted")
+
+                # FG% berechnen
+                att = df["2A"] + df["3A"]
+                made = df["2M"] + df["3M"]
                 df["FG%"] = 0.0
                 mask = att > 0
-                df.loc[mask, "FG%"] = ((m2[mask] + m3[mask]) / att[mask] * 100).round(1)
+                df.loc[mask, "FG%"] = (made[mask] / att[mask] * 100).round(1)
+
+                df["3PCT"] = get_pct("threepointshotsuccess")
+                df["FTPCT"] = get_pct("freethrowssuccess")
                 
-                df["3PCT"] = get_val("threepointshotsuccesspercent").apply(lambda x: round(x*100, 1) if x<=1 else round(x,1))
-                df["FTPCT"] = get_val("freethrowssuccesspercent").apply(lambda x: round(x*100, 1) if x<=1 else round(x,1))
-                df["FTM"] = get_val("freethrowsmadepergame"); df["FTA"] = get_val("freethrowsattemptedpergame")
                 df["OR"] = get_val("offensivereboundspergame"); df["DR"] = get_val("defensivereboundspergame")
                 df["select"] = False
-
     except Exception as e:
         print(f"Error Player Stats ({base_url}): {e}")
 
-    # 2. TEAM STATS LADEN
+    # 2. TEAM STATS LADEN ODER BERECHNEN
     try:
         r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
         if r_team.status_code == 200:
@@ -198,15 +176,28 @@ def fetch_team_data(team_id, season_id):
                 }
     except: pass
 
-    # Fallback Berechnung
+    # FALLBACK: Wenn Team Stats API leer, aber Spieler da -> Summiere Spieler!
     if not ts and not df.empty:
+        total_gp = df["GP"].max() if not df.empty else 1
+        
+        # Absolute Summen pro Spiel berechnen
+        sum_2m = (df["2M"] * df["GP"]).sum() / total_gp
+        sum_2a = (df["2A"] * df["GP"]).sum() / total_gp
+        sum_3m = (df["3M"] * df["GP"]).sum() / total_gp
+        sum_3a = (df["3A"] * df["GP"]).sum() / total_gp
+        sum_ftm = (df["FTM"] * df["GP"]).sum() / total_gp
+        sum_fta = (df["FTA"] * df["GP"]).sum() / total_gp
+
+        # Prozente korrekt aus Summen berechnen
+        fgpct = (sum_2m + sum_3m) / (sum_2a + sum_3a) * 100 if (sum_2a + sum_3a) > 0 else 0
+        pct3 = sum_3m / sum_3a * 100 if sum_3a > 0 else 0
+        ftpct = sum_ftm / sum_fta * 100 if sum_fta > 0 else 0
+
         ts = {
             "ppg": df["PPG"].sum(), "tot": df["TOT"].sum(), "as": df["AS"].sum(),
             "to": df["TO"].sum(), "st": df["ST"].sum(), "bs": df["BS"].sum(),
             "pf": df["PF"].sum(), "or": df["OR"].sum(), "dr": df["DR"].sum(),
-            "fgpct": df[df["FG%"] > 0]["FG%"].mean() if not df.empty else 0,
-            "3pct": df[df["3PCT"] > 0]["3PCT"].mean() if not df.empty else 0,
-            "ftpct": df[df["FTPCT"] > 0]["FTPCT"].mean() if not df.empty else 0,
+            "fgpct": fgpct, "3pct": pct3, "ftpct": ftpct
         }
 
     return df, ts
@@ -247,7 +238,6 @@ def fetch_schedule(team_id, season_id):
 
 @st.cache_data(ttl=10)
 def fetch_game_boxscore(game_id):
-    # Spiel kann Nord oder Süd sein -> beide probieren
     for subdomain in ["api-s", "api-n"]:
         try:
             r = requests.get(f"https://{subdomain}.dbbl.scb.world/games/{game_id}/stats", headers=API_HEADERS, timeout=2)
@@ -279,9 +269,6 @@ def fetch_team_info_basic(team_id):
 
 @st.cache_data(ttl=600)
 def fetch_season_games(season_id):
-    """
-    Lädt ALLE Spiele der Saison (Nord UND Süd).
-    """
     all_games = []
     
     for subdomain in ["api-s", "api-n"]:
@@ -302,7 +289,7 @@ def fetch_season_games(season_id):
                         except: pass
                     res = g.get("result") or {}
                     
-                    # Vermeidung von Duplikaten (falls beide APIs überlappen)
+                    # Vermeidung von Duplikaten
                     if not any(x['id'] == g.get("id") for x in all_games):
                         all_games.append({
                             "id": g.get("id"), "date": d_disp, "date_only": date_only,
