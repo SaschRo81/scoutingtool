@@ -551,6 +551,7 @@ def render_scouting_page():
                                     "load-error-handling": "ignore", 
                                     "load-media-error-handling": "ignore", 
                                     "javascript-delay": "1000"
+                                    "zoom": "0.6",
                                 }
                                 st.session_state.pdf_bytes = pdfkit.from_string(
                                     f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", 
