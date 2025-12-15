@@ -66,41 +66,59 @@ def fetch_team_details_raw(team_id, season_id):
 def fetch_team_data(team_id, season_id):
     """
     Lädt Team-Statistiken UND Spieler-Statistiken.
-    Robust: Wenn Spieler-Stats fehlen, werden trotzdem Team-Stats zurückgegeben (und umgekehrt).
+    Nutzt jetzt den direkten Team-Statistik Endpunkt.
     """
-    api_stats = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
-    api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
+    # 1. URLs definieren
+    # NEU: Direkter Team-Link wie von dir vorgeschlagen
+    api_team_direct = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/statistics/season"
+    # Fallback: Globale Suche (falls direkt fehlschlägt)
+    api_team_fallback = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
+    
+    api_stats_players = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
     
     ts = {}
     df = pd.DataFrame()
 
-    # 1. Team Stats laden (API Call vom User)
+    # ---------------------------------------------------------
+    # TEIL A: TEAM STATS LADEN
+    # ---------------------------------------------------------
     try:
-        r_team = requests.get(api_team, headers=API_HEADERS, timeout=3)
+        # Versuch 1: Direkter Link (bevorzugt)
+        r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
+        
+        td = None
         if r_team.status_code == 200:
-            raw_ts = r_team.json()
-            # API gibt Liste zurück, wir brauchen das erste Element für dieses Team
-            if raw_ts and isinstance(raw_ts, list):
-                # Filter sicherheitshalber nach TeamID, falls API mehr zurückgibt
-                td = next((item for item in raw_ts if str(item.get("teamId")) == str(team_id)), raw_ts[0])
-                
-                ts = {
-                    "ppg": td.get("pointsPerGame", 0), "tot": td.get("totalReboundsPerGame", 0),
-                    "as": td.get("assistsPerGame", 0), "to": td.get("turnoversPerGame", 0),
-                    "st": td.get("stealsPerGame", 0), "bs": td.get("blocksPerGame", 0),
-                    "pf": td.get("foulsCommittedPerGame", 0),
-                    "2m": td.get("twoPointShotsMadePerGame", 0), "2a": td.get("twoPointShotsAttemptedPerGame", 0), "2pct": td.get("twoPointShotsSuccessPercent", 0),
-                    "3m": td.get("threePointShotsMadePerGame", 0), "3a": td.get("threePointShotsAttemptedPerGame", 0), "3pct": td.get("threePointShotsSuccessPercent", 0),
-                    "ftm": td.get("freeThrowsMadePerGame", 0), "fta": td.get("freeThrowsAttemptedPerGame", 0), "ftpct": td.get("freeThrowsSuccessPercent", 0),
-                    "dr": td.get("defensiveReboundsPerGame", 0), "or": td.get("offensiveReboundsPerGame", 0),
-                    "fgpct": td.get("fieldGoalsSuccessPercent", 0)
-                }
+            td = r_team.json() # Hier kommt meist direkt das Objekt
+        
+        # Versuch 2: Fallback Link, falls Direktlink 404/leer
+        if not td:
+            r_fallback = requests.get(api_team_fallback, headers=API_HEADERS, timeout=3)
+            if r_fallback.status_code == 200:
+                raw_list = r_fallback.json()
+                if raw_list and isinstance(raw_list, list):
+                    td = next((item for item in raw_list if str(item.get("teamId")) == str(team_id)), raw_list[0])
+
+        # Daten mappen, wenn vorhanden
+        if td:
+            ts = {
+                "ppg": td.get("pointsPerGame", 0), "tot": td.get("totalReboundsPerGame", 0),
+                "as": td.get("assistsPerGame", 0), "to": td.get("turnoversPerGame", 0),
+                "st": td.get("stealsPerGame", 0), "bs": td.get("blocksPerGame", 0),
+                "pf": td.get("foulsCommittedPerGame", 0),
+                "2m": td.get("twoPointShotsMadePerGame", 0), "2a": td.get("twoPointShotsAttemptedPerGame", 0), "2pct": td.get("twoPointShotsSuccessPercent", 0),
+                "3m": td.get("threePointShotsMadePerGame", 0), "3a": td.get("threePointShotsAttemptedPerGame", 0), "3pct": td.get("threePointShotsSuccessPercent", 0),
+                "ftm": td.get("freeThrowsMadePerGame", 0), "fta": td.get("freeThrowsAttemptedPerGame", 0), "ftpct": td.get("freeThrowsSuccessPercent", 0),
+                "dr": td.get("defensiveReboundsPerGame", 0), "or": td.get("offensiveReboundsPerGame", 0),
+                "fgpct": td.get("fieldGoalsSuccessPercent", 0)
+            }
     except Exception as e:
         print(f"Error fetching team stats: {e}")
 
-    # 2. Player Stats laden
+    # ---------------------------------------------------------
+    # TEIL B: PLAYER STATS LADEN
+    # ---------------------------------------------------------
     try:
-        # Lookup für Metadaten vorbereiten
+        # Lookup für Metadaten vorbereiten (Geburtstag etc.)
         roster_lookup = {}
         raw_details = fetch_team_details_raw(team_id, season_id)
         if raw_details:
@@ -115,9 +133,9 @@ def fetch_team_data(team_id, season_id):
                 if nat == "-": nat = extract_nationality(entry)
                 roster_lookup[pid] = {"birthdate": bdate, "nationality": nat, "height": p.get("height", "-")}
 
-        r_stats = requests.get(api_stats, headers=API_HEADERS, timeout=3)
+        # Spieler Stats abrufen
+        r_stats = requests.get(api_stats_players, headers=API_HEADERS, timeout=3)
         
-        # WICHTIG: Auch weitermachen, wenn r_stats fehlschlägt, sofern wir TS haben
         if r_stats.status_code == 200:
             raw_p = r_stats.json()
             p_list = raw_p if isinstance(raw_p, list) else raw_p.get("data", [])
@@ -161,7 +179,6 @@ def fetch_team_data(team_id, season_id):
                 df["GP"] = get_n("gamesplayed").replace(0,1)
                 min_raw = get_n("minutespergame")
                 df["MIN_FINAL"] = min_raw
-                # Fallback Berechnung Minuten
                 mask_zero = (df["MIN_FINAL"] <= 0) & (df["GP"] > 0)
                 if not df.loc[mask_zero].empty:
                     sec_cols = [c for c in df.columns if "secondsplayed" in c]
@@ -173,7 +190,6 @@ def fetch_team_data(team_id, season_id):
                 df["PPG"] = get_n("pointspergame"); df["TOT"] = get_n("totalreboundspergame"); df["AS"] = get_n("assistspergame")
                 df["TO"] = get_n("turnoverspergame"); df["ST"] = get_n("stealspergame"); df["BS"] = get_n("blockspergame"); df["PF"] = get_n("foulscommittedpergame")
                 
-                # Quoten
                 m2 = get_n("twopointshotsmadepergame"); a2 = get_n("twopointshotsattemptedpergame")
                 m3 = get_n("threepointshotsmadepergame"); a3 = get_n("threepointshotsattemptedpergame")
                 df["2M"] = m2; df["2A"] = a2
@@ -186,17 +202,15 @@ def fetch_team_data(team_id, season_id):
                 
                 df["2PCT"] = get_n("twopointshotsuccesspercent").apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
                 df["3PCT"] = get_n("threepointshotsuccesspercent").apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
-                
                 df["FTM"] = get_n("freethrowsmadepergame"); df["FTA"] = get_n("freethrowsattemptedpergame")
                 df["FTPCT"] = get_n("freethrowssuccesspercent").apply(lambda x: round(x*100, 1) if x <= 1 else round(x, 1))
-                
                 df["OR"] = get_n("offensivereboundspergame"); df["DR"] = get_n("defensivereboundspergame")
                 
                 df["select"] = False
     except Exception as e:
         print(f"Error fetching player stats: {e}")
 
-    # Rückgabe: Erfolg, wenn zumindest eines von beiden da ist (ts nicht leer oder df nicht leer)
+    # Rückgabe: Erfolg, wenn zumindest eines von beiden da ist
     if ts or (not df.empty):
         return df, ts
     
@@ -265,8 +279,6 @@ def fetch_team_info_basic(team_id):
 
 @st.cache_data(ttl=600)
 def fetch_season_games(season_id):
-    """Lädt ALLE Spiele der Saison (für Live View)."""
-    # Wir nehmen hier eine PageSize von 3000 an, um alles zu kriegen
     url = f"https://api-s.dbbl.scb.world/games?seasonId={season_id}&pageSize=3000"
     try:
         resp = requests.get(url, headers=API_HEADERS, timeout=4)
@@ -293,7 +305,7 @@ def fetch_season_games(season_id):
                 clean.append({
                     "id": g.get("id"),
                     "date": d_disp,
-                    "date_only": date_only, # Hilfsfeld für Filter
+                    "date_only": date_only,
                     "home": g.get("homeTeam", {}).get("name", "?"),
                     "guest": g.get("guestTeam", {}).get("name", "?"),
                     "score": f"{h_s}:{g_s}" if g.get("status") == "ENDED" else "-:-",
