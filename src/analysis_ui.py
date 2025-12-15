@@ -5,24 +5,13 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
-from src.config import SEASON_ID
+from src.config import SEASON_ID, TEAMS_DB # <--- TEAMS_DB importiert
 from src.api import fetch_standings
 
 # --- KONSTANTEN & HELPERS ---
 
 ACTION_TRANSLATION = {
-    "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
-    "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
-    "FREE_THROW_MADE": "FW Treffer", "FREE_THROW_MISSED": "FW Fehl",
-    "REBOUND": "Rebound", "FOUL": "Foul", "TURNOVER": "TO",
-    "ASSIST": "Assist", "STEAL": "Steal", "BLOCK": "Block",
-    "SUBSTITUTION": "Wechsel", "TIMEOUT": "Auszeit",
-    "JUMP_BALL": "Sprungball", "START": "Start", "END": "Ende",
-    "TWO_POINT_THROW": "2P Wurf", "THREE_POINT_THROW": "3P Wurf",
-    "FREE_THROW": "Freiwurf", "layup": "Korbleger", "jump_shot": "Sprung",
-    "dunk": "Dunk", "offensive": "Off", "defensive": "Def",
-    "personal_foul": "Persönlich", "technical_foul": "Technisch",
-    "unsportsmanlike_foul": "Unsportlich", "half_or_far_distance": "Mitteldistanz", "close_distance": "Nahdistanz"
+    "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl", "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl", "FREE_THROW_MADE": "FW Treffer", "FREE_THROW_MISSED": "FW Fehl", "REBOUND": "Rebound", "FOUL": "Foul", "TURNOVER": "TO", "ASSIST": "Assist", "STEAL": "Steal", "BLOCK": "Block", "SUBSTITUTION": "Wechsel", "TIMEOUT": "Auszeit", "JUMP_BALL": "Sprungball", "START": "Start", "END": "Ende", "TWO_POINT_THROW": "2P Wurf", "THREE_POINT_THROW": "3P Wurf", "FREE_THROW": "Freiwurf", "layup": "Korbleger", "jump_shot": "Sprung", "dunk": "Dunk", "offensive": "Off", "defensive": "Def", "personal_foul": "Persönlich", "technical_foul": "Technisch", "unsportsmanlike_foul": "Unsportlich", "half_or_far_distance": "Mitteldistanz", "close_distance": "Nahdistanz"
 }
 
 def translate_text(text):
@@ -166,99 +155,43 @@ def analyze_game_flow(actions, home_name, guest_name):
 # --- RENDERING FUNKTIONEN ---
 
 def render_full_play_by_play(box, height=600):
-    """Rendert eine detaillierte Play-by-Play Tabelle auf Deutsch (Neueste zuerst)."""
     actions = box.get("actions", [])
     if not actions:
         st.info("Keine Play-by-Play Daten verfügbar.")
         return
 
     player_map = get_player_lookup(box)
-    player_team_map = get_player_team_lookup(box)
-    
     home_name = get_team_name(box.get("homeTeam", {}), "Heim")
     guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
     home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
     guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
 
     data = []
-    
-    # Laufenden Score berechnen (Chronologisch durchgehen)
-    running_h = 0
-    running_g = 0
+    running_h = 0; running_g = 0
 
     for act in actions:
-        h_pts = act.get("homeTeamPoints")
-        g_pts = act.get("guestTeamPoints")
-        
-        # Score aktualisieren, falls im Datensatz vorhanden
-        if h_pts is not None: running_h = safe_int(h_pts)
-        if g_pts is not None: running_g = safe_int(g_pts)
+        if act.get("homeTeamPoints") is not None: running_h = safe_int(act.get("homeTeamPoints"))
+        if act.get("guestTeamPoints") is not None: running_g = safe_int(act.get("guestTeamPoints"))
         
         score_str = f"{running_h} : {running_g}"
-        
         period = act.get("period", "")
         game_time = act.get("gameTime", "") 
-        time_in_game = act.get("timeInGame", "") 
-        
-        if game_time:
-            display_time = convert_elapsed_to_remaining(game_time, period)
-        else:
-            display_time = "-"
-            if time_in_game and "M" in time_in_game:
-                try:
-                    t = time_in_game.replace("PT", "").replace("S", "")
-                    m, s = t.split("M")
-                    display_time = f"{m}:{s.zfill(2)}"
-                except: pass
-
+        display_time = convert_elapsed_to_remaining(game_time, period) if game_time else "-"
         time_label = f"Q{period} {display_time}" if period else "-"
         
         pid = str(act.get("seasonPlayerId"))
         actor = player_map.get(pid, "")
         
         tid = str(act.get("seasonTeamId"))
-        if tid == home_id:
-            team_display = home_name
-        elif tid == guest_id:
-            team_display = guest_name
-        elif pid in player_team_map: 
-            team_display = player_team_map[pid]
-        else:
-            team_display = "-" 
-
-        raw_type = act.get("type", "")
-        action_german = translate_text(raw_type)
+        team_display = home_name if tid == home_id else guest_name if tid == guest_id else "-"
         
-        is_successful = act.get("isSuccessful")
-        if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
-             if "Treffer" not in action_german and "Fehlwurf" not in action_german:
-                 if is_successful is True:
-                     action_german += " (Treffer)"
-                 elif is_successful is False:
-                     action_german += " (Fehlwurf)"
-
-        qualifiers = act.get("qualifiers", [])
-        if qualifiers:
-            qual_german = [translate_text(q) for q in qualifiers]
-            action_german += f" ({', '.join(qual_german)})"
+        action_german = translate_text(act.get("type", ""))
+        if act.get("points"): action_german += f" (+{act.get('points')})"
         
-        if act.get("points"):
-            action_german += f" (+{act.get('points')})"
-
-        data.append({
-            "Zeit": time_label,
-            "Score": score_str,
-            "Team": team_display,
-            "Spieler": actor,
-            "Aktion": action_german
-        })
+        data.append({"Zeit": time_label, "Score": score_str, "Team": team_display, "Spieler": actor, "Aktion": action_german})
 
     df = pd.DataFrame(data)
-    
-    # WICHTIG: Immer umdrehen, damit die neuste Aktion oben steht
-    if not df.empty:
-        df = df.iloc[::-1]
-
+    if not df.empty: df = df.iloc[::-1]
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def render_game_header(details):
@@ -267,10 +200,7 @@ def render_game_header(details):
     res = details.get("result", {}); score_h = res.get("homeTeamFinalScore", 0); score_g = res.get("guestTeamFinalScore", 0)
     time_str = format_date_time(details.get("scheduledTime"))
     venue = details.get("venue", {}); venue_str = f"{venue.get('name', '-')}, {venue.get('address', '').split(',')[-1].strip()}"
-    refs = []
-    for i in range(1, 4):
-        r = details.get(f"referee{i}")
-        if r and isinstance(r, dict): fn = r.get("firstName", ""); ln = r.get("lastName", ""); refs.append(f"{ln} {fn}".strip())
+    refs = [f'{r.get("lastName", "")} {r.get("firstName", "")}'.strip() for i in range(1, 4) if (r := details.get(f"referee{i}")) and isinstance(r, dict)]
     ref_str = ", ".join(refs) if refs else "-"
     st.markdown(f"<div style='text-align: center; color: #666; font-size: 1.1em;'>📍 {venue_str} | 🕒 {time_str}</div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([2, 1, 2])
@@ -289,37 +219,26 @@ def render_game_header(details):
 
 def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coach_name="-"):
     if not player_stats: return
-    data = []; sum_pts=0; sum_3pm=0; sum_3pa=0; sum_fgm=0; sum_fga=0; sum_ftm=0; sum_fta=0; sum_or=0; sum_dr=0; sum_tr=0; sum_as=0; sum_st=0; sum_to=0; sum_bs=0; sum_pf=0; sum_eff=0; sum_pm=0
+    data = []
     for p in player_stats:
         info = p.get("seasonPlayer", {}); name = f"{info.get('lastName', '')}, {info.get('firstName', '')}"; nr = info.get("shirtNumber", "-"); starter = "*" if p.get("isStartingFive") else ""; sec = safe_int(p.get("secondsPlayed"))
-        pts = safe_int(p.get("points")); sum_pts += pts; m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted")); p2 = safe_int(p.get("twoPointShotSuccessPercent"))
-        m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted")); p3 = safe_int(p.get("threePointShotSuccessPercent")); sum_3pm += m3; sum_3pa += a3
-        mfg = safe_int(p.get("fieldGoalsMade")); afg = safe_int(p.get("fieldGoalsAttempted")); pfg = safe_int(p.get("fieldGoalsSuccessPercent")); sum_fgm += mfg; sum_fga += afg
-        mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted")); pft = safe_int(p.get("freeThrowsSuccessPercent")); sum_ftm += mft; sum_fta += aft
-        oreb = safe_int(p.get("offensiveRebounds")); sum_or += oreb; dreb = safe_int(p.get("defensiveRebounds")); sum_dr += dreb; treb = safe_int(p.get("totalRebounds")); sum_tr += treb
-        ast = safe_int(p.get("assists")); sum_as += ast; stl = safe_int(p.get("steals")); sum_st += stl; tov = safe_int(p.get("turnovers")); sum_to += tov; blk = safe_int(p.get("blocks")); sum_bs += blk; pf = safe_int(p.get("foulsCommitted")); sum_pf += pf; eff = safe_int(p.get("efficiency")); sum_eff += eff; pm = safe_int(p.get("plusMinus")); sum_pm += pm
+        pts = safe_int(p.get("points")); m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted")); p2 = safe_int(p.get("twoPointShotSuccessPercent"))
+        m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted")); p3 = safe_int(p.get("threePointShotSuccessPercent"))
+        mfg = safe_int(p.get("fieldGoalsMade")); afg = safe_int(p.get("fieldGoalsAttempted")); pfg = safe_int(p.get("fieldGoalsSuccessPercent"))
+        mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted")); pft = safe_int(p.get("freeThrowsSuccessPercent"))
+        oreb = safe_int(p.get("offensiveRebounds")); dreb = safe_int(p.get("defensiveRebounds")); treb = safe_int(p.get("totalRebounds"))
+        ast = safe_int(p.get("assists")); stl = safe_int(p.get("steals")); tov = safe_int(p.get("turnovers")); blk = safe_int(p.get("blocks")); pf = safe_int(p.get("foulsCommitted")); eff = safe_int(p.get("efficiency")); pm = safe_int(p.get("plusMinus"))
         min_str = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "DNP"
         s_2p = f"{m2}/{a2} ({int(p2)}%)" if a2 and sec > 0 else ""; s_3p = f"{m3}/{a3} ({int(p3)}%)" if a3 and sec > 0 else ""; s_fg = f"{mfg}/{afg} ({int(pfg)}%)" if sec > 0 else ""; s_ft = f"{mft}/{aft} ({int(pft)}%)" if aft and sec > 0 else ""
         data.append({"No.": f"{starter}{nr}", "Name": name, "Min": min_str, "PTS": pts, "2P": s_2p, "3P": s_3p, "FG": s_fg, "FT": s_ft, "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "ST": stl, "TO": tov, "BS": blk, "PF": pf, "EFF": eff, "+/-": pm})
-    if team_stats_official:
-        t_off = team_stats_official; team_pts = safe_int(t_off.get("points")) - sum_pts; team_or = safe_int(t_off.get("offensiveRebounds")) - sum_or; team_dr = safe_int(t_off.get("defensiveRebounds")) - sum_dr
-        team_tr = safe_int(t_off.get("totalRebounds")) - sum_tr; team_as = safe_int(t_off.get("assists")) - sum_as; team_st = safe_int(t_off.get("steals")) - sum_st; team_to = safe_int(t_off.get("turnovers")) - sum_to
-        team_bs = safe_int(t_off.get("blocks")) - sum_bs; team_pf = safe_int(t_off.get("foulsCommitted")) - sum_pf
-        if (team_or != 0 or team_dr != 0 or team_tr != 0 or team_to != 0 or team_pf != 0 or team_pts != 0):
-            data.append({"No.": "", "Name": "Team / Coach", "Min": "", "PTS": team_pts, "2P": "", "3P": "", "FG": "", "FT": "", "OR": team_or, "DR": team_dr, "TR": team_tr, "AS": team_as, "ST": team_st, "TO": team_to, "BS": team_bs, "PF": team_pf, "EFF": "", "+/-": ""})
-    t_off = team_stats_official if team_stats_official else {}
-    final_pts = safe_int(t_off.get("points")) if t_off else sum_pts; final_fgm = safe_int(t_off.get("fieldGoalsMade")) if t_off else sum_fgm; final_fga = safe_int(t_off.get("fieldGoalsAttempted")) if t_off else sum_fga
-    final_3pm = safe_int(t_off.get("threePointShotsMade")) if t_off else sum_3pm; final_3pa = safe_int(t_off.get("threePointShotsAttempted")) if t_off else sum_3pa; final_ftm = safe_int(t_off.get("freeThrowsMade")) if t_off else sum_ftm
-    final_fta = safe_int(t_off.get("freeThrowsAttempted")) if t_off else sum_fta
-    tot_fg_pct = int(final_fgm/final_fga*100) if final_fga else 0; tot_3p_pct = int(final_3pm/final_3pa*100) if final_3pa else 0; tot_ft_pct = int(final_ftm/final_fta*100) if final_fta else 0
-    totals = {"No.": "", "Name": "TOTALS", "Min": "200:00", "PTS": final_pts, "2P": "", "3P": f"{final_3pm}/{final_3pa} ({tot_3p_pct}%)", "FG": f"{final_fgm}/{final_fga} ({tot_fg_pct}%)", "FT": f"{final_ftm}/{final_fta} ({tot_ft_pct}%)", "OR": safe_int(t_off.get("offensiveRebounds")) if t_off else sum_or, "DR": safe_int(t_off.get("defensiveRebounds")) if t_off else sum_dr, "TR": safe_int(t_off.get("totalRebounds")) if t_off else sum_tr, "AS": safe_int(t_off.get("assists")) if t_off else sum_as, "ST": safe_int(t_off.get("steals")) if t_off else sum_st, "TO": safe_int(t_off.get("turnovers")) if t_off else sum_to, "BS": safe_int(t_off.get("blocks")) if t_off else sum_bs, "PF": safe_int(t_off.get("foulsCommitted")) if t_off else sum_pf, "EFF": safe_int(t_off.get("efficiency")) if t_off else sum_eff, "+/-": ""}
-    data.append(totals)
+    
     df = pd.DataFrame(data)
+    
     def highlight_totals(row):
-        if row['Name'] == 'TOTALS': return ['font-weight: bold; background-color: #f0f0f0' for _ in row]
-        if row['Name'] == 'Team / Coach': return ['font-style: italic; color: #555;' for _ in row]
-        return ['' for _ in row]
-    st.markdown(f"#### {team_name}"); calc_height = (len(df) + 1) * 35 + 3; st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
+        return ['font-weight: bold; background-color: #f0f0f0' if row.Name == 'TOTALS' else '' for _ in row]
+    
+    st.markdown(f"#### {team_name}"); calc_height = (len(df) + 1) * 35 + 3
+    st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
     if coach_name and coach_name != "-": st.markdown(f"*Head Coach: {coach_name}*")
 
 def render_game_top_performers(box):
@@ -397,40 +316,26 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
             for _, row in top4.iterrows():
                 with st.container():
                     col_img, col_stats = st.columns([1, 4])
-                    
-                    # DATENPRÜFUNG: Alter, Nation, Größe
-                    age = row.get('AGE', '-')
-                    nat = row.get('NATIONALITY', '-')
-                    height = row.get('HEIGHT_ROSTER', '-') # Im DF hieß es HEIGHT_ROSTER oder -
-
-                    # Wenn Daten im DataFrame fehlen, versuchen wir den Callback
+                    age = row.get('AGE', '-'); nat = row.get('NATIONALITY', '-'); height = row.get('HEIGHT_ROSTER', '-')
                     img_url = None
                     if metadata_callback:
-                        # Wir rufen ab, wenn Daten fehlen ODER Bild fehlt
                         meta = None
                         if age in ["-", ""] or nat in ["-", ""] or height in ["-", ""] or not row.get("img"):
                             meta = metadata_callback(row["PLAYER_ID"])
-                        
                         if meta:
                             if age in ["-", ""]: age = meta.get("age", "-")
                             if nat in ["-", ""]: nat = meta.get("nationality", "-")
                             if height in ["-", ""]: height = meta.get("height", "-")
                             img_url = meta.get("img")
-                        else:
-                            img_url = row.get("img")
-                    else:
-                        img_url = row.get("img")
-
+                        else: img_url = row.get("img")
+                    else: img_url = row.get("img")
 
                     with col_img:
-                        if img_url:
-                            st.image(img_url, width=100)
-                        else:
-                            st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
+                        if img_url: st.image(img_url, width=100)
+                        else: st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
 
                     with col_stats:
                         st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
-                        # HIER JETZT DIE AKTUALISIERTEN DATEN ANZEIGEN:
                         st.caption(f"Alter: {age} | Nat: {nat} | Größe: {height}")
                         st.markdown(f"**PPG: {row['PPG']}** | FG%: {row['FG%']} | 3P%: {row['3PCT']}% | REB: {row['TOT']} | AST: {row['AS']}")
                     st.divider()
@@ -440,151 +345,88 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
         st.markdown("#### Formkurve")
         if last_games:
             played_games = [g for g in last_games if g.get('has_result')]
-            # Sortierlogik für DD.MM.YYYY
             def parse_date(d_str):
                 try: return datetime.strptime(d_str, "%d.%m.%Y %H:%M")
                 except: return datetime.min
             
             games_sorted = sorted(played_games, key=lambda x: parse_date(x['date']), reverse=True)[:5]
             if games_sorted:
-                # Kompakte Badges-Anzeige
-                st.write("") # Spacer
+                st.write("")
                 cols_form = st.columns(len(games_sorted))
                 for idx, g in enumerate(games_sorted):
-                    h_score = g.get('home_score', 0)
-                    g_score = g.get('guest_score', 0)
-                    is_home = (g.get('homeTeamId') == str(team_id))
-                    
-                    win = False
-                    if is_home and h_score > g_score: win = True
-                    elif not is_home and g_score > h_score: win = True
-                    
-                    color = "#28a745" if win else "#dc3545" # Grün/Rot
-                    char = "W" if win else "L"
-                    
+                    win = (g.get('homeTeamId') == str(team_id) and g.get('home_score', 0) > g.get('guest_score', 0)) or \
+                          (g.get('homeTeamId') != str(team_id) and g.get('guest_score', 0) > g.get('home_score', 0))
+                    color = "#28a745" if win else "#dc3545"; char = "W" if win else "L"
                     with cols_form[idx]:
                         st.markdown(f"<div style='background-color:{color};color:white;text-align:center;padding:10px;border-radius:5px;font-weight:bold;' title='{g['date']}\n{g['home']} vs {g['guest']}\n{g['score']}'>{char}</div>", unsafe_allow_html=True)
             else: st.info("Keine gespielten Spiele.")
         else: st.info("Keine Spiele.")
         
-        # --- TABELLE EINFÜGEN ---
         st.write("")
-        st.markdown("#### Aktueller Tabellenplatz")
+        st.markdown("#### Aktuelle Tabelle")
+        standings_df = fetch_standings(SEASON_ID)
         
-        # Tabelle laden (cached)
-        standings_map = fetch_standings(SEASON_ID)
-        team_stat = standings_map.get(str(team_id))
-        
-        if team_stat:
-            # Daten extrahieren
-            rank = team_stat.get("rank", "-")
-            team_n = team_stat.get("team", {}).get("name", team_name)
-            played = team_stat.get("matchesPlayed", 0)
-            wins = team_stat.get("wins", 0)
-            losses = team_stat.get("losses", 0)
-            pts = team_stat.get("points", 0)
+        if not standings_df.empty:
+            current_team_staffel = TEAMS_DB.get(str(team_id), {}).get("staffel")
             
-            p_scored = team_stat.get("pointsScored", 0)
-            p_conceded = team_stat.get("pointsConceded", 0)
-            diff = team_stat.get("pointsDifference", 0)
-            streak = team_stat.get("streak", "-")
-            
-            # Heim/Gast Statistik (falls in der API, oft nested, hier vereinfacht falls nicht verfügbar)
-            # Wir nehmen erstmal an, dass wir nur Overall haben, da die API Struktur variieren kann
-            # Wenn Home/Away Record verfügbar ist, nutzen wir ihn (oft unter "homePerformance")
-            home_w = team_stat.get("homePerformance", {}).get("wins", "-")
-            home_l = team_stat.get("homePerformance", {}).get("losses", "-")
-            home_str = f"{home_w}-{home_l}" if home_w != "-" else "-"
-            
-            guest_w = team_stat.get("guestPerformance", {}).get("wins", "-")
-            guest_l = team_stat.get("guestPerformance", {}).get("losses", "-")
-            guest_str = f"{guest_w}-{guest_l}" if guest_w != "-" else "-"
-            
-            # Last 10 ist in der einfachen API oft nicht drin, wir nehmen Streak oder "-"
-            last10 = "-" 
-            
-            # HTML Table
-            html_table = f"""
-            <table style="width:100%; font-size:12px; border-collapse: collapse; text-align: center;">
-                <tr style="background-color: #f0f0f0; border-bottom: 1px solid #ddd;">
-                    <th style="padding: 5px;">PL</th>
-                    <th style="padding: 5px; text-align: left;">Team</th>
-                    <th style="padding: 5px;">G</th>
-                    <th style="padding: 5px;">S</th>
-                    <th style="padding: 5px;">N</th>
-                    <th style="padding: 5px;">PKT</th>
-                    <th style="padding: 5px;">+/-</th>
-                    <th style="padding: 5px;">Diff</th>
-                    <th style="padding: 5px;">Heim</th>
-                    <th style="padding: 5px;">Gast</th>
-                    <th style="padding: 5px;">Last 10</th>
-                    <th style="padding: 5px;">Serie</th>
-                </tr>
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 5px; font-weight: bold;">{rank}</td>
-                    <td style="padding: 5px; text-align: left;">{team_n}</td>
-                    <td style="padding: 5px;">{played}</td>
-                    <td style="padding: 5px; color: green;">{wins}</td>
-                    <td style="padding: 5px; color: red;">{losses}</td>
-                    <td style="padding: 5px; font-weight: bold;">{pts}</td>
-                    <td style="padding: 5px;">{p_scored}:{p_conceded}</td>
-                    <td style="padding: 5px;">{diff}</td>
-                    <td style="padding: 5px;">{home_str}</td>
-                    <td style="padding: 5px;">{guest_str}</td>
-                    <td style="padding: 5px;">{last10}</td>
-                    <td style="padding: 5px;">{streak}</td>
-                </tr>
-            </table>
-            """
-            st.markdown(html_table, unsafe_allow_html=True)
+            if current_team_staffel:
+                team_ids_in_staffel = {tid for tid, tinfo in TEAMS_DB.items() if tinfo.get("staffel") == current_team_staffel}
+                staffel_standings = standings_df[standings_df['teamId'].astype(str).isin(team_ids_in_staffel)].copy()
+                staffel_standings.sort_values(by='PL', inplace=True)
+
+                # HTML-Tabelle generieren
+                html_table = """
+                <table style="width:100%; font-size:11px; border-collapse: collapse; text-align: center;">
+                    <tr style="background-color: #f0f0f0; border-bottom: 2px solid #ccc;">
+                        <th style="padding: 4px;">Pl.</th>
+                        <th style="padding: 4px; text-align: left;">Team</th>
+                        <th style="padding: 4px;">Sp</th>
+                        <th style="padding: 4px;">S</th>
+                        <th style="padding: 4px;">N</th>
+                        <th style="padding: 4px;">Pkt</th>
+                        <th style="padding: 4px;">Diff</th>
+                        <th style="padding: 4px;">Serie</th>
+                    </tr>
+                """
+                for _, row in staffel_standings.iterrows():
+                    highlight_style = "background-color: #d1e7dd;" if str(row['teamId']) == str(team_id) else ""
+                    html_table += f"""
+                    <tr style="border-bottom: 1px solid #eee; {highlight_style}">
+                        <td style="padding: 4px; font-weight: bold;">{row.get('PL', '-')}</td>
+                        <td style="padding: 4px; text-align: left;">{row.get('Team', '-')}</td>
+                        <td style="padding: 4px;">{row.get('G', '-')}</td>
+                        <td style="padding: 4px; color: green;">{row.get('S', '-')}</td>
+                        <td style="padding: 4px; color: red;">{row.get('N', '-')}</td>
+                        <td style="padding: 4px; font-weight: bold;">{row.get('PKT', '-')}</td>
+                        <td style="padding: 4px;">{row.get('Diff', '-')}</td>
+                        <td style="padding: 4px;">{row.get('Serie', '-')}</td>
+                    </tr>
+                    """
+                html_table += "</table>"
+                st.markdown(html_table, unsafe_allow_html=True)
+            else:
+                st.info("Staffel des Teams nicht gefunden.")
         else:
-            st.info("Tabellendaten nicht verfügbar.")
+            st.warning("Tabellendaten nicht verfügbar.")
 
 def render_live_view(box):
-    """Zeigt Live Stats und PBP nebeneinander für Mobile optimiert."""
     if not box: return
-
-    # Team Namen
-    h_name = get_team_name(box.get("homeTeam", {}), "Heim")
-    g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    h_name = get_team_name(box.get("homeTeam", {}), "Heim"); g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    res = box.get("result", {}); s_h = res.get("homeTeamFinalScore", 0); s_g = res.get("guestTeamFinalScore", 0)
+    actions = box.get("actions", []); period = res.get("period") or box.get("period", 1)
     
-    # Metadaten Score (kann verzögert sein)
-    res = box.get("result", {})
-    s_h = res.get("homeTeamFinalScore", 0)
-    s_g = res.get("guestTeamFinalScore", 0)
-    
-    actions = box.get("actions", [])
-    period = res.get("period") or box.get("period", 1)
-    
-    # LOGIK-UPDATE: Wir schauen IMMER in die letzte Aktion für den aktuellsten Score.
-    # Die DBBL API Result-Objekte hinken oft 30sek hinterher, die Actions sind live.
-    last_h_live = 0
-    last_g_live = 0
     found_score = False
-
     if actions:
-        # Rückwärts suchen nach dem letzten validen Punktestand
         for act in reversed(actions):
             if act.get("homeTeamPoints") is not None and act.get("guestTeamPoints") is not None:
-                last_h_live = safe_int(act.get("homeTeamPoints"))
-                last_g_live = safe_int(act.get("guestTeamPoints"))
+                s_h = safe_int(act.get("homeTeamPoints")); s_g = safe_int(act.get("guestTeamPoints"))
                 if not period: period = act.get("period")
                 found_score = True
                 break
     
-    # Wenn wir einen Score aus den Actions haben, nutzen wir diesen bevorzugt für die Anzeige
-    if found_score:
-        s_h = last_h_live
-        s_g = last_g_live
-    
-    # Mapping Period
-    p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
-    if safe_int(period) > 4: p_str = f"OT{safe_int(period)-4}"
-    else: p_str = p_map.get(safe_int(period), f"Q{period}") if period else "-"
-    
+    p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}; p_str = f"OT{safe_int(period)-4}" if safe_int(period) > 4 else p_map.get(safe_int(period), f"Q{period}") if period else "-"
     time_str = convert_elapsed_to_remaining(box.get('gameTime', ''), period)
 
-    # Scoreboard
     st.markdown(f"""
     <div style='text-align: center; background-color: #222; color: #fff; padding: 10px; border-radius: 10px; margin-bottom: 20px;'>
         <div style='font-size: 1.2em;'>{h_name} vs {g_name}</div>
@@ -597,43 +439,21 @@ def render_live_view(box):
     
     with c1:
         st.subheader("📊 Live Stats")
-        
-        # Funktion zum Erstellen der Spieler-Tabelle
         def create_live_player_table(team_data):
             players = team_data.get("playerStats", [])
             data = []
             for p in players:
-                # Stats extrahieren
-                sec = safe_int(p.get("secondsPlayed"))
-                min_s = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "00:00"
-                
-                # Nur Spieler anzeigen, die gespielt haben oder im Boxscore relevant sind
-                if sec > 0 or safe_int(p.get("points")) > 0:
-                    data.append({
-                        "Nr": p.get('seasonPlayer', {}).get('shirtNumber', '-'),
-                        "Name": p.get('seasonPlayer', {}).get('lastName', 'Unk'),
-                        "Min": min_s,
-                        "PTS": safe_int(p.get("points")),
-                        "PF": safe_int(p.get("foulsCommitted"))
-                    })
-            
-            # DataFrame erstellen und sortieren nach PTS
+                if sec := safe_int(p.get("secondsPlayed")) > 0 or safe_int(p.get("points")) > 0:
+                    data.append({ "Nr": p.get('seasonPlayer', {}).get('shirtNumber', '-'), "Name": p.get('seasonPlayer', {}).get('lastName', 'Unk'), "Min": f"{int(sec//60):02d}:{int(sec%60):02d}", "PTS": safe_int(p.get("points")), "PF": safe_int(p.get("foulsCommitted"))})
             df = pd.DataFrame(data)
-            if not df.empty:
-                df = df.sort_values(by="PTS", ascending=False)
+            if not df.empty: df = df.sort_values(by="PTS", ascending=False)
             return df
 
-        # Tabellen erstellen
         df_home = create_live_player_table(box.get("homeTeam", {}))
         df_guest = create_live_player_table(box.get("guestTeam", {}))
 
-        # Anzeigen
-        st.markdown(f"**{h_name}**")
-        st.dataframe(df_home, hide_index=True, use_container_width=True)
-        
-        st.write("")
-        st.markdown(f"**{g_name}**")
-        st.dataframe(df_guest, hide_index=True, use_container_width=True)
+        st.markdown(f"**{h_name}**"); st.dataframe(df_home, hide_index=True, use_container_width=True)
+        st.write(""); st.markdown(f"**{g_name}**"); st.dataframe(df_guest, hide_index=True, use_container_width=True)
 
     with c2:
         st.subheader("📜 Live Ticker")
