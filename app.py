@@ -555,7 +555,7 @@ def render_scouting_page():
                                 st.session_state.pdf_bytes = None 
                                 st.session_state.print_mode = True 
                                 st.rerun()
-                        else:
+                   else:
                             st.warning("PDFKit oder wkhtmltopdf ist nicht installiert. PDF-Export nicht verfügbar.")
                             st.session_state.pdf_bytes = None 
                             st.session_state.print_mode = True
