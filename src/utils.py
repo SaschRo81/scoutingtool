@@ -12,7 +12,22 @@ GRAY_BOX_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HA
 def get_logo_url(team_id, season_id):
     return f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/logo"
 
+# NEU: Diese Funktion lädt das Bild herunter und macht es PDF-sicher
 def optimize_image_base64(url):
+    if not url: return ""
+    try:
+        response = requests.get(url, timeout=3)
+        if response.status_code == 200:
+            # Bilddaten in Base64 umwandeln
+            encoded = base64.b64encode(response.content).decode()
+            # MIME-Type raten (meist png oder jpeg)
+            mime = "image/png"
+            if url.lower().endswith(".jpg") or url.lower().endswith(".jpeg"):
+                mime = "image/jpeg"
+            return f"data:{mime};base64,{encoded}"
+    except:
+        pass
+    # Fallback, falls Download fehlschlägt (leeres Bild oder URL zurückgeben)
     return url
 
 def format_minutes(val):
@@ -29,9 +44,9 @@ def format_minutes(val):
     except Exception:
         return "00:00"
 
-def clean_pos(pos):
-    if not pos or pd.isna(pos): return "-"
-    return str(pos).replace("_", " ").title()
+def clean_pos(pos_str):
+    if not pos_str: return "-"
+    return pos_str.replace("_", " ").title()
 
 @st.cache_data(show_spinner=False)
 def optimize_image_base64(url):
