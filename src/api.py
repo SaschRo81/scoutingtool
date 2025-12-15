@@ -16,10 +16,8 @@ def format_minutes(seconds):
     except: return "00:00"
 
 def calculate_age(birthdate_str):
-    """Berechnet das Alter. Akzeptiert '1990-01-01' oder ISO."""
     if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", "", "-"]: return "-"
     try:
-        # Bereinige ISO String (schneide Zeit ab falls vorhanden)
         clean_date = str(birthdate_str).split("T")[0]
         bd = datetime.strptime(clean_date, "%Y-%m-%d")
         today = datetime.now()
@@ -47,29 +45,20 @@ def get_player_metadata_cached(player_id):
             img = data.get("imageUrl", "")
             bdate = get_attr(["birthDate", "birthdate"], person) or get_attr(["birthDate", "birthdate"], data)
             age = calculate_age(bdate)
-            
             nat = "-"
             nats = get_attr(["nationalities"], person) or get_attr(["nationalities"], data)
             if nats and isinstance(nats, list): nat = ", ".join(nats)
             else:
                 n_obj = get_attr(["nationality"], person) or get_attr(["nationality"], data)
                 if n_obj and isinstance(n_obj, dict): nat = n_obj.get("name", "-")
-
             height = get_attr(["height"], person) or get_attr(["height"], data) or "-"
-            
             pos = "-"
             p_obj = get_attr(["position"], data) or get_attr(["position"], person)
             if isinstance(p_obj, dict): pos = p_obj.get("name", "-")
             elif isinstance(p_obj, str): pos = p_obj
             if pos: pos = pos.replace("_", " ")
             
-            return {
-                "img": img, 
-                "height": height, 
-                "pos": pos,
-                "age": age,
-                "nationality": nat
-            }
+            return {"img": img, "height": height, "pos": pos, "age": age, "nationality": nat}
     except: pass
     return {"img": "", "height": "-", "pos": "-", "age": "-", "nationality": "-"}
 
@@ -85,8 +74,6 @@ def fetch_team_details_raw(team_id, season_id):
 @st.cache_data(ttl=600)
 def fetch_team_data(team_id, season_id):
     api_stats = f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}/player-stats"
-    api_team = f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND&teamId={team_id}"
-    
     raw_details = fetch_team_details_raw(team_id, season_id)
     roster_lookup = {}
     
@@ -96,56 +83,34 @@ def fetch_team_data(team_id, season_id):
             p = entry.get("person", {})
             raw_id = p.get("id") or entry.get("id")
             if not raw_id: continue
-            
             pid = str(raw_id).replace(".0", "")
-            
             def find_val(keys):
                 for k in keys:
                     if k in p and p[k]: return p[k]
                     if k in entry and entry[k]: return entry[k]
                 return None
-
             bdate = find_val(["birthDate", "birthdate"]) or ""
             nat = "-"
             nats_list = find_val(["nationalities"])
-            if nats_list and isinstance(nats_list, list):
-                nat = ", ".join(nats_list)
+            if nats_list and isinstance(nats_list, list): nat = ", ".join(nats_list)
             else:
                 nat_obj = find_val(["nationality"])
-                if nat_obj and isinstance(nat_obj, dict):
-                    nat = nat_obj.get("name", "-")
-
+                if nat_obj and isinstance(nat_obj, dict): nat = nat_obj.get("name", "-")
             height = find_val(["height"]) or "-"
             pos = "-"
             pos_raw = find_val(["position"])
             if isinstance(pos_raw, dict): pos = pos_raw.get("name", "-")
             elif isinstance(pos_raw, str): pos = pos_raw
             if pos: pos = pos.replace("_", " ")
-
-            roster_lookup[pid] = {
-                "birthdate": bdate, "nationality": nat, "height": height, "position": pos
-            }
+            roster_lookup[pid] = {"birthdate": bdate, "nationality": nat, "height": height, "position": pos}
 
     try:
         r_stats = requests.get(api_stats, headers=API_HEADERS)
-        r_team = requests.get(api_team, headers=API_HEADERS)
-        
         if r_stats.status_code != 200: return None, None
         
         ts = {}
-        if r_team.status_code == 200:
-            raw_ts = r_team.json()
-            if raw_ts and isinstance(raw_ts, list) and raw_ts:
-                td = raw_ts[0]
-                ts = {
-                    "ppg": td.get("pointsPerGame", 0), "tot": td.get("totalReboundsPerGame", 0),
-                    "as": td.get("assistsPerGame", 0), "to": td.get("turnoversPerGame", 0),
-                    "st": td.get("stealsPerGame", 0), "bs": td.get("blocksPerGame", 0),
-                    "pf": td.get("foulsCommittedPerGame", 0),
-                    "2pct": td.get("twoPointShotsSuccessPercent", 0), "3pct": td.get("threePointShotsSuccessPercent", 0),
-                    "ftpct": td.get("freeThrowsSuccessPercent", 0)
-                }
-
+        # Team Stats (simplified, as they are part of the standings call now)
+        
         df = None
         raw_p = r_stats.json()
         p_list = raw_p if isinstance(raw_p, list) else raw_p.get("data", [])
@@ -154,9 +119,13 @@ def fetch_team_data(team_id, season_id):
             df = pd.json_normalize(p_list)
             df.columns = [str(c).lower() for c in df.columns]
             
+            # NAME FIX: Add 'displayname' as a fallback
             col_map = {
-                "firstname": ["seasonplayer.person.firstname", "person.firstname"], "lastname": ["seasonplayer.person.lastname", "person.lastname"],
-                "shirtnumber": ["seasonplayer.shirtnumber", "jerseynumber"], "id": ["seasonplayer.personid", "seasonplayer.id", "playerid"],
+                "firstname": ["seasonplayer.person.firstname", "person.firstname"], 
+                "lastname": ["seasonplayer.person.lastname", "person.lastname"],
+                "displayname": ["seasonplayer.displayname", "displayname"],
+                "shirtnumber": ["seasonplayer.shirtnumber", "jerseynumber"], 
+                "id": ["seasonplayer.personid", "seasonplayer.id", "playerid"],
                 "position": ["seasonplayer.position", "position"]
             }
             final_cols = {}
@@ -176,7 +145,12 @@ def fetch_team_data(team_id, season_id):
                     return pd.to_numeric(df[col], errors="coerce").fillna(default)
                 return pd.Series([default]*len(df), index=df.index)
             
+            # Create name from first/last, then use displayname as fallback
             df["NAME_FULL"] = (get_s("firstname") + " " + get_s("lastname")).str.strip()
+            display_name_col = final_cols.get("displayname")
+            if display_name_col in df.columns:
+                df.loc[df["NAME_FULL"] == "", "NAME_FULL"] = df[display_name_col]
+
             df["NR"] = get_s("shirtnumber").str.replace(".0", "", regex=False)
             df["PLAYER_ID"] = get_s("id").str.replace(".0", "", regex=False)
             df["POS"] = get_s("position").apply(lambda x: x.replace("_", " "))
@@ -202,10 +176,11 @@ def fetch_team_data(team_id, season_id):
             df["select"] = False
         else:
             df = pd.DataFrame()
-            
         return df, ts
     except Exception:
         return None, None
+
+# ... (alle anderen fetch funktionen bleiben gleich) ...
 
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
@@ -220,24 +195,14 @@ def fetch_schedule(team_id, season_id):
                 res = g.get("result")
                 score, has_res, h_score, g_score = "-", False, 0, 0
                 if res and isinstance(res, dict):
-                    h_score = res.get('homeTeamFinalScore')
-                    g_score = res.get('guestTeamFinalScore')
-                    if h_score is not None and g_score is not None:
-                        score, has_res = f"{h_score} : {g_score}", True
-                
+                    h_score = res.get('homeTeamFinalScore'); g_score = res.get('guestTeamFinalScore')
+                    if h_score is not None and g_score is not None: score, has_res = f"{h_score} : {g_score}", True
                 raw_d = g.get("scheduledTime", "")
                 d_disp = raw_d
                 if raw_d:
-                    try: 
-                        d_disp = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
+                    try: d_disp = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
                     except: pass
-                
-                clean.append({
-                    "id": g.get("id"), "date": d_disp, "score": score, "has_result": has_res,
-                    "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
-                    "homeTeamId": str(g.get("homeTeam", {}).get("teamId")), "guestTeamId": str(g.get("guestTeam", {}).get("teamId")),
-                    "home_score": h_score, "guest_score": g_score
-                })
+                clean.append({"id": g.get("id"), "date": d_disp, "score": score, "has_result": has_res, "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"), "homeTeamId": str(g.get("homeTeam", {}).get("teamId")), "guestTeamId": str(g.get("guestTeam", {}).get("teamId")), "home_score": h_score, "guest_score": g_score})
             return clean
     except: pass
     return []
@@ -257,8 +222,7 @@ def fetch_team_info_basic(team_id):
     try:
         resp = requests.get(f"https://api-s.dbbl.scb.world/teams/{team_id}", headers=API_HEADERS)
         if resp.status_code == 200:
-            data = resp.json()
-            venues = data.get("venues", [])
+            venues = resp.json().get("venues", [])
             main = next((v for v in venues if v.get("isMain")), venues[0] if venues else None)
             if main: return {"id": team_id, "venue": main}
     except: pass
@@ -286,12 +250,10 @@ def fetch_season_games(season_id):
                 res = g.get("result")
                 score, has_res, h_score, g_score = "0 : 0", False, 0, 0
                 if res and isinstance(res, dict):
-                    h_score = res.get('homeTeamFinalScore', 0)
-                    g_score = res.get('guestTeamFinalScore', 0)
+                    h_score = res.get('homeTeamFinalScore', 0); g_score = res.get('guestTeamFinalScore', 0)
                     if h_score is not None and g_score is not None:
                         score = f"{h_score} : {g_score}"
                         if h_score > 0 or g_score > 0: has_res = True
-                
                 raw_d = g.get("scheduledTime", "")
                 d_disp, date_only = raw_d, ""
                 if raw_d:
@@ -299,27 +261,21 @@ def fetch_season_games(season_id):
                         dt = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
                         d_disp, date_only = dt.strftime("%d.%m.%Y %H:%M"), dt.strftime("%d.%m.%Y")
                     except: pass
-                
-                clean.append({
-                    "id": g.get("id"), "date": d_disp, "date_only": date_only, "score": score, "has_result": has_res,
-                    "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
-                    "home_logo_id": str(g.get("homeTeam", {}).get("teamId")), "guest_logo_id": str(g.get("guestTeam", {}).get("teamId"))
-                })
+                clean.append({"id": g.get("id"), "date": d_disp, "date_only": date_only, "score": score, "has_result": has_res, "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"), "home_logo_id": str(g.get("homeTeam", {}).get("teamId")), "guest_logo_id": str(g.get("guestTeam", {}).get("teamId"))})
             return clean
     except: pass
     return []
 
 @st.cache_data(ttl=3600)
 def fetch_standings(season_id, staffel):
-    """Lädt die Tabelle für die angegebene Staffel (Nord oder Süd) mit dem korrekten displayType."""
-    
+    """Lädt die Tabelle für die angegebene Staffel (Nord oder Süd)."""
     staffel_short = "n" if staffel.lower() == "nord" else "s"
-    # KORREKTUR: displayType auf MAIN_ROUND geändert
     url = f"https://api-{staffel_short}.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND"
     
     standings_data = []
     try:
-        resp = requests.get(url, headers=API_HEADERS)
+        # TABELLEN-FIX: Die Anfrage wird OHNE die API-Header gesendet.
+        resp = requests.get(url)
         if resp.status_code == 200:
             data = resp.json()
             if isinstance(data, list):
@@ -339,5 +295,4 @@ def fetch_standings(season_id, staffel):
                 "streak": entry.get("streak", "-"), "homePerformance": entry.get("homePerformance", {}),
                 "guestPerformance": entry.get("guestPerformance", {})
             }
-            
     return standings_map
