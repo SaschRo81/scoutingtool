@@ -241,6 +241,17 @@ def fetch_team_data(team_id, season_id):
             m2 = get_n("twopointshotsmadepergame"); a2 = get_n("twopointshotsattemptedpergame")
             m3 = get_n("threepointshotsmadepergame"); a3 = get_n("threepointshotsattemptedpergame")
             
+            # --- KORREKTUR START: Spalten explizit zuweisen ---
+            df["2M"] = m2
+            df["2A"] = a2
+            df["3M"] = m3  # <-- Das hat gefehlt und den Fehler verursacht
+            df["3A"] = a3
+            df["FTM"] = get_n("freethrowsmadepergame")
+            df["FTA"] = get_n("freethrowsattemptedpergame")
+            # --- KORREKTUR ENDE ---
+
+            total_att = a2 + a3
+            
             total_att = a2 + a3
             df["FG%"] = pd.Series([0.0]*len(df), index=df.index)
             mask_att = total_att > 0
