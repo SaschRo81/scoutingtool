@@ -386,7 +386,7 @@ def run_openai_generation(api_key, prompt):
         return response.choices[0].message.content
     except Exception as e: return f"Fehler: {str(e)}"
 
-def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
+def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None, staffel="Süd"):
     st.subheader(f"Analyse: {team_name}")
     c1, c2 = st.columns([2, 1])
     
@@ -398,12 +398,10 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                 with st.container():
                     col_img, col_stats = st.columns([1, 4])
                     
-                    # DATENPRÜFUNG: Alter, Nation, Größe
                     age = row.get('AGE', '-')
                     nat = row.get('NATIONALITY', '-')
-                    height = row.get('HEIGHT_ROSTER', '-') # Im DF hieß es HEIGHT_ROSTER oder -
+                    height = row.get('HEIGHT_ROSTER', '-')
 
-                    # Wenn Daten im DataFrame fehlen, versuchen wir den Callback
                     img_url = None
                     if metadata_callback:
                         meta = None
@@ -419,7 +417,6 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                             img_url = row.get("img")
                     else:
                         img_url = row.get("img")
-
 
                     with col_img:
                         if img_url:
@@ -455,7 +452,7 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                     if is_home and h_score > g_score: win = True
                     elif not is_home and g_score > h_score: win = True
                     
-                    color = "#28a745" if win else "#dc3545" # Grün/Rot
+                    color = "#28a745" if win else "#dc3545"
                     char = "W" if win else "L"
                     
                     with cols_form[idx]:
@@ -463,68 +460,53 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
             else: st.info("Keine gespielten Spiele.")
         else: st.info("Keine Spiele.")
         
-        # --- TABELLE EINFÜGEN ---
         st.write("")
         st.markdown("#### Aktueller Tabellenplatz")
         
-        # KORREKTE PRÜFUNG: Prüfen, ob der Eintrag im Dictionary existiert
-        standings_map = fetch_standings(SEASON_ID)
-        team_stat = standings_map.get(str(team_id))
+        # Die Staffel wird hier an die API-Funktion übergeben
+        standings_map = fetch_standings(SEASON_ID, staffel)
         
-        if team_stat:
-            # Daten extrahieren
-            rank = team_stat.get("rank", "-")
-            team_n = team_stat.get("team", {}).get("name", team_name)
-            played = team_stat.get("matchesPlayed", 0)
-            wins = team_stat.get("wins", 0)
-            losses = team_stat.get("losses", 0)
-            pts = team_stat.get("points", 0)
-            p_scored = team_stat.get("pointsScored", 0)
-            p_conceded = team_stat.get("pointsConceded", 0)
-            diff = team_stat.get("pointsDifference", 0)
-            streak = team_stat.get("streak", "-")
-            home_w = team_stat.get("homePerformance", {}).get("wins", "-")
-            home_l = team_stat.get("homePerformance", {}).get("losses", "-")
-            home_str = f"{home_w}-{home_l}" if home_w != "-" else "-"
-            guest_w = team_stat.get("guestPerformance", {}).get("wins", "-")
-            guest_l = team_stat.get("guestPerformance", {}).get("losses", "-")
-            guest_str = f"{guest_w}-{guest_l}" if guest_w != "-" else "-"
-            last10 = "-" 
-            
-            # HTML Table
-            html_table = f"""
-            <table style="width:100%; font-size:12px; border-collapse: collapse; text-align: center;">
-                <tr style="background-color: #f0f0f0; border-bottom: 1px solid #ddd;">
-                    <th style="padding: 5px;">PL</th>
-                    <th style="padding: 5px; text-align: left;">Team</th>
-                    <th style="padding: 5px;">G</th>
-                    <th style="padding: 5px;">S</th>
-                    <th style="padding: 5px;">N</th>
-                    <th style="padding: 5px;">PKT</th>
-                    <th style="padding: 5px;">+/-</th>
-                    <th style="padding: 5px;">Diff</th>
-                    <th style="padding: 5px;">Heim</th>
-                    <th style="padding: 5px;">Gast</th>
-                    <th style="padding: 5px;">Last 10</th>
-                    <th style="padding: 5px;">Serie</th>
-                </tr>
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 5px; font-weight: bold;">{rank}</td>
-                    <td style="padding: 5px; text-align: left;">{team_n}</td>
-                    <td style="padding: 5px;">{played}</td>
-                    <td style="padding: 5px; color: green;">{wins}</td>
-                    <td style="padding: 5px; color: red;">{losses}</td>
-                    <td style="padding: 5px; font-weight: bold;">{pts}</td>
-                    <td style="padding: 5px;">{p_scored}:{p_conceded}</td>
-                    <td style="padding: 5px;">{diff}</td>
-                    <td style="padding: 5px;">{home_str}</td>
-                    <td style="padding: 5px;">{guest_str}</td>
-                    <td style="padding: 5px;">{last10}</td>
-                    <td style="padding: 5px;">{streak}</td>
-                </tr>
-            </table>
-            """
-            st.markdown(html_table, unsafe_allow_html=True)
+        # KORREKTE PRÜFUNG: Zuerst prüfen, ob die Map überhaupt Daten enthält
+        if standings_map:
+            team_stat = standings_map.get(str(team_id))
+            if team_stat:
+                rank = team_stat.get("rank", "-")
+                team_n = team_stat.get("team", {}).get("name", team_name)
+                played = team_stat.get("matchesPlayed", 0)
+                wins = team_stat.get("wins", 0)
+                losses = team_stat.get("losses", 0)
+                pts = team_stat.get("points", 0)
+                p_scored = team_stat.get("pointsScored", 0)
+                p_conceded = team_stat.get("pointsConceded", 0)
+                diff = team_stat.get("pointsDifference", 0)
+                streak = team_stat.get("streak", "-")
+                home_w = team_stat.get("homePerformance", {}).get("wins", "-")
+                home_l = team_stat.get("homePerformance", {}).get("losses", "-")
+                home_str = f"{home_w}-{home_l}" if home_w != "-" else "-"
+                guest_w = team_stat.get("guestPerformance", {}).get("wins", "-")
+                guest_l = team_stat.get("guestPerformance", {}).get("losses", "-")
+                guest_str = f"{guest_w}-{guest_l}" if guest_w != "-" else "-"
+                
+                html_table = f"""
+                <table style="width:100%; font-size:12px; border-collapse: collapse; text-align: center;">
+                    <tr style="background-color: #f0f0f0; border-bottom: 1px solid #ddd;">
+                        <th>PL</th><th>Team</th><th>G</th><th>S</th><th>N</th><th>PKT</th><th>Diff</th><th>Serie</th>
+                    </tr>
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="font-weight: bold;">{rank}</td>
+                        <td style="text-align: left;">{team_n}</td>
+                        <td>{played}</td>
+                        <td style="color: green;">{wins}</td>
+                        <td style="color: red;">{losses}</td>
+                        <td style="font-weight: bold;">{pts}</td>
+                        <td>{diff}</td>
+                        <td>{streak}</td>
+                    </tr>
+                </table>
+                """
+                st.markdown(html_table, unsafe_allow_html=True)
+            else:
+                 st.warning(f"Team (ID: {team_id}) nicht in den Tabellendaten für Staffel '{staffel}' gefunden.")
         else:
             st.info("Tabellendaten nicht verfügbar.")
 
