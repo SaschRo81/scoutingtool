@@ -547,11 +547,11 @@ def render_scouting_page():
                                     "page-size": "A4", "orientation": "Portrait", 
                                     "margin-top": "5mm", "margin-right": "5mm", 
                                     "margin-bottom": "5mm", "margin-left": "5mm", 
-                                    "encoding": "UTF-8", "zoom": "0.42", 
+                                    "encoding": "UTF-8", "zoom": "0.6", 
                                     "load-error-handling": "ignore", 
                                     "load-media-error-handling": "ignore", 
                                     "javascript-delay": "1000"
-                                    "zoom": "0.6",
+                                    
                                 }
                                 st.session_state.pdf_bytes = pdfkit.from_string(
                                     f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", 
