@@ -77,21 +77,23 @@ def render_home():
     st.markdown(
         """
         <style>
-        /* 
-           Hintergrundbild auf dem Hauptcontainer 
-           Wir nutzen einen Trick: Ein lineares Gradient (75% Weiß) liegt ÜBER dem Bild.
-           Dadurch wirkt das Bild blass (Opacity ca. 0.25), ohne dass wir z-index Probleme haben.
-        */
-        [data-testid="stAppViewContainer"] {
-            background: linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)), 
-                        url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
+        /* Hintergrundbild auf dem Hauptcontainer */
+        [data-testid="stAppViewContainer"]::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            background-attachment: fixed;
+            opacity: 0.25; 
+            z-index: -1;
         }
         
-        /* Buttons Stylen - Deckend Weiß & Schwebend */
+        /* Buttons Stylen - Deckend Weiß */
         div.stButton > button {
             width: 100%;
             height: 4em;
@@ -99,24 +101,22 @@ def render_home():
             font-weight: bold;
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: transform 0.2s;
             background-color: #ffffff !important; /* Wichtig: Überschreibt Theme */
             color: #333333 !important;
             border: 1px solid #ddd;
             opacity: 1 !important; /* Keine Transparenz */
         }
-        
         div.stButton > button:hover {
             transform: scale(1.02);
-            box-shadow: 0px 6px 8px rgba(0,0,0,0.15);
             border-color: #ff4b4b;
             background-color: #ffffff !important;
             color: #ff4b4b !important;
         }
         
-        /* Titel Box - Deckend Weiß */
+        /* Titel Box */
         .title-container {
-            background-color: #ffffff; 
+            background-color: #ffffff; /* Deckend Weiß */
             padding: 20px; 
             border-radius: 15px; 
             box-shadow: 0px 4px 6px rgba(0,0,0,0.1); 
@@ -133,8 +133,6 @@ def render_home():
     )
     
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>🏀 DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
-    
-    # Grid Layout für die Buttons
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
         r1_c1, r1_c2 = st.columns(2)
@@ -142,25 +140,19 @@ def render_home():
             if st.button("📊 Teamvergleich", use_container_width=True): go_comparison(); st.rerun()
         with r1_c2: 
             if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
-        
         st.write("") 
-        
         r2_c1, r2_c2 = st.columns(2)
         with r2_c1: 
             if st.button("📝 Scouting Report", use_container_width=True): go_scouting(); st.rerun()
         with r2_c2: 
             if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
-        
         st.write("") 
-        
         r3_c1, r3_c2 = st.columns(2)
         with r3_c1:
             if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
         with r3_c2:
              if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
-        
         st.write("")
-        
         _, c5, _ = st.columns([1, 2, 1])
         with c5:
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
