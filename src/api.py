@@ -377,34 +377,30 @@ def fetch_season_games(season_id):
 
 # --- NEUE, KORRIGIERTE FUNKTION ---
 @st.cache_data(ttl=3600)
-def fetch_standings(season_id):
-    """Lädt die Tabellen für Nord & Süd und kombiniert sie."""
-    urls = {
-        "nord": f"https://api-n.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND_AND_PLAY_OFFS",
-        "sued": f"https://api-s.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND_AND_PLAY_OFFS"
-    }
+def fetch_standings(season_id, staffel):
+    """Lädt die Tabelle für die angegebene Staffel (Nord oder Süd)."""
     
-    all_standings_data = []
+    # Bestimmt den richtigen API-Endpunkt basierend auf der Auswahl
+    staffel_short = "n" if staffel.lower() == "nord" else "s"
+    url = f"https://api-{staffel_short}.dbbl.scb.world/seasons/{season_id}/team-statistics?displayType=MAIN_ROUND_AND_PLAY_OFFS"
     
-    for key, url in urls.items():
-        try:
-            resp = requests.get(url, headers=API_HEADERS)
-            if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, list):
-                    all_standings_data.extend(data)
-        except requests.exceptions.RequestException:
-            # Wenn eine API (z.B. Nord) nicht erreichbar ist, machen wir trotzdem weiter
-            continue
+    standings_data = []
+    try:
+        resp = requests.get(url, headers=API_HEADERS)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list):
+                standings_data = data
+    except requests.exceptions.RequestException as e:
+        # Bei einem Fehler geben wir eine leere Karte zurück
+        return {}
             
-    # Wir bauen ein Dictionary, damit wir später leicht nach Team-ID suchen können
+    # Wir bauen das Dictionary, damit der Rest des Codes funktioniert
     standings_map = {}
-    for entry in all_standings_data:
-        # Die Team-ID ist hier direkt im Objekt
+    for entry in standings_data:
         tid = str(entry.get("teamId", ""))
         if tid:
-            # Wir mappen die API-Antwort auf die Keys, die das Frontend erwartet
-            # um die analysis_ui.py nicht anpassen zu müssen.
+            # Mappen der API-Antwort auf die erwarteten Keys
             standings_map[tid] = {
                 "rank": entry.get("rank", "-"),
                 "team": {"name": entry.get("teamName", "Unbekannt")},
