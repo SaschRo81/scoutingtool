@@ -33,9 +33,9 @@ from src.analysis_ui import (
     render_prep_dashboard, render_live_view 
 )
 
-# --- KONFIGURATION & FALLBACKS ---
-# Fallback Saison ID, falls die globale SEASON_ID keine Ergebnisse liefert
-API_SEASON_ID = "2025" 
+# --- KONFIGURATION ---
+# Wir nutzen explizit 2025, wie von dir angegeben
+CURRENT_SEASON_ID = "2025" 
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
@@ -44,28 +44,37 @@ st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", pag
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_real_logo_urls():
     """
-    Holt die echten Logo-URLs direkt von der DBBL API.
-    Nutzt fest die Saison 2024, da diese aktuell Daten liefert.
+    Holt die echten Logo-URLs direkt von den DBBL APIs (Nord und Süd).
+    Kombiniert beide Quellen für Saison 2025.
     """
-    url = f"https://api-s.dbbl.scb.world/teams?seasonId={API_SEASON_ID}"
     headers = {
         "accept": "application/json",
         "X-API-Key": "48673298c840c12a1646b737c83e5e5e"
     }
-    try:
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            teams_data = response.json()
-            logo_map = {}
-            for t in teams_data:
-                tid = str(t.get("id"))
-                logo = t.get("logo")
-                if logo:
-                    logo_map[tid] = logo
-            return logo_map
-    except Exception as e:
-        print(f"Fehler Logo API: {e}")
-    return {}
+    
+    # Beide Endpunkte abfragen, um sicherzugehen
+    urls = [
+        f"https://api-s.dbbl.scb.world/teams?seasonId={CURRENT_SEASON_ID}",
+        f"https://api-n.dbbl.scb.world/teams?seasonId={CURRENT_SEASON_ID}"
+    ]
+    
+    logo_map = {}
+    
+    for url in urls:
+        try:
+            response = requests.get(url, headers=headers, timeout=3)
+            if response.status_code == 200:
+                teams_data = response.json()
+                for t in teams_data:
+                    tid = str(t.get("id"))
+                    logo = t.get("logo")
+                    # Nur speichern, wenn Logo vorhanden
+                    if logo and "http" in logo:
+                        logo_map[tid] = logo
+        except Exception:
+            continue
+            
+    return logo_map
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_image_bytes(url):
@@ -73,7 +82,7 @@ def load_image_bytes(url):
     if not url: return None
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
         }
         r = requests.get(url, headers=headers, timeout=3)
@@ -86,11 +95,10 @@ def load_image_bytes(url):
 def image_to_base64_str(img_bytes):
     """Wandelt Bytes in einen HTML-tauglichen Base64 String um."""
     if not img_bytes:
-        # Transparentes Pixel als Notfall-Fallback, damit kein "Broken Image" Icon kommt
+        # Transparentes Pixel als Notfall-Fallback
         return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
     try:
         b64 = base64.b64encode(img_bytes).decode()
-        # Wir nehmen an es ist PNG oder JPG, der Browser ist da meist tolerant
         return f"data:image/png;base64,{b64}"
     except:
         return ""
@@ -236,8 +244,9 @@ def render_team_stats_page():
                 st.session_state.stats_team_id = None
                 st.rerun()
         
+        # WICHTIG: Hier nutzen wir 2025 für die Stats!
         with st.spinner("Lade Team Statistiken..."):
-            df, ts = fetch_team_data(tid, SEASON_ID)
+            df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
             
         if df is not None and not df.empty:
             t_info = TEAMS_DB.get(tid, {})
@@ -257,7 +266,7 @@ def render_team_stats_page():
             
             st.divider()
             
-            st.subheader("Saison Durchschnittswerte (Team)")
+            st.subheader(f"Saison Durchschnittswerte (Saison {CURRENT_SEASON_ID})")
             if ts:
                 m1, m2, m3, m4, m5, m6 = st.columns(6)
                 m1.metric("Punkte", f"{ts.get('ppg', 0):.1f}")
@@ -351,7 +360,7 @@ def render_comparison_page():
     st.divider()
     if st.button("Vergleich starten", type="primary"):
         with st.spinner("Lade Daten..."):
-            _, ts_h = fetch_team_data(h_id, SEASON_ID); _, ts_g = fetch_team_data(g_id, SEASON_ID)
+            _, ts_h = fetch_team_data(h_id, CURRENT_SEASON_ID); _, ts_g = fetch_team_data(g_id, CURRENT_SEASON_ID)
             if ts_h and ts_g: st.markdown(generate_comparison_html(ts_h, ts_g, h_name, g_name), unsafe_allow_html=True)
             else: st.error("Daten nicht verfügbar.")
 
@@ -364,7 +373,7 @@ def render_player_comparison_page():
         t1 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s1}
         tn1 = st.selectbox("Team", list({v["name"]: k for k, v in t1.items()}.keys()), key="pc_t_a")
         tid1 = {v["name"]: k for k, v in t1.items()}[tn1]
-        df1, _ = fetch_team_data(tid1, SEASON_ID)
+        df1, _ = fetch_team_data(tid1, CURRENT_SEASON_ID)
         if df1 is not None and not df1.empty: 
             p1 = st.selectbox("Spieler", df1["NAME_FULL"].tolist(), key="pc_p_a")
             row1 = df1[df1["NAME_FULL"] == p1].iloc[0]
@@ -378,7 +387,7 @@ def render_player_comparison_page():
         t2 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s2}
         tn2 = st.selectbox("Team", list({v["name"]: k for k, v in t2.items()}.keys()), key="pc_t_b")
         tid2 = {v["name"]: k for k, v in t2.items()}[tn2]
-        df2, _ = fetch_team_data(tid2, SEASON_ID)
+        df2, _ = fetch_team_data(tid2, CURRENT_SEASON_ID)
         if df2 is not None and not df2.empty: 
             p2 = st.selectbox("Spieler", df2["NAME_FULL"].tolist(), key="pc_p_b")
             row2 = df2[df2["NAME_FULL"] == p2].iloc[0]
@@ -417,8 +426,8 @@ def render_prep_page():
         opp_id = {v["name"]: k for k, v in t.items()}[opp_name]
     if st.button("Vorbereitung starten", type="primary"):
         with st.spinner("Lade Daten..."):
-            df, _ = fetch_team_data(opp_id, SEASON_ID)
-            sched = fetch_schedule(opp_id, SEASON_ID)
+            df, _ = fetch_team_data(opp_id, CURRENT_SEASON_ID)
+            sched = fetch_schedule(opp_id, CURRENT_SEASON_ID)
             if df is not None: render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
             else: st.error("Fehler beim Laden.")
 
@@ -453,7 +462,7 @@ def render_live_page():
     else:
         st.markdown("### Spiele von heute")
         with st.spinner("Lade aktuellen Spielplan..."):
-            all_games = fetch_season_games(SEASON_ID)
+            all_games = fetch_season_games(CURRENT_SEASON_ID)
         if not all_games:
             st.warning("Keine Spieldaten gefunden.")
             return
@@ -485,91 +494,6 @@ def render_live_page():
                         if st.button(f"Zum Spiel ({game['home'][:3]} vs {game['guest'][:3]})", key=f"btn_live_{game['id']}", use_container_width=True):
                             st.session_state.live_game_id = game['id']
                             st.rerun()
-
-def render_game_venue_page():
-    render_page_header("📍 Spielorte der Teams") 
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="venue_staffel")
-        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-        to = {v["name"]: k for k, v in t.items()}
-    with c2:
-        tn = st.selectbox("Wähle ein Team:", list(to.keys()), key="venue_team_select")
-        tid = to[tn]
-    st.divider()
-    if tid:
-        st.subheader(f"Standard-Heimspielort von {tn}")
-        with st.spinner(f"Lade Daten..."):
-            info = fetch_team_info_basic(tid)
-            venue = info.get("venue") if info else None
-            if venue:
-                st.markdown(f"**Halle:** {venue.get('name', 'N/A')}"); st.markdown(f"**Adresse:** {venue.get('address', 'N/A')}")
-                if venue.get('address'):
-                    u = f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{venue.get('name', '')}, {venue.get('address', '')}')}"
-                    st.markdown(f"**Route:** [Google Maps öffnen]({u})", unsafe_allow_html=True)
-            else: st.warning("Nicht gefunden.")
-        st.divider()
-        st.subheader(f"Alle Spiele von {tn}")
-        games = fetch_schedule(tid, SEASON_ID)
-        if games:
-            games.sort(key=lambda x: datetime.strptime(x['date'], "%d.%m.%Y %H:%M"), reverse=True)
-            for g in games:
-                gid = g.get("id")
-                if str(g.get("homeTeamId")) == str(tid):
-                    with st.expander(f"🏟️ Heim: {g.get('date')} vs {g.get('guest')} ({g.get('score')})"):
-                        if gid:
-                            d = fetch_game_details(gid)
-                            if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
-                else:
-                    with st.expander(f"🚌 Gast: {g.get('date')} bei {g.get('home')} ({g.get('score')})"):
-                        if gid:
-                            d = fetch_game_details(gid)
-                            if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
-
-def render_analysis_page():
-    render_page_header("🎥 Spielnachbereitung") 
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
-        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-        to = {v["name"]: k for k, v in t.items()}
-    with c2:
-        tn = st.selectbox("Dein Team:", list(to.keys()), key="ana_team")
-        tid = to[tn]
-    if tid:
-        games = fetch_schedule(tid, SEASON_ID)
-        if games:
-            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in games}
-            sel = st.selectbox("Wähle ein Spiel:", list(opts.keys()), key="ana_game_select")
-            gid = opts[sel]
-            if st.button("Analyse laden", type="primary"):
-                st.session_state.selected_game_id = gid
-                if "generated_ai_report" in st.session_state: del st.session_state["generated_ai_report"]
-            if st.session_state.selected_game_id == gid:
-                st.divider()
-                with st.spinner("Lade Daten..."):
-                    box = fetch_game_boxscore(gid); details = fetch_game_details(gid)
-                    if box and details: 
-                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("referee1"); box["referee2"] = details.get("referee2"); box["referee3"] = details.get("referee3"); box["scheduledTime"] = details.get("scheduledTime"); box["attendance"] = details.get("result", {}).get("spectators"); box["id"] = details.get("id") 
-                        render_game_header(box)
-                        st.markdown("### 📝 Spielberichte & PBP")
-                        t1, t2, t3 = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
-                        with t1:
-                            st.markdown(generate_game_summary(box)); st.divider()
-                            hn = get_team_name(box.get("homeTeam", {}), "Heim"); gn = get_team_name(box.get("guestTeam", {}), "Gast")
-                            hc = box.get("homeTeam", {}).get("headCoachName", "-"); gc = box.get("guestTeam", {}).get("headCoachName", "-")
-                            render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), box.get("homeTeam", {}).get("gameStat", {}), hn, hc)
-                            st.write(""); render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), box.get("guestTeam", {}).get("gameStat", {}), gn, gc)
-                            st.divider(); render_game_top_performers(box); st.divider(); render_charts_and_stats(box)
-                        with t2:
-                            st.info("ChatGPT Prompt:"); st.code(generate_complex_ai_prompt(box), language="text")
-                        with t3: render_full_play_by_play(box)
-                    else: st.error("Fehler beim Laden.")
-        else: st.warning("Keine Spiele.")
 
 def render_scouting_page():
     # 1. Logos holen (zentral) für Scouting Report
@@ -610,10 +534,13 @@ def render_scouting_page():
             if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != hn: 
                 l_url = real_logos.get(str(hid))
                 l_bytes = load_image_bytes(l_url)
-                st.session_state.logo_h = image_to_base64_str(l_bytes) # Base64 string speichern für Report
+                st.session_state.logo_h = image_to_base64_str(l_bytes) 
             
-            # Anzeige in UI (hier brauchen wir kein b64, aber st.image kann auch b64 URL)
-            st.markdown(f"<img src='{st.session_state.logo_h}' width='80'>", unsafe_allow_html=True)
+            # Anzeige in UI
+            if st.session_state.logo_h:
+                st.markdown(f"<img src='{st.session_state.logo_h}' width='80'>", unsafe_allow_html=True)
+            else:
+                st.write(hn)
 
         with c3:
             idxg = 1
@@ -626,7 +553,10 @@ def render_scouting_page():
                 l_bytes = load_image_bytes(l_url)
                 st.session_state.logo_g = image_to_base64_str(l_bytes)
 
-            st.markdown(f"<img src='{st.session_state.logo_g}' width='80'>", unsafe_allow_html=True)
+            if st.session_state.logo_g:
+                st.markdown(f"<img src='{st.session_state.logo_g}' width='80'>", unsafe_allow_html=True)
+            else:
+                st.write(gn)
 
         st.write("---")
         idx_t = 0
@@ -641,7 +571,7 @@ def render_scouting_page():
         
         if click_load or (st.session_state.roster_df is None and cur_tid != tid) or (st.session_state.roster_df is not None and cur_tid != tid):
             with st.spinner("Lade Daten..."):
-                df, ts = fetch_team_data(tid, SEASON_ID)
+                df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
                 if df is not None and not df.empty: 
                     st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
                     st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
