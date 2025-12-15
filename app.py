@@ -52,7 +52,7 @@ def get_best_team_logo(team_id):
     candidates = [
         f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
         f"https://api-n.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
-        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}", # Fallback Vorjahr
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}", 
         f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
     ]
 
@@ -214,14 +214,16 @@ def render_team_stats_page():
             df, ts = fetch_team_data(tid, active_season)
             
             # 2. VERSUCH: FALLBACK AUF 2024
-            if df is None or df.empty:
+            if (df is None or df.empty) and not ts:
                 active_season = "2024"
                 df, ts = fetch_team_data(tid, active_season)
-            
-        if df is not None and not df.empty:
+        
+        # ANZEIGEN WENN IRGENDETWAS DA IST (TS oder DF)
+        has_data = (df is not None and not df.empty) or (ts and len(ts) > 0)
+
+        if has_data:
             t_info = TEAMS_DB.get(tid, {})
             name = t_info.get("name", "Team")
-            
             logo_b64 = get_best_team_logo(tid)
             
             c1, c2 = st.columns([1, 4])
@@ -258,23 +260,26 @@ def render_team_stats_page():
             st.divider()
             
             st.subheader("Aktueller Kader & Stats")
-            display_cols = ["NR", "NAME_FULL", "GP", "MIN_DISPLAY", "PPG", "FG%", "3PCT", "FTPCT", "TOT", "AS", "ST", "TO", "PF"]
-            col_config = {
-                "NR": st.column_config.TextColumn("#", width="small"),
-                "NAME_FULL": st.column_config.TextColumn("Name", width="medium"),
-                "GP": st.column_config.NumberColumn("Spiele"),
-                "MIN_DISPLAY": st.column_config.TextColumn("Min"),
-                "PPG": st.column_config.NumberColumn("PTS", format="%.1f"),
-                "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
-                "3PCT": st.column_config.NumberColumn("3P%", format="%.1f %%"),
-                "FTPCT": st.column_config.NumberColumn("FW%", format="%.1f %%"),
-                "TOT": st.column_config.NumberColumn("REB", format="%.1f"),
-                "AS": st.column_config.NumberColumn("AST", format="%.1f"),
-                "ST": st.column_config.NumberColumn("STL", format="%.1f"),
-                "TO": st.column_config.NumberColumn("TO", format="%.1f"),
-                "PF": st.column_config.NumberColumn("PF", format="%.1f"),
-            }
-            st.dataframe(df[display_cols], column_config=col_config, hide_index=True, use_container_width=True, height=600)
+            if df is not None and not df.empty:
+                display_cols = ["NR", "NAME_FULL", "GP", "MIN_DISPLAY", "PPG", "FG%", "3PCT", "FTPCT", "TOT", "AS", "ST", "TO", "PF"]
+                col_config = {
+                    "NR": st.column_config.TextColumn("#", width="small"),
+                    "NAME_FULL": st.column_config.TextColumn("Name", width="medium"),
+                    "GP": st.column_config.NumberColumn("Spiele"),
+                    "MIN_DISPLAY": st.column_config.TextColumn("Min"),
+                    "PPG": st.column_config.NumberColumn("PTS", format="%.1f"),
+                    "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"),
+                    "3PCT": st.column_config.NumberColumn("3P%", format="%.1f %%"),
+                    "FTPCT": st.column_config.NumberColumn("FW%", format="%.1f %%"),
+                    "TOT": st.column_config.NumberColumn("REB", format="%.1f"),
+                    "AS": st.column_config.NumberColumn("AST", format="%.1f"),
+                    "ST": st.column_config.NumberColumn("STL", format="%.1f"),
+                    "TO": st.column_config.NumberColumn("TO", format="%.1f"),
+                    "PF": st.column_config.NumberColumn("PF", format="%.1f"),
+                }
+                st.dataframe(df[display_cols], column_config=col_config, hide_index=True, use_container_width=True, height=600)
+            else:
+                st.info("Keine Spielerdaten verfügbar (Tabelle leer).")
         else:
             st.error(f"Daten konnten weder für Saison 2025 noch für 2024 geladen werden (Team-ID: {tid}).")
     else:
@@ -288,7 +293,6 @@ def render_team_stats_page():
                 col = cols[idx % 5]
                 with col:
                     with st.container(border=True):
-                        # AGGRESSIVES LADEN
                         logo_b64 = get_best_team_logo(tid)
                         
                         c_l, c_m, c_r = st.columns([1, 2, 1])
@@ -529,20 +533,21 @@ def render_scouting_page():
         
         if click_load or (st.session_state.roster_df is None and cur_tid != tid) or (st.session_state.roster_df is not None and cur_tid != tid):
             with st.spinner("Lade Daten..."):
-                # NEU: HIER AUCH FALLBACK LOGIK EINGEBAUT
+                # VERSUCH 1: 2025
                 active_season = CURRENT_SEASON_ID
                 df, ts = fetch_team_data(tid, active_season)
                 
-                if df is None or df.empty:
+                # VERSUCH 2: 2024
+                if (df is None or df.empty) and not ts:
                     active_season = "2024"
                     df, ts = fetch_team_data(tid, active_season)
 
-                if df is not None and not df.empty: 
+                if (df is not None and not df.empty) or ts: 
                     st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
                     st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
                     st.session_state.print_mode = False 
                     if active_season != CURRENT_SEASON_ID:
-                        st.toast(f"Hinweis: Kader aus Saison {active_season} geladen (2025 leer).", icon="⚠️")
+                        st.toast(f"Hinweis: Daten aus Saison {active_season} geladen.", icon="⚠️")
                 else: 
                     st.error("Fehler API: Keine Daten für 2025 oder 2024 gefunden."); 
                     st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
