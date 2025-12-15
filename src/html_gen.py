@@ -1,10 +1,10 @@
+# --- START OF FILE src/html_gen.py ---
 import pandas as pd
 from src.utils import clean_pos
 
 def generate_header_html(meta):
     return f"""
 <div class="report-header">
-    <!-- HIER GEÄNDERT: Neuer Titel im PDF -->
     <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
     <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
     <div class="matchup-container">
@@ -272,3 +272,4 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
 
     html += "</table></div>"
     return html
+# --- END OF FILE src/html_gen.py ---
