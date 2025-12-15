@@ -433,7 +433,6 @@ def render_analysis_page():
     if tid:
         games = fetch_schedule(tid, CURRENT_SEASON_ID)
         if games:
-            # FIX: Filtere nur Spiele mit Ergebnis
             played_games = [g for g in games if g.get('has_result')]
             opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in played_games}
             
