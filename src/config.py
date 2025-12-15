@@ -1,7 +1,7 @@
 import streamlit as st
 
 # Version
-VERSION = "v4.3 (Secure Mode)"
+VERSION = "v5.0"
 
 # --- API KONFIGURATION ---
 try:
