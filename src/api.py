@@ -69,6 +69,13 @@ def get_player_metadata_cached(player_id):
 
 @st.cache_data(ttl=600)
 def fetch_team_details_raw(team_id, season_id):
+    # FIX: Dieser Endpunkt scheint stabiler und zentral zu sein
+    url = f"https://api-1.dbbl.scb.world/teams/{team_id}/{season_id}"
+    try:
+        resp = requests.get(url, headers=API_HEADERS, timeout=3)
+        if resp.status_code == 200: return resp.json()
+    except: pass
+    # Fallback auf den Nord/Süd spezifischen Endpunkt
     base = get_base_url(team_id)
     url = f"{base}/teams/{team_id}/{season_id}"
     try:
@@ -96,6 +103,7 @@ def fetch_team_data(team_id, season_id):
             
             if isinstance(td, dict):
                 gp = td.get("gamesPlayed") or 1
+                
                 fgm = td.get("fieldGoalsMade") or 0; fga = td.get("fieldGoalsAttempted") or 0
                 m3 = td.get("threePointShotsMade") or 0; a3 = td.get("threePointShotsAttempted") or 0
                 ftm = td.get("freeThrowsMade") or 0; fta = td.get("freeThrowsAttempted") or 0
@@ -155,12 +163,12 @@ def fetch_team_data(team_id, season_id):
                 df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
                 df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
                 
-                # HIER WAR DER FEHLER: Metadaten wurden nicht gemerged
+                # FIX: METADATEN WIEDER HINZUGEFÜGT
                 df["BIRTHDATE"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("birthdate", ""))
                 df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("nationality", "-"))
                 df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("height", "-"))
                 df["AGE"] = df["BIRTHDATE"].apply(calculate_age)
-
+                
                 df["GP"] = get_val("gamesplayed").replace(0, 1)
                 
                 df["TOTAL_MINUTES"] = get_val("secondsplayed") / 60
