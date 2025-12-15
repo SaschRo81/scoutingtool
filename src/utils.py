@@ -66,3 +66,7 @@ def optimize_image_base64(url):
     except Exception:
         pass
     return GRAY_BOX_B64
+def clean_pos(pos_str):
+    if not pos_str: return "-"
+    # Ersetzt Unterstriche durch Leerzeichen und macht den ersten Buchstaben groß
+    return pos_str.replace("_", " ").title()
