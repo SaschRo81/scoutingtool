@@ -5,8 +5,8 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
-from src.config import SEASON_ID # <--- NEU IMPORTIERT
-from src.api import fetch_standings # <--- NEU IMPORTIERT
+from src.config import SEASON_ID
+from src.api import fetch_standings
 
 # --- KONSTANTEN & HELPERS ---
 
@@ -322,6 +322,21 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
     st.markdown(f"#### {team_name}"); calc_height = (len(df) + 1) * 35 + 3; st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
     if coach_name and coach_name != "-": st.markdown(f"*Head Coach: {coach_name}*")
 
+def render_game_top_performers(box):
+    h_data = box.get("homeTeam", {}); g_data = box.get("guestTeam", {}); h_name = get_team_name(h_data, "Heim"); g_name = get_team_name(g_data, "Gast")
+    def get_top3(stats_list, key="points"):
+        active = [p for p in stats_list if safe_int(p.get("secondsPlayed")) > 0]
+        return sorted(active, key=lambda x: safe_int(x.get(key)), reverse=True)[:3]
+    def mk_box(players, title, color, val_key="points"):
+        html = f"<div style='flex:1; border:1px solid #ccc; margin:5px;'><div style='background:{color}; color:white; padding:5px; font-weight:bold; text-align:center;'>{title}</div><table style='width:100%; border-collapse:collapse;'>"
+        for p in players:
+             name = f"{p.get('seasonPlayer', {}).get('lastName', '')}"; val = safe_int(p.get(val_key))
+             html += f"<tr><td style='padding:6px; font-size:16px;'>{name}</td><td style='padding:6px; text-align:right; font-weight:bold; font-size:16px;'>{val}</td></tr>"
+        return html + "</table></div>"
+    st.markdown("#### Top Performer")
+    html = f"""<div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">{mk_box(get_top3(h_data.get("playerStats", []), "points"), f"Points ({h_name})", "#e35b00", "points")}{mk_box(get_top3(g_data.get("playerStats", []), "points"), f"Points ({g_name})", "#e35b00", "points")}</div><div style="display:flex; flex-direction:row; gap:10px; margin-bottom:20px;">{mk_box(get_top3(h_data.get("playerStats", []), "totalRebounds"), f"Rebounds ({h_name})", "#0055ff", "totalRebounds")}{mk_box(get_top3(g_data.get("playerStats", []), "totalRebounds"), f"Rebounds ({g_name})", "#0055ff", "totalRebounds")}</div>"""
+    st.markdown(html, unsafe_allow_html=True)
+
 def render_charts_and_stats(box):
     h = box.get("homeTeam", {}).get("gameStat", {}); g = box.get("guestTeam", {}).get("gameStat", {}); h_name = get_team_name(box.get("homeTeam", {}), "Heim"); g_name = get_team_name(box.get("guestTeam", {}), "Gast"); actions = box.get("actions", []); hid = str(box.get("homeTeam", {}).get("seasonTeam", {}).get("seasonTeamId", "0")); gid = str(box.get("guestTeam", {}).get("seasonTeam", {}).get("seasonTeamId", "0")); cs = calculate_advanced_stats_from_actions(actions, hid, gid)
     def mk_label(pct, made, att): return f"{pct}% ({made}/{att})"
@@ -405,6 +420,7 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                             img_url = row.get("img")
                     else:
                         img_url = row.get("img")
+
 
                     with col_img:
                         if img_url:
