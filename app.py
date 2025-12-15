@@ -5,7 +5,6 @@ import pandas as pd
 from datetime import datetime, date, time 
 import time as time_module 
 from urllib.parse import quote_plus 
-import base64
 
 try:
     import pdfkit
@@ -506,69 +505,26 @@ def render_scouting_page():
                     with c3: st.caption("About"); ea = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea_scout")
                     up = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"], key="up_scout")
                     if st.form_submit_button("Generieren", type="primary"):
-                        # Daten speichern
-                        st.session_state.facts_offense = eo
-                        st.session_state.facts_defense = ed
-                        st.session_state.facts_about = ea
-                        
+                        st.session_state.facts_offense = eo; st.session_state.facts_defense = ed; st.session_state.facts_about = ea
                         for item in res:
-                            st.session_state.saved_colors[item["pid"]] = item["color"]
-                            for k, v in item["notes"].items():
-                                st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
-                        
-                        # Dateiname generieren
-                        tn = (gn if target == "Gastteam (Gegner)" else hn).replace(" ", "_")
+                            st.session_state.saved_colors[item["pid"]] = item["color"]; 
+                            for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
+                        tn = (guest_name_selected if target_radio_selection == "Gastteam (Gegner)" else home_name_selected).replace(" ", "_")
                         st.session_state.report_filename = f"Scouting_Report_{tn}_{d_inp.strftime('%d.%m.%Y')}.pdf"
-                        
-                        # HTML zusammenbauen
-                        html = generate_header_html(st.session_state.game_meta)
-                        html += generate_top3_html(st.session_state.roster_df)
-                        
-                        for item in res:
-                            meta = get_player_metadata_cached(item["pid"])
-                            html += generate_card_html(item["row"].to_dict(), meta, item["notes"], cmap[item["color"]])
-                        
+                        html = generate_header_html(st.session_state.game_meta); html += generate_top3_html(st.session_state.roster_df)
+                        for item in res: meta = get_player_metadata_cached(item["pid"]); html += generate_card_html(item["row"].to_dict(), meta, item["notes"], cmap[item["color"]])
                         html += generate_team_stats_html(st.session_state.team_stats)
-                        
                         if up:
-                            html += "<div style='page-break-before:always'><h2>Plays</h2>"
-                            for f in up:
-                                b64 = base64.b64encode(f.getvalue()).decode()
-                                html += f"<div style='margin-bottom:20px; text-align:center;'><img src='data:image/png;base64,{b64}' style='width:100%; height:auto; border:1px solid #ccc;'></div>"
-                        
-                        html += generate_custom_sections_html(eo, ed, ea)
-                        st.session_state.final_html = html
-                        
-                        # PDF Generierung (Korrekte Einrückung!)
+                            html += "<div style='page-break-before:always'><h2>Plays</h2>"; 
+                            for f in up: b64 = base64.b64encode(f.getvalue()).decode(); html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
+                        html += generate_custom_sections_html(eo, ed, ea); st.session_state.final_html = html
                         if HAS_PDFKIT:
                             try:
-                                full = f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>"
-                                opts = {
-                                    "page-size": "A4", 
-                                    "orientation": "Portrait", 
-                                    "margin-top": "5mm", 
-                                    "margin-right": "5mm", 
-                                    "margin-bottom": "5mm", 
-                                    "margin-left": "5mm", 
-                                    "encoding": "UTF-8", 
-                                    "zoom": "0.6",  # Angepasst auf 0.6 damit es nicht zu groß ist
-                                    "load-error-handling": "ignore", 
-                                    "load-media-error-handling": "ignore", 
-                                    "javascript-delay": "1000"
-                                }
-                                st.session_state.pdf_bytes = pdfkit.from_string(full, False, options=opts)
-                                st.session_state.print_mode = True
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"PDF Error: {e}")
-                                st.session_state.pdf_bytes = None
-                                st.session_state.print_mode = True
-                                st.rerun()
-                        else:
-                            st.warning("PDFKit fehlt.")
-                            st.session_state.pdf_bytes = None
-                            st.session_state.print_mode = True
-                            st.rerun()
+                                opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42", "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
+                                st.session_state.pdf_bytes = pdfkit.from_string(f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", False, options=opts); st.session_state.print_mode = True; st.rerun()
+                            except Exception as e: st.error(f"PDF Error: {e}"); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
+                        else: st.warning("PDFKit fehlt."); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
+
 # --- MAIN LOOP ---
 if st.session_state.current_page == "home": render_home()
 elif st.session_state.current_page == "scouting": render_scouting_page()
