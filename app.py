@@ -187,6 +187,7 @@ def render_team_stats_page():
                 st.rerun()
         
         # Daten laden
+        # Hinweis: Nutzt im Hintergrund endpoint /statistics/season
         with st.spinner("Lade Team Statistiken..."):
             df, ts = fetch_team_data(tid, SEASON_ID)
             
@@ -195,12 +196,17 @@ def render_team_stats_page():
             t_info = TEAMS_DB.get(tid, {})
             name = t_info.get("name", "Team")
             
-            # FIX: Logo laden mit Optimierung, damit es angezeigt wird
             logo_url = get_logo_url(tid, SEASON_ID)
             logo_img = optimize_image_base64(logo_url)
             
             c1, c2 = st.columns([1, 4])
-            with c1: st.image(logo_img, width=120)
+            with c1: 
+                # Auch hier Container nutzen, falls Logo fehlt
+                if logo_img:
+                    st.image(logo_img, width=120)
+                else:
+                     st.markdown(f"**{name}**")
+
             with c2: st.title(f"Statistik: {name}")
             
             st.divider()
@@ -267,26 +273,34 @@ def render_team_stats_page():
         tab_nord, tab_sued = st.tabs(["Nord", "Süd"])
         
         def render_logo_grid(staffel_name):
-            # Filtern nach Staffel
             teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel_name}
             
-            # Grid erstellen (z.B. 5 Spalten)
+            # Grid mit 5 Spalten
             cols = st.columns(5)
             
             for idx, (tid, info) in enumerate(teams.items()):
                 col = cols[idx % 5]
                 with col:
-                    # FIX: Logo laden mit Optimierung (wichtig für Anzeige!)
-                    logo_url = get_logo_url(tid, SEASON_ID)
-                    logo_img = optimize_image_base64(logo_url)
-                    
-                    st.image(logo_img, use_container_width=True)
-                    
-                    # Button darunter
-                    if st.button("Stats anzeigen", key=f"btn_stats_{tid}"):
-                        st.session_state.stats_team_id = tid
-                        st.rerun()
-                    st.write("") # Abstand
+                    # FIX: Rahmen um die ganze Karte ziehen, damit man was sieht, auch ohne Logo
+                    with st.container(border=True):
+                        # Bild laden und optimieren
+                        logo_url = get_logo_url(tid, SEASON_ID)
+                        logo_img = optimize_image_base64(logo_url)
+                        
+                        # Versuch das Bild anzuzeigen, sonst Platzhalter
+                        if logo_img:
+                             st.image(logo_img, use_container_width=True)
+                        else:
+                             # Fallback, wenn Logo URL 404/leer
+                             st.markdown(f"<div style='height:100px; display:flex; align-items:center; justify-content:center; background:#eee; color:#aaa;'>Kein Logo</div>", unsafe_allow_html=True)
+                        
+                        # Name IMMER anzeigen, damit man weiß, wer es ist
+                        st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center;'>{info['name']}</div>", unsafe_allow_html=True)
+                        
+                        # Button volle Breite
+                        if st.button("Stats anzeigen", key=f"btn_stats_{tid}", use_container_width=True):
+                            st.session_state.stats_team_id = tid
+                            st.rerun()
         
         with tab_nord:
             st.subheader("Teams Nord")
