@@ -67,11 +67,18 @@ def get_player_metadata_cached(player_id):
         except: pass
     return {"img": "", "height": 0, "pos": "-", "age": "-", "nationality": "-"}
 
+@st.cache_data(ttl=600)
+def fetch_team_details_raw(team_id, season_id):
+    base = get_base_url(team_id)
+    url = f"{base}/teams/{team_id}/{season_id}"
+    try:
+        resp = requests.get(url, headers=API_HEADERS, timeout=3)
+        if resp.status_code == 200: return resp.json()
+    except: pass
+    return None
+
 # KEIN CACHE HIER! Das hat den Fehler im Head-to-Head verursacht.
 def fetch_team_data(team_id, season_id):
-    """
-    Lädt Team- und Spieler-Stats vom korrekten Nord/Süd-Server.
-    """
     base_url = get_base_url(team_id)
     
     api_stats_players = f"{base_url}/teams/{team_id}/{season_id}/player-stats"
@@ -80,7 +87,7 @@ def fetch_team_data(team_id, season_id):
     ts = {}
     df = pd.DataFrame()
 
-    # 1. TEAM STATS LADEN (MIT KORREKTEN FELDNAMEN)
+    # 1. TEAM STATS LADEN
     try:
         r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
         if r_team.status_code == 200:
@@ -90,7 +97,6 @@ def fetch_team_data(team_id, season_id):
             if isinstance(td, dict):
                 gp = td.get("gamesPlayed") or 1
                 
-                # Absolute Werte für korrekte Prozent-Berechnung
                 fgm = td.get("fieldGoalsMade") or 0
                 fga = td.get("fieldGoalsAttempted") or 0
                 m3 = td.get("threePointShotsMade") or 0
@@ -109,10 +115,26 @@ def fetch_team_data(team_id, season_id):
                     "ftpct": (ftm / fta * 100) if fta > 0 else 0,
                 }
     except Exception as e:
-        print(f"Fehler bei Team Stats API für Team {team_id}: {e}")
+        print(f"Fehler bei Team Stats API: {e}")
 
-    # 2. PLAYER STATS LADEN (falls verfügbar)
+    # 2. PLAYER STATS LADEN
     try:
+        roster_lookup = {}
+        # Stammdaten-Lookup für Alter/Nation
+        raw_details = fetch_team_details_raw(team_id, season_id)
+        if raw_details:
+            squad = raw_details.get("squad", []) if isinstance(raw_details, dict) else []
+            for entry in squad:
+                p = entry.get("person", {})
+                raw_id = p.get("id") or entry.get("id")
+                if raw_id:
+                    pid = str(raw_id).replace(".0", "")
+                    roster_lookup[pid] = {
+                        "birthdate": p.get("birthDate") or entry.get("birthDate"),
+                        "nationality": extract_nationality(p) if extract_nationality(p) != "-" else extract_nationality(entry),
+                        "height": p.get("height", "-")
+                    }
+        
         r_stats = requests.get(api_stats_players, headers=API_HEADERS, timeout=4)
         if r_stats.status_code == 200:
             raw_p = r_stats.json()
@@ -137,6 +159,13 @@ def fetch_team_data(team_id, season_id):
                 df["NAME_FULL"] = (df[col_fn].astype(str) + " " + df[col_ln].astype(str)).str.strip() if col_fn and col_ln else "Unknown"
                 df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
                 df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
+                
+                # FIX: METADATEN ZUM DATAFRAME HINZUFÜGEN
+                df["BIRTHDATE"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("birthdate", ""))
+                df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("nationality", "-"))
+                df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("height", "-"))
+                df["AGE"] = df["BIRTHDATE"].apply(calculate_age)
+                
                 df["GP"] = get_val("gamesplayed").replace(0, 1)
                 
                 # TOTALS
@@ -201,7 +230,8 @@ def fetch_schedule(team_id, season_id):
                     "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
                     "homeTeamId": str(g.get("homeTeam", {}).get("teamId")), 
                     "guestTeamId": str(g.get("guestTeam", {}).get("teamId")),
-                    "home_score": h_s, "guest_score": g_s
+                    "home_score": h_s, "guest_score": g_s,
+                    "has_result": (h_s is not None and g_s is not None)
                 })
             return clean
     except: pass
