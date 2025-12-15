@@ -395,20 +395,43 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
             for _, row in top4.iterrows():
                 with st.container():
                     col_img, col_stats = st.columns([1, 4])
-                    with col_img:
-                        if "img" in row.index and row["img"]:
-                            st.image(row["img"], width=100)
-                        elif metadata_callback:
-                            # Callback nutzen um Bild zu laden
+                    
+                    # DATENPRÜFUNG: Alter, Nation, Größe
+                    age = row.get('AGE', '-')
+                    nat = row.get('NATIONALITY', '-')
+                    height = row.get('HEIGHT_ROSTER', '-') # Im DF hieß es HEIGHT_ROSTER oder -
+
+                    # Wenn Daten im DataFrame fehlen, versuchen wir den Callback
+                    img_url = None
+                    if metadata_callback:
+                        # Wir rufen ab, wenn Daten fehlen ODER Bild fehlt
+                        # Aber Achtung: Callback ist teuer, daher Logik beachten
+                        # Einfachste Logik: Wenn irgendwas fehlt, Callback
+                        meta = None
+                        if age in ["-", ""] or nat in ["-", ""] or height in ["-", ""] or not row.get("img"):
                             meta = metadata_callback(row["PLAYER_ID"])
-                            if meta["img"]: st.image(meta["img"], width=100)
-                            else: st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
+                        
+                        if meta:
+                            if age in ["-", ""]: age = meta.get("age", "-")
+                            if nat in ["-", ""]: nat = meta.get("nationality", "-")
+                            if height in ["-", ""]: height = meta.get("height", "-")
+                            img_url = meta.get("img")
+                        else:
+                            img_url = row.get("img")
+                    else:
+                        img_url = row.get("img")
+
+
+                    with col_img:
+                        if img_url:
+                            st.image(img_url, width=100)
                         else:
                             st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
 
                     with col_stats:
                         st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
-                        st.caption(f"Alter: {row.get('AGE', '-')} | Nat: {row.get('NATIONALITY', '-')}")
+                        # HIER JETZT DIE AKTUALISIERTEN DATEN ANZEIGEN:
+                        st.caption(f"Alter: {age} | Nat: {nat} | Größe: {height}")
                         st.markdown(f"**PPG: {row['PPG']}** | FG%: {row['FG%']} | 3P%: {row['3PCT']}% | REB: {row['TOT']} | AST: {row['AS']}")
                     st.divider()
         else: st.warning("Keine Kaderdaten.")
