@@ -16,7 +16,6 @@ except ImportError:
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url 
-# WICHTIG: Neue Funktion importiert
 from src.api import (
     fetch_team_data_live, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
@@ -455,6 +454,53 @@ def render_game_venue_page():
                             if d and d.get("venue"):
                                 v = d.get("venue")
                                 st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
+
+def render_analysis_page():
+    render_page_header("🎥 Spielnachbereitung") 
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
+        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
+        to = {v["name"]: k for k, v in t.items()}
+    with c2:
+        tn = st.selectbox("Dein Team:", list(to.keys()), key="ana_team")
+        tid = to[tn]
+    if tid:
+        games = fetch_schedule(tid, CURRENT_SEASON_ID)
+        if games:
+            played_games = [g for g in games if g.get('has_result')]
+            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in played_games}
+            
+            if not opts:
+                st.warning("Keine gespielten Spiele für dieses Team in dieser Saison gefunden.")
+                return
+
+            sel = st.selectbox("Wähle ein Spiel:", list(opts.keys()), key="ana_game_select")
+            gid = opts[sel]
+            if st.button("Analyse laden", type="primary"):
+                st.session_state.selected_game_id = gid
+                if "generated_ai_report" in st.session_state: del st.session_state["generated_ai_report"]
+            if st.session_state.selected_game_id == gid:
+                st.divider()
+                with st.spinner("Lade Daten..."):
+                    box = fetch_game_boxscore(gid); details = fetch_game_details(gid)
+                    if box and details: 
+                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("referee1"); box["referee2"] = details.get("referee2"); box["referee3"] = details.get("referee3"); box["scheduledTime"] = details.get("scheduledTime"); box["attendance"] = details.get("result", {}).get("spectators"); box["id"] = details.get("id") 
+                        render_game_header(box)
+                        st.markdown("### 📝 Spielberichte & PBP")
+                        t1, t2, t3 = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
+                        with t1:
+                            st.markdown(generate_game_summary(box)); st.divider()
+                            hn = get_team_name(box.get("homeTeam", {}), "Heim"); gn = get_team_name(box.get("guestTeam", {}), "Gast")
+                            hc = box.get("homeTeam", {}).get("headCoachName", "-"); gc = box.get("guestTeam", {}).get("headCoachName", "-")
+                            render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), box.get("homeTeam", {}).get("gameStat", {}), hn, hc)
+                            st.write(""); render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), box.get("guestTeam", {}).get("gameStat", {}), gn, gc)
+                            st.divider(); render_game_top_performers(box); st.divider(); render_charts_and_stats(box)
+                        with t2:
+                            st.info("ChatGPT Prompt:"); st.code(generate_complex_ai_prompt(box), language="text")
+                        with t3: render_full_play_by_play(box)
+                    else: st.error("Fehler beim Laden.")
+        else: st.warning("Keine Spiele.")
 
 def render_scouting_page():
     render_page_header("📝 PreGame Report") 
