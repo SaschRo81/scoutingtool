@@ -44,20 +44,20 @@ def inject_custom_css():
     st.markdown(
         """
         <style>
-        /* Hintergrundbild */
-        .stApp::before {
-            content: "";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
+        /* Hintergrundbild für den gesamten View-Container */
+        [data-testid="stAppViewContainer"] {
+            /* Das Bild wird mit einem halbtransparenten weißen Schleier überlagert (0.8 = 80% Weiß) */
+            background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.8)), 
+                              url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
-            opacity: 0.7; 
-            z-index: -1;
+            background-attachment: fixed;
+        }
+
+        /* Header transparent machen */
+        [data-testid="stHeader"] {
+            background-color: rgba(0,0,0,0);
         }
         
         /* Buttons Stylen - Deckend Weiß */
