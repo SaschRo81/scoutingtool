@@ -39,6 +39,64 @@ CURRENT_SEASON_ID = "2025"
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
+# --- ZENTRALE CSS & BILD FUNKTION (FÜR ALLE SEITEN) ---
+def inject_custom_css():
+    st.markdown(
+        """
+        <style>
+        /* Hintergrundbild für ALLE Seiten */
+        .stApp::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            opacity: 0.25; 
+            z-index: -1;
+        }
+        
+        /* Buttons Stylen - Deckend Weiß */
+        div.stButton > button {
+            width: 100%;
+            height: 3em;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            box-shadow: 0px 2px 4px rgba(0,0,0,0.1);
+            background-color: #ffffff !important; 
+            color: #333333 !important;
+            border: 1px solid #ddd;
+            opacity: 1 !important; 
+        }
+        div.stButton > button:hover {
+            transform: scale(1.01);
+            border-color: #ff4b4b;
+            color: #ff4b4b !important;
+        }
+
+        /* Titel Box auf Home */
+        .title-container {
+            background-color: #ffffff; 
+            padding: 20px; 
+            border-radius: 15px; 
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); 
+            text-align: center; 
+            margin-bottom: 40px; 
+            max-width: 800px; 
+            margin-left: auto; 
+            margin-right: auto; 
+            border: 1px solid #f0f0f0;
+            opacity: 1 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True
+    )
+
 # --- BILDER LADE LOGIK ---
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_best_team_logo(team_id):
@@ -52,7 +110,7 @@ def get_best_team_logo(team_id):
     headers = { "User-Agent": "Mozilla/5.0", "Accept": "image/*", "Referer": "https://dbbl.de/" }
     for url in candidates:
         try:
-            r = requests.get(url, headers=headers, timeout=1.5)
+            r = requests.get(url, headers=headers, timeout=1.0)
             if r.status_code == 200 and len(r.content) > 500: 
                 b64 = base64.b64encode(r.content).decode()
                 mime = "image/jpeg" if "jpg" in url or "jpeg" in url else "image/png"
@@ -70,34 +128,9 @@ for key, default in [
     ("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
     ("roster_df", None), ("team_stats", None), ("game_meta", {}),
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
-    ("facts_offense", pd.DataFrame([
-        {"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"},
-        {"Fokus": "Spacing", "Beschreibung": "swing or skip the ball to get it inside"},
-        {"Fokus": "Rules", "Beschreibung": "Stick to our offense rules"},
-        {"Fokus": "Automatics", "Beschreibung": "use cuts and shifts to get movement on court"},
-        {"Fokus": "Share", "Beschreibung": "the ball / always look for an extra pass"},
-        {"Fokus": "Set Offense", "Beschreibung": "look inside a lot"},
-        {"Fokus": "Pick´n Roll", "Beschreibung": "watch out for the half rol against the hetch"},
-        {"Fokus": "Pace", "Beschreibung": "Execution over speed, take care of the ball"},
-    ])),
-    ("facts_defense", pd.DataFrame([
-        {"Fokus": "Rebound", "Beschreibung": "box out!"},
-        {"Fokus": "Transition", "Beschreibung": "Slow the ball down! Pick up the ball early!"},
-        {"Fokus": "Communication", "Beschreibung": "Talk on positioning, helpside & on screens"},
-        {"Fokus": "Positioning", "Beschreibung": "close the middle on close outs and drives"},
-        {"Fokus": "Pick´n Roll", "Beschreibung": "red (yellow, last 8 sec. from shot clock)"},
-        {"Fokus": "DHO", "Beschreibung": "aggressive switch - same size / gap - small and big"},
-        {"Fokus": "Offball screens", "Beschreibung": "yellow"},
-    ])),
-    ("facts_about", pd.DataFrame([
-        {"Fokus": "Be ready for wild caotic / a lot of 1-1 and shooting", "Beschreibung": ""},
-        {"Fokus": "Stay ready no matter what happens", "Beschreibung": "Don’t be bothered by calls/no calls"},
-        {"Fokus": "No matter what the score is, we always give 100%.", "Beschreibung": ""},
-        {"Fokus": "Together", "Beschreibung": "Fight for & trust in each other!"},
-        {"Fokus": "Take care of the ball", "Beschreibung": "no easy turnovers to prevent easy fastbreaks!"},
-        {"Fokus": "Halfcourt", "Beschreibung": "Take responsibility! Stop them as a team!"},
-        {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"},
-    ])),
+    ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks"}])),
+    ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
+    ("facts_about", pd.DataFrame([{"Fokus": "Together", "Beschreibung": "Fight!"}])),
     ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None),
     ("stats_team_id", None)
 ]:
@@ -116,6 +149,7 @@ def go_team_stats(): st.session_state.current_page = "team_stats"
 
 # --- STANDARD-SEITENHEADER ---
 def render_page_header(page_title):
+    inject_custom_css() # CSS IMMER LADEN
     header_col1, header_col2 = st.columns([1, 4])
     with header_col1:
         st.button("🏠 Home", on_click=go_home, key=f"home_button_header_{st.session_state.current_page}")
@@ -128,34 +162,7 @@ def render_page_header(page_title):
 # SEITE 1: HOME
 # ==========================================
 def render_home():
-    st.markdown(
-        """
-        <style>
-        .stApp::before {
-            content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
-            background-size: cover; background-position: center; background-repeat: no-repeat;
-            opacity: 0.7; z-index: -1;
-        }
-        div.stButton > button {
-            width: 100%; height: 4em; font-size: 18px; font-weight: bold; border-radius: 10px;
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s;
-            background-color: #ffffff !important; color: #333333 !important; border: 1px solid #ddd;
-            opacity: 1 !important; 
-        }
-        div.stButton > button:hover {
-            transform: scale(1.02); border-color: #ff4b4b; background-color: #ffffff !important;
-            color: #ff4b4b !important;
-        }
-        .title-container {
-            background-color: #ffffff; padding: 20px; border-radius: 15px; 
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); text-align: center; 
-            margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto; 
-            border: 1px solid #f0f0f0; opacity: 1 !important;
-        }
-        </style>
-        """, unsafe_allow_html=True
-    )
+    inject_custom_css() # CSS AUCH HIER LADEN
     
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>🏀 DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
     _, col_center, _ = st.columns([1, 2, 1])
@@ -194,6 +201,7 @@ def render_team_stats_page():
                 st.rerun()
         
         with st.spinner("Lade Team Statistiken..."):
+            # FIX: Aufruf von fetch_team_data statt fetch_team_data_live (da alias)
             df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
             
         has_data = (df is not None and not df.empty) or (ts and len(ts) > 0)
@@ -295,7 +303,9 @@ def render_comparison_page():
     st.divider()
     if st.button("Vergleich starten", type="primary"):
         with st.spinner("Lade Daten..."):
-            _, ts_h = fetch_team_data(h_id, CURRENT_SEASON_ID); _, ts_g = fetch_team_data(g_id, CURRENT_SEASON_ID)
+            # FIX: fetch_team_data statt fetch_team_data_live
+            _, ts_h = fetch_team_data(h_id, CURRENT_SEASON_ID)
+            _, ts_g = fetch_team_data(g_id, CURRENT_SEASON_ID)
             if ts_h and ts_g: st.markdown(generate_comparison_html(ts_h, ts_g, h_name, g_name), unsafe_allow_html=True)
             else: st.error("Daten nicht verfügbar.")
 
@@ -308,6 +318,7 @@ def render_player_comparison_page():
         t1 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s1}
         tn1 = st.selectbox("Team", list({v["name"]: k for k, v in t1.items()}.keys()), key="pc_t_a")
         tid1 = {v["name"]: k for k, v in t1.items()}[tn1]
+        # FIX: fetch_team_data
         df1, _ = fetch_team_data(tid1, CURRENT_SEASON_ID)
         if df1 is not None and not df1.empty: 
             p1 = st.selectbox("Spieler", df1["NAME_FULL"].tolist(), key="pc_p_a")
@@ -322,6 +333,7 @@ def render_player_comparison_page():
         t2 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s2}
         tn2 = st.selectbox("Team", list({v["name"]: k for k, v in t2.items()}.keys()), key="pc_t_b")
         tid2 = {v["name"]: k for k, v in t2.items()}[tn2]
+        # FIX: fetch_team_data
         df2, _ = fetch_team_data(tid2, CURRENT_SEASON_ID)
         if df2 is not None and not df2.empty: 
             p2 = st.selectbox("Spieler", df2["NAME_FULL"].tolist(), key="pc_p_b")
@@ -361,6 +373,7 @@ def render_prep_page():
         opp_id = {v["name"]: k for k, v in t.items()}[opp_name]
     if st.button("Vorbereitung starten", type="primary"):
         with st.spinner("Lade Daten..."):
+            # FIX: fetch_team_data
             df, _ = fetch_team_data(opp_id, CURRENT_SEASON_ID)
             sched = fetch_schedule(opp_id, CURRENT_SEASON_ID)
             if df is not None: 
@@ -469,70 +482,4 @@ def render_game_venue_page():
                         if gid:
                             d = fetch_game_details(gid)
                             if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
-                else:
-                    with st.expander(f"🚌 Gast: {g.get('date')} bei {g.get('home')} ({g.get('score')})"):
-                        if gid:
-                            d = fetch_game_details(gid)
-                            if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
-
-def render_analysis_page():
-    render_page_header("🎥 Spielnachbereitung") 
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
-        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-        to = {v["name"]: k for k, v in t.items()}
-    with c2:
-        tn = st.selectbox("Dein Team:", list(to.keys()), key="ana_team")
-        tid = to[tn]
-    if tid:
-        games = fetch_schedule(tid, CURRENT_SEASON_ID)
-        if games:
-            played_games = [g for g in games if g.get('has_result')]
-            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in played_games}
-            
-            if not opts:
-                st.warning("Keine gespielten Spiele für dieses Team in dieser Saison gefunden.")
-                return
-
-            sel = st.selectbox("Wähle ein Spiel:", list(opts.keys()), key="ana_game_select")
-            gid = opts[sel]
-            if st.button("Analyse laden", type="primary"):
-                st.session_state.selected_game_id = gid
-                if "generated_ai_report" in st.session_state: del st.session_state["generated_ai_report"]
-            if st.session_state.selected_game_id == gid:
-                st.divider()
-                with st.spinner("Lade Daten..."):
-                    box = fetch_game_boxscore(gid); details = fetch_game_details(gid)
-                    if box and details: 
-                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("referee1"); box["referee2"] = details.get("referee2"); box["referee3"] = details.get("referee3"); box["scheduledTime"] = details.get("scheduledTime"); box["attendance"] = details.get("result", {}).get("spectators"); box["id"] = details.get("id") 
-                        render_game_header(box)
-                        st.markdown("### 📝 Spielberichte & PBP")
-                        t1, t2, t3 = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
-                        with t1:
-                            st.markdown(generate_game_summary(box)); st.divider()
-                            hn = get_team_name(box.get("homeTeam", {}), "Heim"); gn = get_team_name(box.get("guestTeam", {}), "Gast")
-                            hc = box.get("homeTeam", {}).get("headCoachName", "-"); gc = box.get("guestTeam", {}).get("headCoachName", "-")
-                            render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), box.get("homeTeam", {}).get("gameStat", {}), hn, hc)
-                            st.write(""); render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), box.get("guestTeam", {}).get("gameStat", {}), gn, gc)
-                            st.divider(); render_game_top_performers(box); st.divider(); render_charts_and_stats(box)
-                        with t2:
-                            st.info("ChatGPT Prompt:"); st.code(generate_complex_ai_prompt(box), language="text")
-                        with t3: render_full_play_by_play(box)
-                    else: st.error("Fehler beim Laden.")
-        else: st.warning("Keine Spiele.")
-
-# --- MAIN LOOP ---
-if st.session_state.current_page == "home": render_home()
-elif st.session_state.current_page == "scouting": render_scouting_page()
-elif st.session_state.current_page == "comparison": render_comparison_page()
-elif st.session_state.current_page == "analysis": render_analysis_page()
-elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
-elif st.session_state.current_page == "game_venue": render_game_venue_page()
-elif st.session_state.current_page == "prep": render_prep_page()
-elif st.session_state.current_page == "live": render_live_page()
-elif st.session_state.current_page == "team_stats": render_team_stats_page()
+                                v = d.get("v
