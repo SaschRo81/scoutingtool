@@ -17,7 +17,7 @@ except ImportError:
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url 
 from src.api import (
-    fetch_team_data, get_player_metadata_cached, fetch_schedule, 
+    fetch_team_stats_fresh, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
     fetch_season_games
 )
@@ -169,7 +169,7 @@ def render_team_stats_page():
                 st.rerun()
         
         with st.spinner("Lade Team Statistiken..."):
-            df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
+            df, ts = fetch_team_stats_fresh(tid, CURRENT_SEASON_ID)
             
         has_data = (df is not None and not df.empty) or (ts and len(ts) > 0)
 
@@ -270,7 +270,8 @@ def render_comparison_page():
     st.divider()
     if st.button("Vergleich starten", type="primary"):
         with st.spinner("Lade Daten..."):
-            _, ts_h = fetch_team_data(h_id, CURRENT_SEASON_ID); _, ts_g = fetch_team_data(g_id, CURRENT_SEASON_ID)
+            _, ts_h = fetch_team_stats_fresh(h_id, CURRENT_SEASON_ID)
+            _, ts_g = fetch_team_stats_fresh(g_id, CURRENT_SEASON_ID)
             if ts_h and ts_g: st.markdown(generate_comparison_html(ts_h, ts_g, h_name, g_name), unsafe_allow_html=True)
             else: st.error("Daten nicht verfügbar.")
 
@@ -283,7 +284,7 @@ def render_player_comparison_page():
         t1 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s1}
         tn1 = st.selectbox("Team", list({v["name"]: k for k, v in t1.items()}.keys()), key="pc_t_a")
         tid1 = {v["name"]: k for k, v in t1.items()}[tn1]
-        df1, _ = fetch_team_data(tid1, CURRENT_SEASON_ID)
+        df1, _ = fetch_team_stats_fresh(tid1, CURRENT_SEASON_ID)
         if df1 is not None and not df1.empty: 
             p1 = st.selectbox("Spieler", df1["NAME_FULL"].tolist(), key="pc_p_a")
             row1 = df1[df1["NAME_FULL"] == p1].iloc[0]
@@ -297,7 +298,7 @@ def render_player_comparison_page():
         t2 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s2}
         tn2 = st.selectbox("Team", list({v["name"]: k for k, v in t2.items()}.keys()), key="pc_t_b")
         tid2 = {v["name"]: k for k, v in t2.items()}[tn2]
-        df2, _ = fetch_team_data(tid2, CURRENT_SEASON_ID)
+        df2, _ = fetch_team_stats_fresh(tid2, CURRENT_SEASON_ID)
         if df2 is not None and not df2.empty: 
             p2 = st.selectbox("Spieler", df2["NAME_FULL"].tolist(), key="pc_p_b")
             row2 = df2[df2["NAME_FULL"] == p2].iloc[0]
@@ -336,7 +337,7 @@ def render_prep_page():
         opp_id = {v["name"]: k for k, v in t.items()}[opp_name]
     if st.button("Vorbereitung starten", type="primary"):
         with st.spinner("Lade Daten..."):
-            df, _ = fetch_team_data(opp_id, CURRENT_SEASON_ID)
+            df, _ = fetch_team_stats_fresh(opp_id, CURRENT_SEASON_ID)
             sched = fetch_schedule(opp_id, CURRENT_SEASON_ID)
             if df is not None: 
                 render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
@@ -563,7 +564,8 @@ def render_scouting_page():
         
         if click_load or (st.session_state.roster_df is None and cur_tid != tid) or (st.session_state.roster_df is not None and cur_tid != tid):
             with st.spinner("Lade Daten..."):
-                df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
+                # WICHTIG: Neue UNCACHED Funktion
+                df, ts = fetch_team_stats_fresh(tid, CURRENT_SEASON_ID)
 
                 if (df is not None and not df.empty) or ts: 
                     st.session_state.roster_df = df if df is not None else pd.DataFrame()
