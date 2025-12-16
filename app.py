@@ -224,11 +224,11 @@ def render_home():
         with r3_c1: 
             if st.button("📝 PreGame Report", use_container_width=True): go_scouting(); st.rerun()
         with r3_c2:
-             if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
+             if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
         st.write("")
         r4_c1, r4_c2 = st.columns(2)
         with r4_c1:
-             if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
+             if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
         with r4_c2:
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
 
