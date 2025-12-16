@@ -16,8 +16,7 @@ def get_base_url(team_id):
         team_info = TEAMS_DB.get(tid)
         if team_info and team_info.get("staffel") == "Nord":
             return "https://api-n.dbbl.scb.world"
-    except (ValueError, TypeError):
-        pass
+    except: pass
     return "https://api-s.dbbl.scb.world"
 
 def format_minutes(seconds):
@@ -85,8 +84,8 @@ def fetch_team_details_raw(team_id, season_id):
     except: pass
     return None
 
-# Umbenannt, um Cache-Probleme sicher zu vermeiden
-def fetch_team_data_uncached(team_id, season_id):
+# Hauptfunktion - Cache deaktiviert für Frische, Name standardisiert
+def fetch_team_data(team_id, season_id):
     base_url = get_base_url(team_id)
     
     api_stats_players = f"{base_url}/teams/{team_id}/{season_id}/player-stats"
@@ -132,7 +131,6 @@ def fetch_team_data_uncached(team_id, season_id):
                 raw_id = p.get("id") or entry.get("id")
                 if raw_id:
                     pid = str(raw_id).replace(".0", "")
-                    # Robusterer Zugriff auf Geburtstage
                     bdate = p.get("birthDate") or p.get("birthdate") or entry.get("birthDate") or entry.get("birthdate")
                     roster_lookup[pid] = {
                         "birthdate": bdate,
@@ -188,68 +186,40 @@ def fetch_team_data_uncached(team_id, season_id):
                 # PER GAME & PERCENTAGES
                 gp_safe = df["GP"].replace(0, 1)
                 df["MIN_DISPLAY"] = (df["TOTAL_MINUTES"] * 60 / gp_safe).apply(format_minutes)
-                df["PPG"] = (df["TOTAL_PTS"] / gp_safe).round(1)
-                df["TOT"] = (df["TOTAL_REB"] / gp_safe).round(1)
-                df["AS"] = (df["TOTAL_AST"] / gp_safe).round(1)
-                df["ST"] = (df["TOTAL_STL"] / gp_safe).round(1)
-                df["TO"] = (df["TOTAL_TO"] / gp_safe).round(1)
-                df["BS"] = (df["TOTAL_BLK"] / gp_safe).round(1)
-                df["PF"] = (df["TOTAL_PF"] / gp_safe).round(1)
-                df["OR"] = (df["TOTAL_OR"] / gp_safe).round(1)
-                df["DR"] = (df["TOTAL_DR"] / gp_safe).round(1)
-                df["2M"] = (df["TOTAL_2M"] / gp_safe).round(1)
-                df["2A"] = (df["TOTAL_2A"] / gp_safe).round(1)
-                df["3M"] = (df["TOTAL_3M"] / gp_safe).round(1)
-                df["3A"] = (df["TOTAL_3A"] / gp_safe).round(1)
-                df["FTM"] = (df["TOTAL_FTM"] / gp_safe).round(1)
+                df["PPG"] = (df["TOTAL_PTS"] / gp_safe).round(1); df["TOT"] = (df["TOTAL_REB"] / gp_safe).round(1)
+                df["AS"] = (df["TOTAL_AST"] / gp_safe).round(1); df["ST"] = (df["TOTAL_STL"] / gp_safe).round(1)
+                df["TO"] = (df["TOTAL_TO"] / gp_safe).round(1); df["BS"] = (df["TOTAL_BLK"] / gp_safe).round(1)
+                df["PF"] = (df["TOTAL_PF"] / gp_safe).round(1); df["OR"] = (df["TOTAL_OR"] / gp_safe).round(1)
+                df["DR"] = (df["TOTAL_DR"] / gp_safe).round(1); df["2M"] = (df["TOTAL_2M"] / gp_safe).round(1)
+                df["2A"] = (df["TOTAL_2A"] / gp_safe).round(1); df["3M"] = (df["TOTAL_3M"] / gp_safe).round(1)
+                df["3A"] = (df["TOTAL_3A"] / gp_safe).round(1); df["FTM"] = (df["TOTAL_FTM"] / gp_safe).round(1)
                 df["FTA"] = (df["TOTAL_FTA"] / gp_safe).round(1)
 
-                # WICHTIG: 2-Punkt Quote berechnen (das fehlte!)
+                df["FG%"] = (df["TOTAL_FGM"] / df["TOTAL_FGA"] * 100).round(1).fillna(0)
+                df["3PCT"] = (df["TOTAL_3M"] / df["TOTAL_3A"] * 100).round(1).fillna(0)
+                df["FTPCT"] = (df["TOTAL_FTM"] / df["TOTAL_FTA"] * 100).round(1).fillna(0)
+                
+                # WICHTIG: 2-Punkt Quote
                 df["2PCT"] = 0.0
                 mask2 = df["TOTAL_2A"] > 0
                 df.loc[mask2, "2PCT"] = (df.loc[mask2, "TOTAL_2M"] / df.loc[mask2, "TOTAL_2A"] * 100).round(1)
 
-                # FG%
-                df["FG%"] = (df["TOTAL_FGM"] / df["TOTAL_FGA"] * 100).round(1).fillna(0)
-                # 3PCT
-                df["3PCT"] = (df["TOTAL_3M"] / df["TOTAL_3A"] * 100).round(1).fillna(0)
-                # FTPCT
-                df["FTPCT"] = (df["TOTAL_FTM"] / df["TOTAL_FTA"] * 100).round(1).fillna(0)
-                
                 df["select"] = False
 
     except Exception as e:
         print(f"Error Player Stats ({base_url}): {e}")
 
-    # Fallback Berechnung, wenn Team Stats API leer
-    if not ts and not df.empty:
-        total_games = df["GP"].max() if not df.empty else 1
-        if total_games == 0: total_games = 1
-
-        team_total_pts = df["TOTAL_PTS"].sum(); team_total_reb = df["TOTAL_REB"].sum()
-        team_total_ast = df["TOTAL_AST"].sum(); team_total_stl = df["TOTAL_STL"].sum()
-        team_total_to = df["TOTAL_TO"].sum(); team_total_blk = df["TOTAL_BLK"].sum()
-        team_total_pf = df["TOTAL_PF"].sum(); team_total_or = df["TOTAL_OR"].sum()
-        team_total_dr = df["TOTAL_DR"].sum(); team_total_fgm = df["TOTAL_FGM"].sum()
-        team_total_fga = df["TOTAL_FGA"].sum(); team_total_3m = df["TOTAL_3M"].sum()
-        team_total_3a = df["TOTAL_3A"].sum(); team_total_ftm = df["TOTAL_FTM"].sum()
-        team_total_fta = df["TOTAL_FTA"].sum()
-
-        ts = {
-            "ppg": team_total_pts / total_games, "tot": team_total_reb / total_games,
-            "as": team_total_ast / total_games, "st": team_total_stl / total_games,
-            "to": team_total_to / total_games, "bs": team_total_blk / total_games,
-            "pf": team_total_pf / total_games, "or": team_total_or / total_games,
-            "dr": team_total_dr / total_games,
-            "fgpct": (team_total_fgm / team_total_fga * 100) if team_total_fga > 0 else 0,
-            "3pct": (team_total_3m / team_total_3a * 100) if team_total_3a > 0 else 0,
-            "ftpct": (team_total_ftm / team_total_fta * 100) if team_total_fta > 0 else 0,
-        }
+    # --- SAFETY CHECK: FEHLENDE SPALTEN AUFFÜLLEN ---
+    # Falls die Berechnung abgestürzt ist, aber ein DF existiert (z.B. aus json_normalize),
+    # müssen wir sicherstellen, dass die Spalten für den Report existieren.
+    if df is not None and not df.empty:
+        required_cols = ["2M", "2A", "2PCT", "3M", "3A", "3PCT", "FTM", "FTA", "FTPCT", 
+                         "DR", "OR", "TOT", "AS", "TO", "ST", "PF", "BS", "PPG", "MIN_DISPLAY"]
+        for c in required_cols:
+            if c not in df.columns:
+                df[c] = 0
 
     return df, ts
-
-# Alias für Kompatibilität mit app.py (falls dort fetch_team_data aufgerufen wird)
-fetch_team_data = fetch_team_data_uncached
 
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
@@ -337,7 +307,6 @@ def fetch_season_games(season_id):
                             date_only = dt_obj.strftime("%d.%m.%Y")
                         except: pass
                     res = g.get("result") or {}
-                    
                     if not any(x['id'] == g.get("id") for x in all_games):
                         all_games.append({
                             "id": g.get("id"), "date": d_disp, "date_only": date_only,
