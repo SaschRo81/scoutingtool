@@ -69,6 +69,14 @@ def get_player_metadata_cached(player_id):
 
 @st.cache_data(ttl=600)
 def fetch_team_details_raw(team_id, season_id):
+    # Versuch 1: Zentraler Endpunkt
+    url = f"https://api-1.dbbl.scb.world/teams/{team_id}/{season_id}"
+    try:
+        resp = requests.get(url, headers=API_HEADERS, timeout=3)
+        if resp.status_code == 200: return resp.json()
+    except: pass
+    
+    # Versuch 2: Spezifischer Server
     base = get_base_url(team_id)
     url = f"{base}/teams/{team_id}/{season_id}"
     try:
@@ -77,7 +85,8 @@ def fetch_team_details_raw(team_id, season_id):
     except: pass
     return None
 
-def fetch_team_data(team_id, season_id):
+# UMBENANNT & NICHT GECACHED -> Zwingt Streamlit, neue Daten zu holen
+def fetch_team_stats_fresh(team_id, season_id):
     base_url = get_base_url(team_id)
     
     api_stats_players = f"{base_url}/teams/{team_id}/{season_id}/player-stats"
@@ -86,7 +95,7 @@ def fetch_team_data(team_id, season_id):
     ts = {}
     df = pd.DataFrame()
 
-    # 1. TEAM STATS LADEN (MIT KORREKTEN FELDNAMEN & BERECHNUNGEN)
+    # 1. TEAM STATS LADEN
     try:
         r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
         if r_team.status_code == 200:
@@ -95,40 +104,26 @@ def fetch_team_data(team_id, season_id):
             
             if isinstance(td, dict):
                 gp = td.get("gamesPlayed") or 1
-                if gp == 0: gp = 1 # Div/0 Schutz
+                fgm = td.get("fieldGoalsMade") or 0; fga = td.get("fieldGoalsAttempted") or 0
+                m3 = td.get("threePointShotsMade") or 0; a3 = td.get("threePointShotsAttempted") or 0
+                ftm = td.get("freeThrowsMade") or 0; fta = td.get("freeThrowsAttempted") or 0
                 
-                # Absolute Werte
-                fgm = td.get("fieldGoalsMade") or 0
-                fga = td.get("fieldGoalsAttempted") or 0
-                m3 = td.get("threePointShotsMade") or 0
-                a3 = td.get("threePointShotsAttempted") or 0
-                ftm = td.get("freeThrowsMade") or 0
-                fta = td.get("freeThrowsAttempted") or 0
-                
-                # 2-Punkt Werte berechnen (Gesamt - 3er)
+                # 2-Punkt Werte
                 m2 = fgm - m3
                 a2 = fga - a3
-                
+
                 ts = {
-                    # Per Game Werte (berechnet aus Totals / GP)
-                    "ppg": (td.get("points") or 0) / gp,
-                    "tot": (td.get("totalRebounds") or 0) / gp,
-                    "as": (td.get("assists") or 0) / gp,
-                    "to": (td.get("turnovers") or 0) / gp,
-                    "st": (td.get("steals") or 0) / gp,
-                    "bs": (td.get("blocks") or 0) / gp,
-                    "pf": (td.get("foulsCommitted") or 0) / gp,
-                    "or": (td.get("offensiveRebounds") or 0) / gp,
+                    "ppg": (td.get("points") or 0) / gp, "tot": (td.get("totalRebounds") or 0) / gp,
+                    "as": (td.get("assists") or 0) / gp, "to": (td.get("turnovers") or 0) / gp,
+                    "st": (td.get("steals") or 0) / gp, "bs": (td.get("blocks") or 0) / gp,
+                    "pf": (td.get("foulsCommitted") or 0) / gp, "or": (td.get("offensiveRebounds") or 0) / gp,
                     "dr": (td.get("defensiveRebounds") or 0) / gp,
                     
-                    # Shooting Stats (Per Game für HTML Report)
-                    "2m": m2 / gp,
-                    "2a": a2 / gp,
-                    "3m": m3 / gp,
-                    "3a": a3 / gp,
-                    "ftm": ftm / gp,
-                    "fta": fta / gp,
-                    
+                    # Shooting Stats für HTML Report
+                    "2m": m2 / gp, "2a": a2 / gp,
+                    "3m": m3 / gp, "3a": a3 / gp,
+                    "ftm": ftm / gp, "fta": fta / gp,
+
                     # Prozente
                     "fgpct": (fgm / fga * 100) if fga > 0 else 0,
                     "2pct": (m2 / a2 * 100) if a2 > 0 else 0,
@@ -149,6 +144,7 @@ def fetch_team_data(team_id, season_id):
                 raw_id = p.get("id") or entry.get("id")
                 if raw_id:
                     pid = str(raw_id).replace(".0", "")
+                    # Robusterer Zugriff auf Geburtstage
                     bdate = p.get("birthDate") or p.get("birthdate") or entry.get("birthDate") or entry.get("birthdate")
                     roster_lookup[pid] = {
                         "birthdate": bdate,
@@ -181,6 +177,7 @@ def fetch_team_data(team_id, season_id):
                 df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
                 df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
                 
+                # METADATEN MERGEN
                 df["BIRTHDATE"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("birthdate", ""))
                 df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("nationality", "-"))
                 df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda x: roster_lookup.get(x, {}).get("height", "-"))
@@ -188,6 +185,7 @@ def fetch_team_data(team_id, season_id):
                 
                 df["GP"] = get_val("gamesplayed").replace(0, 1)
                 
+                # TOTALS
                 df["TOTAL_MINUTES"] = get_val("secondsplayed") / 60
                 df["TOTAL_PTS"] = get_val("points"); df["TOTAL_REB"] = get_val("totalrebounds")
                 df["TOTAL_AST"] = get_val("assists"); df["TOTAL_STL"] = get_val("steals")
@@ -199,6 +197,7 @@ def fetch_team_data(team_id, season_id):
                 df["TOTAL_FTA"] = get_val("freethrowsattempted"); df["TOTAL_2M"] = df["TOTAL_FGM"] - df["TOTAL_3M"]
                 df["TOTAL_2A"] = df["TOTAL_FGA"] - df["TOTAL_3A"]
                 
+                # PER GAME & PERCENTAGES
                 gp_safe = df["GP"].replace(0, 1)
                 df["MIN_DISPLAY"] = (df["TOTAL_MINUTES"] * 60 / gp_safe).apply(format_minutes)
                 df["PPG"] = (df["TOTAL_PTS"] / gp_safe).round(1); df["TOT"] = (df["TOTAL_REB"] / gp_safe).round(1)
@@ -214,7 +213,7 @@ def fetch_team_data(team_id, season_id):
                 df["3PCT"] = (df["TOTAL_3M"] / df["TOTAL_3A"] * 100).round(1).fillna(0)
                 df["FTPCT"] = (df["TOTAL_FTM"] / df["TOTAL_FTA"] * 100).round(1).fillna(0)
                 
-                # WICHTIG: 2-Punkt Quote für HTML Report
+                # WICHTIG: 2-Punkt Quote
                 df["2PCT"] = 0.0
                 mask2 = df["TOTAL_2A"] > 0
                 df.loc[mask2, "2PCT"] = (df.loc[mask2, "TOTAL_2M"] / df.loc[mask2, "TOTAL_2A"] * 100).round(1)
@@ -229,36 +228,47 @@ def fetch_team_data(team_id, season_id):
         total_games = df["GP"].max() if not df.empty else 1
         if total_games == 0: total_games = 1
 
-        # Summen
-        team_fgm = df["TOTAL_FGM"].sum(); team_fga = df["TOTAL_FGA"].sum()
-        team_3m = df["TOTAL_3M"].sum(); team_3a = df["TOTAL_3A"].sum()
-        team_ftm = df["TOTAL_FTM"].sum(); team_fta = df["TOTAL_FTA"].sum()
-        team_2m = team_fgm - team_3m; team_2a = team_fga - team_3a
+        team_total_pts = df["TOTAL_PTS"].sum(); team_total_reb = df["TOTAL_REB"].sum()
+        team_total_ast = df["TOTAL_AST"].sum(); team_total_stl = df["TOTAL_STL"].sum()
+        team_total_to = df["TOTAL_TO"].sum(); team_total_blk = df["TOTAL_BLK"].sum()
+        team_total_pf = df["TOTAL_PF"].sum(); team_total_or = df["TOTAL_OR"].sum()
+        team_total_dr = df["TOTAL_DR"].sum(); team_total_fgm = df["TOTAL_FGM"].sum()
+        team_total_fga = df["TOTAL_FGA"].sum(); team_total_3m = df["TOTAL_3M"].sum()
+        team_total_3a = df["TOTAL_3A"].sum(); team_total_ftm = df["TOTAL_FTM"].sum()
+        team_total_fta = df["TOTAL_FTA"].sum()
+        
+        team_2m = team_total_fgm - team_total_3m
+        team_2a = team_total_fga - team_total_3a
 
         ts = {
-            "ppg": df["TOTAL_PTS"].sum() / total_games,
-            "tot": df["TOTAL_REB"].sum() / total_games,
-            "as": df["TOTAL_AST"].sum() / total_games,
-            "st": df["TOTAL_STL"].sum() / total_games,
-            "to": df["TOTAL_TO"].sum() / total_games,
-            "bs": df["TOTAL_BLK"].sum() / total_games,
-            "pf": df["TOTAL_PF"].sum() / total_games,
-            "or": df["TOTAL_OR"].sum() / total_games,
-            "dr": df["TOTAL_DR"].sum() / total_games,
+            "ppg": team_total_pts / total_games, "tot": team_total_reb / total_games,
+            "as": team_total_ast / total_games, "st": team_total_stl / total_games,
+            "to": team_total_to / total_games, "bs": team_total_blk / total_games,
+            "pf": team_total_pf / total_games, "or": team_total_or / total_games,
+            "dr": team_total_dr / total_games,
             
-            # Wurf-Stats für HTML (per Game)
             "2m": team_2m / total_games, "2a": team_2a / total_games,
-            "3m": team_3m / total_games, "3a": team_3a / total_games,
-            "ftm": team_ftm / total_games, "fta": team_fta / total_games,
+            "3m": team_total_3m / total_games, "3a": team_total_3a / total_games,
+            "ftm": team_total_ftm / total_games, "fta": team_total_fta / total_games,
 
-            # Prozente
-            "fgpct": (team_fgm / team_fga * 100) if team_fga > 0 else 0,
+            "fgpct": (team_total_fgm / team_total_fga * 100) if team_total_fga > 0 else 0,
             "2pct": (team_2m / team_2a * 100) if team_2a > 0 else 0,
-            "3pct": (team_3m / team_3a * 100) if team_3a > 0 else 0,
-            "ftpct": (team_ftm / team_fta * 100) if team_fta > 0 else 0,
+            "3pct": (team_total_3m / team_total_3a * 100) if team_total_3a > 0 else 0,
+            "ftpct": (team_total_ftm / team_total_fta * 100) if team_total_fta > 0 else 0,
         }
+        
+    # SICHERHEITSNETZ FÜR HTML REPORT:
+    # Falls das Dataframe existiert, prüfen wir ob alle Spalten da sind
+    if df is not None and not df.empty:
+        required = ["2M", "2A", "2PCT", "3M", "3A", "3PCT", "FTM", "FTA", "FTPCT", 
+                    "DR", "OR", "TOT", "AS", "TO", "ST", "PF", "BS", "PPG", "MIN_DISPLAY"]
+        for c in required:
+            if c not in df.columns: df[c] = 0
 
     return df, ts
+
+# Alias für Kompatibilität mit app.py
+fetch_team_data = fetch_team_stats_fresh
 
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
@@ -329,7 +339,6 @@ def fetch_team_info_basic(team_id):
 @st.cache_data(ttl=600)
 def fetch_season_games(season_id):
     all_games = []
-    
     for subdomain in ["api-s", "api-n"]:
         url = f"https://{subdomain}.dbbl.scb.world/games?seasonId={season_id}&pageSize=3000"
         try:
@@ -347,7 +356,6 @@ def fetch_season_games(season_id):
                             date_only = dt_obj.strftime("%d.%m.%Y")
                         except: pass
                     res = g.get("result") or {}
-                    
                     if not any(x['id'] == g.get("id") for x in all_games):
                         all_games.append({
                             "id": g.get("id"), "date": d_disp, "date_only": date_only,
@@ -357,5 +365,4 @@ def fetch_season_games(season_id):
                             "status": g.get("status")
                         })
         except: pass
-        
     return all_games
