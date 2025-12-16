@@ -103,30 +103,59 @@ def render_page_header(page_title):
 # SEITE 1: HOME
 # ==========================================
 def render_home():
+    # CSS für Hintergrundbild und Styling
     st.markdown(
         """
         <style>
-        .stApp::before {
-            content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
-            background-size: cover; background-position: center; background-repeat: no-repeat;
-            opacity: 0.7; z-index: -1;
+        /* FIX: Bild direkt auf den View-Container anwenden */
+        [data-testid="stAppViewContainer"] {
+            /* 
+               Der Trick für Transparenz: 
+               Wir legen einen weißen Schleier (rgba 255,255,255 mit 0.3 Deckkraft) über das Bild.
+               Das lässt das Bild so aussehen, als hätte es 0.7 Opacity.
+            */
+            background: linear-gradient(rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.3)), 
+                        url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
         }
+
+        /* Buttons Stylen - Deckend Weiß */
         div.stButton > button {
-            width: 100%; height: 4em; font-size: 18px; font-weight: bold; border-radius: 10px;
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s;
-            background-color: #ffffff !important; color: #333333 !important; border: 1px solid #ddd;
+            width: 100%;
+            height: 4em;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+            background-color: #ffffff !important; 
+            color: #333333 !important;
+            border: 1px solid #ddd;
             opacity: 1 !important; 
         }
         div.stButton > button:hover {
-            transform: scale(1.02); border-color: #ff4b4b; background-color: #ffffff !important;
+            transform: scale(1.02);
+            border-color: #ff4b4b;
+            background-color: #ffffff !important;
             color: #ff4b4b !important;
         }
+        
+        /* Titel Box */
         .title-container {
-            background-color: #ffffff; padding: 20px; border-radius: 15px; 
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); text-align: center; 
-            margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto; 
-            border: 1px solid #f0f0f0; opacity: 1 !important;
+            background-color: #ffffff; 
+            padding: 20px; 
+            border-radius: 15px; 
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); 
+            text-align: center; 
+            margin-bottom: 40px; 
+            max-width: 800px; 
+            margin-left: auto; 
+            margin-right: auto; 
+            border: 1px solid #f0f0f0;
+            opacity: 1 !important;
         }
         </style>
         """, unsafe_allow_html=True
