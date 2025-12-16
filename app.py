@@ -16,7 +16,6 @@ except ImportError:
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url 
-# WICHTIG: Einheitlicher Import
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
@@ -40,32 +39,59 @@ CURRENT_SEASON_ID = "2025"
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
-# --- ZENTRALE CSS FUNKTION ---
+# --- ZENTRALE CSS & BILD FUNKTION ---
 def inject_custom_css():
     st.markdown(
         """
         <style>
+        /* Hintergrundbild */
         .stApp::before {
-            content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             background-image: url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
-            background-size: cover; background-position: center; background-repeat: no-repeat;
-            opacity: 0.7; z-index: -1;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            opacity: 0.7; 
+            z-index: -1;
         }
+        
+        /* Buttons Stylen - Deckend Weiß */
         div.stButton > button {
-            width: 100%; height: 4em; font-size: 18px; font-weight: bold; border-radius: 10px;
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s;
-            background-color: #ffffff !important; color: #333333 !important; border: 1px solid #ddd;
+            width: 100%;
+            height: 3em;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            box-shadow: 0px 2px 4px rgba(0,0,0,0.1);
+            background-color: #ffffff !important; 
+            color: #333333 !important;
+            border: 1px solid #ddd;
             opacity: 1 !important; 
         }
         div.stButton > button:hover {
-            transform: scale(1.02); border-color: #ff4b4b; background-color: #ffffff !important;
+            transform: scale(1.01);
+            border-color: #ff4b4b;
             color: #ff4b4b !important;
         }
+
+        /* Titel Box auf Home */
         .title-container {
-            background-color: #ffffff; padding: 20px; border-radius: 15px; 
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); text-align: center; 
-            margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto; 
-            border: 1px solid #f0f0f0; opacity: 1 !important;
+            background-color: #ffffff; 
+            padding: 20px; 
+            border-radius: 15px; 
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); 
+            text-align: center; 
+            margin-bottom: 40px; 
+            max-width: 800px; 
+            margin-left: auto; 
+            margin-right: auto; 
+            border: 1px solid #f0f0f0;
+            opacity: 1 !important;
         }
         </style>
         """, unsafe_allow_html=True
@@ -97,9 +123,10 @@ def image_to_base64_str(img_bytes):
     try: return f"data:image/png;base64,{base64.b64encode(img_bytes).decode()}"
     except: return ""
 
-# --- SESSION STATE ---
+# --- SESSION STATE (MIT ALLEN DETAILS) ---
 for key, default in [
-    ("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
+    ("current_page", "home"),
+    ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
     ("roster_df", None), ("team_stats", None), ("game_meta", {}),
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
     ("facts_offense", pd.DataFrame([
@@ -148,7 +175,7 @@ def go_team_stats(): st.session_state.current_page = "team_stats"
 
 # --- STANDARD-SEITENHEADER ---
 def render_page_header(page_title):
-    inject_custom_css()
+    inject_custom_css() # CSS immer laden
     header_col1, header_col2 = st.columns([1, 4])
     with header_col1:
         st.button("🏠 Home", on_click=go_home, key=f"home_button_header_{st.session_state.current_page}")
@@ -161,7 +188,8 @@ def render_page_header(page_title):
 # SEITE 1: HOME
 # ==========================================
 def render_home():
-    inject_custom_css()
+    inject_custom_css() # CSS sicherstellen
+    
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>🏀 DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
@@ -300,8 +328,7 @@ def render_comparison_page():
     st.divider()
     if st.button("Vergleich starten", type="primary"):
         with st.spinner("Lade Daten..."):
-            _, ts_h = fetch_team_data(h_id, CURRENT_SEASON_ID)
-            _, ts_g = fetch_team_data(g_id, CURRENT_SEASON_ID)
+            _, ts_h = fetch_team_data(h_id, CURRENT_SEASON_ID); _, ts_g = fetch_team_data(g_id, CURRENT_SEASON_ID)
             if ts_h and ts_g: st.markdown(generate_comparison_html(ts_h, ts_g, h_name, g_name), unsafe_allow_html=True)
             else: st.error("Daten nicht verfügbar.")
 
@@ -594,17 +621,12 @@ def render_scouting_page():
         
         if click_load or (st.session_state.roster_df is None and cur_tid != tid) or (st.session_state.roster_df is not None and cur_tid != tid):
             with st.spinner("Lade Daten..."):
-                # WICHTIG: Neue UNCACHED Funktion
                 df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
-
-                if (df is not None and not df.empty) or ts: 
-                    st.session_state.roster_df = df if df is not None else pd.DataFrame()
-                    st.session_state.team_stats = ts; st.session_state.current_tid = tid 
+                if df is not None and not df.empty: 
+                    st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
                     st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
                     st.session_state.print_mode = False 
-                else: 
-                    st.error(f"Fehler API: Keine Daten für {target} in Saison {CURRENT_SEASON_ID} gefunden."); 
-                    st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
+                else: st.error("Fehler API."); st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
         elif st.session_state.roster_df is None or st.session_state.roster_df.empty: st.info("Bitte laden.")
         
         if st.session_state.roster_df is not None and not st.session_state.roster_df.empty: 
@@ -635,9 +657,7 @@ def render_scouting_page():
                         tn = (gn if target == "Gastteam (Gegner)" else hn).replace(" ", "_")
                         st.session_state.report_filename = f"Scouting_Report_{tn}_{d_inp.strftime('%d.%m.%Y')}.pdf"
                         html = generate_header_html(st.session_state.game_meta); html += generate_top3_html(st.session_state.roster_df)
-                        for item in res: 
-                            meta = get_player_metadata_cached(item["pid"])
-                            html += generate_card_html(item["row"].to_dict(), meta, item["notes"], cmap[item["color"]])
+                        for item in res: meta = get_player_metadata_cached(item["pid"]); html += generate_card_html(item["row"].to_dict(), meta, item["notes"], cmap[item["color"]])
                         html += generate_team_stats_html(st.session_state.team_stats)
                         if up:
                             html += "<div style='page-break-before:always'><h2>Plays</h2>"; 
