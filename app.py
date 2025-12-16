@@ -39,14 +39,51 @@ CURRENT_SEASON_ID = "2025"
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon="🏀")
 
-# --- ZENTRALE CSS & BILD FUNKTION ---
+# --- ZENTRALE CSS STEUERUNG ---
 def inject_custom_css():
-    st.markdown(
-        """
+    # 1. Basis-CSS für Buttons (Gilt überall)
+    base_css = """
+    <style>
+    div.stButton > button {
+        width: 100%;
+        height: 3em;
+        font-size: 16px;
+        font-weight: bold;
+        border-radius: 8px;
+        box-shadow: 0px 2px 4px rgba(0,0,0,0.1);
+        background-color: #ffffff !important; 
+        color: #333333 !important;
+        border: 1px solid #ddd;
+        opacity: 1 !important; 
+    }
+    div.stButton > button:hover {
+        transform: scale(1.01);
+        border-color: #ff4b4b;
+        color: #ff4b4b !important;
+    }
+    /* Titel Box auf Home */
+    .title-container {
+        background-color: #ffffff; 
+        padding: 20px; 
+        border-radius: 15px; 
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.1); 
+        text-align: center; 
+        margin-bottom: 40px; 
+        max-width: 800px; 
+        margin-left: auto; 
+        margin-right: auto; 
+        border: 1px solid #f0f0f0;
+        opacity: 1 !important;
+    }
+    </style>
+    """
+    st.markdown(base_css, unsafe_allow_html=True)
+
+    # 2. Hintergrund-Logik: Nur auf HOME anzeigen, sonst WEISS
+    if st.session_state.current_page == "home":
+        bg_css = """
         <style>
-        /* Hintergrundbild für den gesamten View-Container */
         [data-testid="stAppViewContainer"] {
-            /* Das Bild wird mit einem halbtransparenten weißen Schleier überlagert (0.8 = 80% Weiß) */
             background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.8)), 
                               url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
             background-size: cover;
@@ -54,48 +91,26 @@ def inject_custom_css():
             background-repeat: no-repeat;
             background-attachment: fixed;
         }
-
-        /* Header transparent machen */
         [data-testid="stHeader"] {
             background-color: rgba(0,0,0,0);
         }
-        
-        /* Buttons Stylen - Deckend Weiß */
-        div.stButton > button {
-            width: 100%;
-            height: 3em;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 8px;
-            box-shadow: 0px 2px 4px rgba(0,0,0,0.1);
-            background-color: #ffffff !important; 
-            color: #333333 !important;
-            border: 1px solid #ddd;
-            opacity: 1 !important; 
+        </style>
+        """
+        st.markdown(bg_css, unsafe_allow_html=True)
+    else:
+        # Auf allen anderen Seiten: Hintergrund entfernen / Weiß setzen
+        clean_css = """
+        <style>
+        [data-testid="stAppViewContainer"] {
+            background-image: none !important;
+            background-color: #ffffff !important;
         }
-        div.stButton > button:hover {
-            transform: scale(1.01);
-            border-color: #ff4b4b;
-            color: #ff4b4b !important;
-        }
-
-        /* Titel Box auf Home */
-        .title-container {
-            background-color: #ffffff; 
-            padding: 20px; 
-            border-radius: 15px; 
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1); 
-            text-align: center; 
-            margin-bottom: 40px; 
-            max-width: 800px; 
-            margin-left: auto; 
-            margin-right: auto; 
-            border: 1px solid #f0f0f0;
-            opacity: 1 !important;
+        [data-testid="stHeader"] {
+            background-color: #ffffff !important;
         }
         </style>
-        """, unsafe_allow_html=True
-    )
+        """
+        st.markdown(clean_css, unsafe_allow_html=True)
 
 # --- BILDER LADE LOGIK ---
 @st.cache_data(ttl=3600, show_spinner=False)
