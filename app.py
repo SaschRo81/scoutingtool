@@ -16,9 +16,8 @@ except ImportError:
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url 
-# WICHTIG: Neue Funktion importiert
 from src.api import (
-    fetch_team_data_uncached, get_player_metadata_cached, fetch_schedule, 
+    fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
     fetch_season_games
 )
@@ -170,8 +169,7 @@ def render_team_stats_page():
                 st.rerun()
         
         with st.spinner("Lade Team Statistiken..."):
-            # WICHTIG: Neue UNCACHED Funktion
-            df, ts = fetch_team_data_uncached(tid, CURRENT_SEASON_ID)
+            df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
             
         has_data = (df is not None and not df.empty) or (ts and len(ts) > 0)
 
@@ -272,9 +270,7 @@ def render_comparison_page():
     st.divider()
     if st.button("Vergleich starten", type="primary"):
         with st.spinner("Lade Daten..."):
-            # WICHTIG: Neue UNCACHED Funktion
-            _, ts_h = fetch_team_data_uncached(h_id, CURRENT_SEASON_ID)
-            _, ts_g = fetch_team_data_uncached(g_id, CURRENT_SEASON_ID)
+            _, ts_h = fetch_team_data(h_id, CURRENT_SEASON_ID); _, ts_g = fetch_team_data(g_id, CURRENT_SEASON_ID)
             if ts_h and ts_g: st.markdown(generate_comparison_html(ts_h, ts_g, h_name, g_name), unsafe_allow_html=True)
             else: st.error("Daten nicht verfügbar.")
 
@@ -287,8 +283,7 @@ def render_player_comparison_page():
         t1 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s1}
         tn1 = st.selectbox("Team", list({v["name"]: k for k, v in t1.items()}.keys()), key="pc_t_a")
         tid1 = {v["name"]: k for k, v in t1.items()}[tn1]
-        # WICHTIG: Neue UNCACHED Funktion
-        df1, _ = fetch_team_data_uncached(tid1, CURRENT_SEASON_ID)
+        df1, _ = fetch_team_data(tid1, CURRENT_SEASON_ID)
         if df1 is not None and not df1.empty: 
             p1 = st.selectbox("Spieler", df1["NAME_FULL"].tolist(), key="pc_p_a")
             row1 = df1[df1["NAME_FULL"] == p1].iloc[0]
@@ -302,8 +297,7 @@ def render_player_comparison_page():
         t2 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s2}
         tn2 = st.selectbox("Team", list({v["name"]: k for k, v in t2.items()}.keys()), key="pc_t_b")
         tid2 = {v["name"]: k for k, v in t2.items()}[tn2]
-        # WICHTIG: Neue UNCACHED Funktion
-        df2, _ = fetch_team_data_uncached(tid2, CURRENT_SEASON_ID)
+        df2, _ = fetch_team_data(tid2, CURRENT_SEASON_ID)
         if df2 is not None and not df2.empty: 
             p2 = st.selectbox("Spieler", df2["NAME_FULL"].tolist(), key="pc_p_b")
             row2 = df2[df2["NAME_FULL"] == p2].iloc[0]
@@ -342,10 +336,9 @@ def render_prep_page():
         opp_id = {v["name"]: k for k, v in t.items()}[opp_name]
     if st.button("Vorbereitung starten", type="primary"):
         with st.spinner("Lade Daten..."):
-            # WICHTIG: Neue UNCACHED Funktion
-            df, _ = fetch_team_data_uncached(opp_id, CURRENT_SEASON_ID)
+            df, _ = fetch_team_data(opp_id, CURRENT_SEASON_ID)
             sched = fetch_schedule(opp_id, CURRENT_SEASON_ID)
-            if df is not None and not df.empty: 
+            if df is not None: 
                 render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
             else: 
                 st.error("Fehler beim Laden der Spielerdaten.")
@@ -414,100 +407,6 @@ def render_live_page():
                             st.session_state.live_game_id = game['id']
                             st.rerun()
 
-def render_game_venue_page():
-    render_page_header("📍 Spielorte der Teams") 
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="venue_staffel")
-        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-        to = {v["name"]: k for k, v in t.items()}
-    with c2:
-        tn = st.selectbox("Wähle ein Team:", list(to.keys()), key="venue_team_select")
-        tid = to[tn]
-    st.divider()
-    if tid:
-        st.subheader(f"Standard-Heimspielort von {tn}")
-        with st.spinner(f"Lade Daten..."):
-            info = fetch_team_info_basic(tid)
-            venue = info.get("venue") if info else None
-            if venue:
-                st.markdown(f"**Halle:** {venue.get('name', 'N/A')}"); st.markdown(f"**Adresse:** {venue.get('address', 'N/A')}")
-                if venue.get('address'):
-                    u = f"https://www.google.com/maps/search/?api=1&query={quote_plus(f'{venue.get('name', '')}, {venue.get('address', '')}')}"
-                    st.markdown(f"**Route:** [Google Maps öffnen]({u})", unsafe_allow_html=True)
-            else: st.warning("Nicht gefunden.")
-        st.divider()
-        st.subheader(f"Alle Spiele von {tn}")
-        games = fetch_schedule(tid, CURRENT_SEASON_ID)
-        if games:
-            def date_sorter(x):
-                try: return datetime.strptime(x['date'], "%d.%m.%Y %H:%M")
-                except: return datetime.min
-            games.sort(key=date_sorter, reverse=True)
-            for g in games:
-                gid = g.get("id")
-                if str(g.get("homeTeamId")) == str(tid):
-                    with st.expander(f"🏟️ Heim: {g.get('date')} vs {g.get('guest')} ({g.get('score')})"):
-                        if gid:
-                            d = fetch_game_details(gid)
-                            if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
-                else:
-                    with st.expander(f"🚌 Gast: {g.get('date')} bei {g.get('home')} ({g.get('score')})"):
-                        if gid:
-                            d = fetch_game_details(gid)
-                            if d and d.get("venue"):
-                                v = d.get("venue")
-                                st.markdown(f"**Ort:** {v.get('name', '-')}, {v.get('address', '-')}")
-
-def render_analysis_page():
-    render_page_header("🎥 Spielnachbereitung") 
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
-        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-        to = {v["name"]: k for k, v in t.items()}
-    with c2:
-        tn = st.selectbox("Dein Team:", list(to.keys()), key="ana_team")
-        tid = to[tn]
-    if tid:
-        games = fetch_schedule(tid, CURRENT_SEASON_ID)
-        if games:
-            played_games = [g for g in games if g.get('has_result')]
-            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in played_games}
-            
-            if not opts:
-                st.warning("Keine gespielten Spiele für dieses Team in dieser Saison gefunden.")
-                return
-
-            sel = st.selectbox("Wähle ein Spiel:", list(opts.keys()), key="ana_game_select")
-            gid = opts[sel]
-            if st.button("Analyse laden", type="primary"):
-                st.session_state.selected_game_id = gid
-                if "generated_ai_report" in st.session_state: del st.session_state["generated_ai_report"]
-            if st.session_state.selected_game_id == gid:
-                st.divider()
-                with st.spinner("Lade Daten..."):
-                    box = fetch_game_boxscore(gid); details = fetch_game_details(gid)
-                    if box and details: 
-                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("referee1"); box["referee2"] = details.get("referee2"); box["referee3"] = details.get("referee3"); box["scheduledTime"] = details.get("scheduledTime"); box["attendance"] = details.get("result", {}).get("spectators"); box["id"] = details.get("id") 
-                        render_game_header(box)
-                        st.markdown("### 📝 Spielberichte & PBP")
-                        t1, t2, t3 = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
-                        with t1:
-                            st.markdown(generate_game_summary(box)); st.divider()
-                            hn = get_team_name(box.get("homeTeam", {}), "Heim"); gn = get_team_name(box.get("guestTeam", {}), "Gast")
-                            hc = box.get("homeTeam", {}).get("headCoachName", "-"); gc = box.get("guestTeam", {}).get("headCoachName", "-")
-                            render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), box.get("homeTeam", {}).get("gameStat", {}), hn, hc)
-                            st.write(""); render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), box.get("guestTeam", {}).get("gameStat", {}), gn, gc)
-                            st.divider(); render_game_top_performers(box); st.divider(); render_charts_and_stats(box)
-                        with t2:
-                            st.info("ChatGPT Prompt:"); st.code(generate_complex_ai_prompt(box), language="text")
-                        with t3: render_full_play_by_play(box)
-                    else: st.error("Fehler beim Laden.")
-        else: st.warning("Keine Spiele.")
-
 def render_scouting_page():
     render_page_header("📝 PreGame Report") 
     if st.session_state.print_mode:
@@ -570,8 +469,10 @@ def render_scouting_page():
         
         if click_load or (st.session_state.roster_df is None and cur_tid != tid) or (st.session_state.roster_df is not None and cur_tid != tid):
             with st.spinner("Lade Daten..."):
-                # WICHTIG: Neue UNCACHED Funktion
-                df, ts = fetch_team_data_uncached(tid, CURRENT_SEASON_ID)
+                # WICHTIG: Fallback für Scouting Report falls 2025 leer
+                df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
+                if df is None or df.empty:
+                    df, ts = fetch_team_data(tid, "2024")
 
                 if (df is not None and not df.empty) or ts: 
                     st.session_state.roster_df = df if df is not None else pd.DataFrame()
@@ -579,7 +480,7 @@ def render_scouting_page():
                     st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
                     st.session_state.print_mode = False 
                 else: 
-                    st.error(f"Fehler API: Keine Daten für {target} in Saison {CURRENT_SEASON_ID} gefunden."); 
+                    st.error(f"Fehler API: Keine Daten für {target} gefunden."); 
                     st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
         elif st.session_state.roster_df is None or st.session_state.roster_df.empty: st.info("Bitte laden.")
         
