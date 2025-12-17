@@ -41,7 +41,7 @@ def generate_top3_html(df: pd.DataFrame) -> str:
 
     def build_box(d, headers, keys, bolds, color, title):
         h = f"<div class='stat-box'>"
-        h += f"<div class='stat-title' style='border-top: 4px solid {color}; color: {color}; font-size: 18px; padding: 5px; font-weight:bold;'>{title}</div>"
+        h += f"<div class='stat-title' style='border-top: 5px solid {color}; color: {color}; font-size: 22px; padding: 5px; font-weight:bold;'>{title}</div>"
         h += f"<table class='top3-table'>"
         h += "<tr>"
         for head in headers: 
@@ -129,8 +129,8 @@ def generate_team_stats_html(ts):
     if not ts: return ""
     def calc_pct(m, a, api): return api if api > 0 else (m/a*100 if a>0 else 0)
     return f"""
-<div class="team-stats-container"><h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG)</h2>
-    <table class="stats-table" style="font-size: 16px;">
+<div class="team-stats-container"><h2 style="border-bottom: 3px solid #333; font-size: 28px;">Team Stats (AVG)</h2>
+    <table class="stats-table" style="font-size: 20px;">
         <tr class="bg-gray font-bold"><th rowspan="2" style="padding: 4px;">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr>
         <tr class="bg-gray font-bold"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>
         <tr class="font-bold" style="background-color: #f9f9f9;"><td style="padding: 8px;">{ts['ppg']:.1f}</td><td>{ts['2m']:.1f}</td><td>{ts['2a']:.1f}</td><td>{calc_pct(ts['2m'],ts['2a'],ts['2pct']):.1f}</td><td>{ts['3m']:.1f}</td><td>{ts['3a']:.1f}</td><td>{calc_pct(ts['3m'],ts['3a'],ts['3pct']):.1f}</td><td>{ts['ftm']:.1f}</td><td>{ts['fta']:.1f}</td><td>{calc_pct(ts['ftm'],ts['fta'],ts['ftpct']):.1f}</td><td>{ts['dr']:.1f}</td><td>{ts['or']:.1f}</td><td>{ts['tot']:.1f}</td><td>{ts['as']:.1f}</td><td>{ts['to']:.1f}</td><td>{ts['st']:.1f}</td><td>{ts['pf']:.1f}</td></tr>
