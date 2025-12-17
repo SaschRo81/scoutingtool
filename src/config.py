@@ -144,7 +144,13 @@ CSS_STYLES = """
     .note-row td:first-child { border-left: none; }
     .note-row td:last-child { border-right: none; }
 
-    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; border-left: 3px solid #999 !important; }
+    /* HIER GEÄNDERT: Spezifischer Selektor + !important für Rot */
+    .note-row td.note-right { 
+        color: #d9534f !important; 
+        font-weight: bold !important; 
+        -webkit-print-color-adjust: exact; 
+        border-left: 3px solid #999 !important; 
+    }
 
     .team-stats-container { margin-top: 30px; page-break-inside: avoid; }
     
