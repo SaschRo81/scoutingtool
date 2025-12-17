@@ -355,3 +355,43 @@ def fetch_season_games(season_id):
                         })
         except: pass
     return all_games
+
+@st.cache_data(ttl=1800)
+def fetch_team_rank(team_id, season_id):
+    """Holt den aktuellen Tabellenplatz und die Bilanz."""
+    base_url = get_base_url(team_id)
+    # Versuche gängige Endpunkte für Tabellen
+    urls = [
+        f"{base_url}/standings?seasonId={season_id}",
+        f"{base_url}/statistics/standings?seasonId={season_id}"
+    ]
+    
+    for url in urls:
+        try:
+            r = requests.get(url, headers=API_HEADERS, timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                # Manchmal ist die Liste direkt data, manchmal data['items']
+                items = data if isinstance(data, list) else data.get("items", [])
+                
+                # Sortieren sicherstellen (falls API nicht sortiert liefert)
+                # Wir gehen davon aus, dass die API eine Liste von Teams liefert.
+                # Wir suchen unser Team.
+                
+                search_id = str(team_id)
+                for idx, entry in enumerate(items):
+                    # IDs finden
+                    tid = str(entry.get("team", {}).get("id", ""))
+                    if not tid: tid = str(entry.get("teamId", ""))
+                    
+                    if tid == search_id:
+                        # Rang gefunden (idx + 1, da 0-basiert)
+                        rank = entry.get("position") or entry.get("rank") or (idx + 1)
+                        wins = entry.get("wins", 0)
+                        losses = entry.get("losses", 0)
+                        points = entry.get("points", 0)
+                        return {"rank": rank, "wins": wins, "losses": losses, "points": points}
+        except:
+            pass
+            
+    return None
