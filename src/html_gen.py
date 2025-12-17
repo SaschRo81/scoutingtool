@@ -1,6 +1,7 @@
 # --- START OF FILE src/html_gen.py ---
 
 import pandas as pd
+import copy
 from src.utils import clean_pos
 
 def generate_header_html(meta):
@@ -104,7 +105,6 @@ def generate_card_html(row, metadata, notes, color_code):
     for i in range(1, 5):
         l_note = notes.get(f'l{i}', '')
         r_note = notes.get(f'r{i}', '')
-        # HIER IST DER FIX: Inline Style 'color: #d9534f' erzwingt die rote Farbe im PDF
         note_rows += f'<tr class="note-row"><td colspan="6">{l_note}</td><td colspan="12" class="note-right" style="color: #d9534f; font-weight: bold;">{r_note}</td></tr>'
 
     return f"""
@@ -165,15 +165,22 @@ def generate_comparison_html(h_stats_in, g_stats_in, h_name, g_name):
         stats['FG%'] = (fg_m / fg_a * 100) if fg_a > 0 else 0.0
         stats['3pct'] = get_pct(stats, '3'); stats['ftpct'] = get_pct(stats, 'ft')
         if 'bs' not in stats: stats['bs'] = 0.0
+    
     html = f"""<div style="margin: 20px 0; font-family: sans-serif;"><h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 0;">Head-to-Head (Saison-Schnitt)</h3><table style="width: 100%; border-collapse: collapse; font-size: 16px;"><tr style="background-color: #333; color: white;"><th style="padding: 12px; text-align: right; width: 35%;">{h_name}</th><th style="padding: 12px; text-align: center; width: 30%; background-color: #555;">Statistik</th><th style="padding: 12px; text-align: left; width: 35%;">{g_name}</th></tr>"""
+    
     for label, key, is_pct, lower_better in metrics:
         val_h = h_stats.get(key, 0.0); val_g = g_stats.get(key, 0.0)
         fmt_h = f"{val_h:.1f}" + ("%" if is_pct else ""); fmt_g = f"{val_g:.1f}" + ("%" if is_pct else "")
-        style_h = "padding: 8px; text-align: right; border-bottom: 1px solid #eee;"
-        style_g = "padding: 8px; text-align: left; border-bottom: 1px solid #eee;"
+        
+        # FIX: Farbe explizit setzen!
+        style_h = "padding: 8px; text-align: right; border-bottom: 1px solid #eee; color: #333;"
+        style_g = "padding: 8px; text-align: left; border-bottom: 1px solid #eee; color: #333;"
+        style_label = "padding: 8px; text-align: center; color: #666; font-size: 14px; border-bottom: 1px solid #eee;"
+        
         if val_h != val_g:
             is_h_better = (val_h < val_g) if lower_better else (val_h > val_g)
             if is_h_better: style_h += " font-weight: bold; color: #2e7d32;"
             else: style_g += " font-weight: bold; color: #2e7d32;"
-        html += f"""<tr><td style="{style_h}">{fmt_h}</td><td style="padding: 8px; text-align: center; color: #666; font-size: 14px; border-bottom: 1px solid #eee;">{label}</td><td style="{style_g}">{fmt_g}</td></tr>"""
+            
+        html += f"""<tr><td style="{style_h}">{fmt_h}</td><td style="{style_label}">{label}</td><td style="{style_g}">{fmt_g}</td></tr>"""
     return html + "</table></div>"
