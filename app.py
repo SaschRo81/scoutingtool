@@ -694,7 +694,7 @@ def render_scouting_page():
                             for f in up: b64 = base64.b64encode(f.getvalue()).decode(); html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
                         html += generate_custom_sections_html(eo, ed, ea); st.session_state.final_html = html
                         if HAS_PDFKIT:
-                        try:
+                            try:
                         opts = {
                         "page-size": "A4",
                         "orientation": "Portrait",
