@@ -28,7 +28,6 @@ def format_minutes(seconds):
 def calculate_age(birthdate_str):
     if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", "", "-", "null"]: return "-"
     try:
-        # ISO String bereinigen
         clean_date = str(birthdate_str).split("T")[0]
         bd = datetime.strptime(clean_date, "%Y-%m-%d")
         today = datetime.now()
@@ -51,7 +50,6 @@ def extract_nationality(data_obj):
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_player_metadata_cached(player_id):
     clean_id = str(player_id).replace(".0", "")
-    # Probiere beide Server
     for subdomain in ["api-s", "api-n"]:
         url = f"https://{subdomain}.dbbl.scb.world/season-players/{clean_id}"
         try:
@@ -60,16 +58,11 @@ def get_player_metadata_cached(player_id):
                 data = resp.json()
                 person = data.get("person", {})
                 img = data.get("imageUrl", "")
-                
-                # Suche Geburtsdatum überall
                 bdate = data.get("birthDate") or person.get("birthDate") or person.get("birthdate")
                 age = calculate_age(bdate)
-                
                 nat = extract_nationality(data)
                 if nat == "-": nat = extract_nationality(person)
-                
                 height = data.get("height") or person.get("height", "-")
-                
                 return {"img": img, "height": height, "pos": data.get("position", "-"), "age": age, "nationality": nat}
         except: pass
     return {"img": "", "height": "-", "pos": "-", "age": "-", "nationality": "-"}
@@ -103,8 +96,29 @@ def fetch_team_data(team_id, season_id):
         r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
         if r_team.status_code == 200:
             data = r_team.json()
-            td = data[0] if isinstance(data, list) and data else data
+            td = None
             
+            # --- FIX: Suche nach der korrekten Team-ID im Array ---
+            if isinstance(data, list):
+                # Wir suchen das Objekt, dessen ID oder seasonTeamId mit der angefragten übereinstimmt
+                search_id = str(team_id)
+                for item in data:
+                    # IDs prüfen (verschiedene Felder möglich)
+                    item_tid = str(item.get("teamId", ""))
+                    item_stid = str(item.get("seasonTeamId", ""))
+                    item_obj_id = str(item.get("seasonTeam", {}).get("id", ""))
+                    
+                    if search_id in [item_tid, item_stid, item_obj_id]:
+                        td = item
+                        break
+                
+                # Fallback: Wenn wir nichts gefunden haben, aber die Liste nur 1 Element hat, nehmen wir das
+                if td is None and len(data) == 1:
+                    td = data[0]
+            elif isinstance(data, dict):
+                td = data
+            # -----------------------------------------------------
+
             if isinstance(td, dict) and td.get("gamesPlayed"):
                 gp = td.get("gamesPlayed") or 1
                 fgm = td.get("fieldGoalsMade") or 0; fga = td.get("fieldGoalsAttempted") or 0
@@ -160,14 +174,11 @@ def fetch_team_data(team_id, season_id):
                         return pd.to_numeric(df[c], errors="coerce").fillna(default)
                     return pd.Series([default]*len(df), index=df.index)
 
-                # WICHTIG: Priorität auf 'seasonplayer.id' legen, da diese für Metadaten gebraucht wird
                 col_id_opts = ["seasonplayer.id", "seasonplayerid", "personid", "playerid", "id"]
                 col_id = None
                 for opt in col_id_opts:
                      matches = [c for c in df.columns if opt in c]
-                     if matches: 
-                         col_id = sorted(matches, key=len)[0]
-                         break
+                     if matches: col_id = sorted(matches, key=len)[0]; break
                 
                 col_fn = next((c for c in df.columns if "firstname" in c), None)
                 col_ln = next((c for c in df.columns if "lastname" in c), None)
@@ -177,27 +188,22 @@ def fetch_team_data(team_id, season_id):
                 df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
                 df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
                 
-                # Metadaten Mergen (Lookup + Fallback)
                 def get_meta_field(pid, field_key):
-                    # 1. Lookup
                     val = roster_lookup.get(pid, {}).get(field_key)
                     if val and val != "-": return val
-                    # 2. Live Einzelabruf
                     meta = get_player_metadata_cached(pid)
                     if field_key == "birthdate": return None 
                     return meta.get(field_key, "-")
 
                 df["AGE"] = df["PLAYER_ID"].apply(lambda pid: calculate_age(roster_lookup.get(pid, {}).get("birthdate")))
                 mask_no_age = df["AGE"] == "-"
-                if mask_no_age.any():
-                    df.loc[mask_no_age, "AGE"] = df.loc[mask_no_age, "PLAYER_ID"].apply(lambda pid: get_player_metadata_cached(pid).get("age", "-"))
+                if mask_no_age.any(): df.loc[mask_no_age, "AGE"] = df.loc[mask_no_age, "PLAYER_ID"].apply(lambda pid: get_player_metadata_cached(pid).get("age", "-"))
 
                 df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda pid: get_meta_field(pid, "nationality"))
                 df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda pid: get_meta_field(pid, "height"))
                 
                 df["GP"] = get_val("gamesplayed").replace(0, 1)
                 
-                # TOTALS
                 df["TOTAL_MINUTES"] = get_val("secondsplayed") / 60
                 df["TOTAL_PTS"] = get_val("points"); df["TOTAL_REB"] = get_val("totalrebounds")
                 df["TOTAL_AST"] = get_val("assists"); df["TOTAL_STL"] = get_val("steals")
@@ -209,7 +215,6 @@ def fetch_team_data(team_id, season_id):
                 df["TOTAL_FTA"] = get_val("freethrowsattempted"); df["TOTAL_2M"] = df["TOTAL_FGM"] - df["TOTAL_3M"]
                 df["TOTAL_2A"] = df["TOTAL_FGA"] - df["TOTAL_3A"]
                 
-                # PER GAME
                 gp_safe = df["GP"].replace(0, 1)
                 df["MIN_DISPLAY"] = (df["TOTAL_MINUTES"] * 60 / gp_safe).apply(format_minutes)
                 df["PPG"] = (df["TOTAL_PTS"] / gp_safe).round(1); df["TOT"] = (df["TOTAL_REB"] / gp_safe).round(1)
@@ -224,26 +229,19 @@ def fetch_team_data(team_id, season_id):
                 df["FG%"] = (df["TOTAL_FGM"] / df["TOTAL_FGA"] * 100).round(1).fillna(0)
                 df["3PCT"] = (df["TOTAL_3M"] / df["TOTAL_3A"] * 100).round(1).fillna(0)
                 df["FTPCT"] = (df["TOTAL_FTM"] / df["TOTAL_FTA"] * 100).round(1).fillna(0)
-                
-                df["2PCT"] = 0.0
-                mask2 = df["TOTAL_2A"] > 0
+                df["2PCT"] = 0.0; mask2 = df["TOTAL_2A"] > 0
                 df.loc[mask2, "2PCT"] = (df.loc[mask2, "TOTAL_2M"] / df.loc[mask2, "TOTAL_2A"] * 100).round(1)
-
                 df["select"] = False
-
-    except Exception as e:
-        print(f"Error Player Stats ({base_url}): {e}")
+    except Exception as e: print(f"Error Player Stats ({base_url}): {e}")
 
     # Fallback Berechnung Team Stats
     if not ts and not df.empty:
         tg = df["GP"].max() if not df.empty else 1
         if tg == 0: tg = 1
-
         t_fgm = df["TOTAL_FGM"].sum(); t_fga = df["TOTAL_FGA"].sum()
         t_3m = df["TOTAL_3M"].sum(); t_3a = df["TOTAL_3A"].sum()
         t_ftm = df["TOTAL_FTM"].sum(); t_fta = df["TOTAL_FTA"].sum()
         t_2m = t_fgm - t_3m; t_2a = t_fga - t_3a
-
         ts = {
             "ppg": df["TOTAL_PTS"].sum()/tg, "tot": df["TOTAL_REB"].sum()/tg,
             "as": df["TOTAL_AST"].sum()/tg, "st": df["TOTAL_STL"].sum()/tg,
@@ -256,45 +254,35 @@ def fetch_team_data(team_id, season_id):
             "3pct": (t_3m/t_3a*100) if t_3a>0 else 0,
             "ftpct": (t_ftm/t_fta*100) if t_fta>0 else 0,
         }
-
-    # SAFETY: Spalten auffüllen
+    
     if df is not None and not df.empty:
-        required = ["2M", "2A", "2PCT", "3M", "3A", "3PCT", "FTM", "FTA", "FTPCT", 
-                    "DR", "OR", "TOT", "AS", "TO", "ST", "PF", "BS", "PPG", "MIN_DISPLAY"]
-        for c in required:
+        for c in ["2M", "2A", "2PCT", "3M", "3A", "3PCT", "FTM", "FTA", "FTPCT", "DR", "OR", "TOT", "AS", "TO", "ST", "PF", "BS", "PPG", "MIN_DISPLAY"]:
             if c not in df.columns: df[c] = 0
 
     return df, ts
 
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
-    # WICHTIG: Hier auch verschiedene Server probieren
     urls = [
         f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}",
         f"https://api-n.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}"
     ]
-    
     for url in urls:
         try:
             resp = requests.get(url, headers=API_HEADERS, timeout=3)
             if resp.status_code == 200:
                 data = resp.json()
                 items = data.get("items", [])
-                if items: # Wenn Spiele gefunden, dann ist das der richtige Server
+                if items:
                     clean = []
                     for g in items:
                         res = g.get("result", {}) or {}
-                        h_s = res.get('homeTeamFinalScore')
-                        g_s = res.get('guestTeamFinalScore')
+                        h_s = res.get('homeTeamFinalScore'); g_s = res.get('guestTeamFinalScore')
                         score = f"{h_s} : {g_s}" if (h_s is not None) else "-"
-                        
-                        raw_d = g.get("scheduledTime", "")
-                        d_disp = raw_d
+                        raw_d = g.get("scheduledTime", ""); d_disp = raw_d
                         if raw_d:
-                            try: 
-                                d_disp = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
+                            try: d_disp = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
                             except: pass
-                        
                         clean.append({
                             "id": g.get("id"), "date": d_disp, "score": score,
                             "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
@@ -354,8 +342,7 @@ def fetch_season_games(season_id):
                     if raw_d:
                         try:
                             dt_obj = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
-                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
-                            date_only = dt_obj.strftime("%d.%m.%Y")
+                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M"); date_only = dt_obj.strftime("%d.%m.%Y")
                         except: pass
                     res = g.get("result") or {}
                     if not any(x['id'] == g.get("id") for x in all_games):
