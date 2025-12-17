@@ -116,7 +116,7 @@ CSS_STYLES = """
     .layout-stats-cell { vertical-align: top; padding: 0; width: auto; }
     
     /* STATS TABELLE */
-    .stats-table { width: 100%; border-collapse: collapse; font-size: 20px; text-align: center; color: black; }
+    .stats-table { width: 100%; border-collapse: collapse; font-size: 18px; text-align: center; color: black; }
     
     .stats-table th, .stats-table td { 
         border: 1px solid #999; 
