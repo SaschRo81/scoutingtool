@@ -9,13 +9,11 @@ def generate_header_html(meta):
 <div class="report-header">
     <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
     
-    <!-- ÜBERSCHRIFT: Datum oben, Uhrzeit unten (durch <br>) -->
     <h1 class="report-title" style="line-height: 1.3;">
         Scouting Report | {meta['date']}<br>
         <span style="font-size: 0.6em; font-weight: normal;">{meta['time']}</span>
     </h1>
 
-    <!-- LOGOS: Flexbox erzwingt 'row' (nebeneinander) -->
     <div class="matchup-container" style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 50px; margin-top: 20px;">
         <div class="team-logo-box" style="text-align: center;">
             <img src="{meta['home_logo']}" class="team-logo-img">
@@ -50,7 +48,7 @@ def generate_top3_html(df: pd.DataFrame) -> str:
 
     def build_box(d, headers, keys, bolds, color, title):
         h = f"<div class='stat-box'>"
-        h += f"<div class='stat-title' style='border-top: 5px solid {color}; color: {color}; font-size: 22px; padding: 5px; font-weight:bold;'>{title}</div>"
+        h += f"<div class='stat-title' style='border-top: 4px solid {color}; color: {color}; font-size: 18px; padding: 5px; font-weight:bold;'>{title}</div>"
         h += f"<table class='top3-table'>"
         h += "<tr>"
         for head in headers: 
@@ -104,13 +102,9 @@ def generate_card_html(row, metadata, notes, color_code):
     except: height_str = "-"
     pos_str = clean_pos(metadata["pos"])
     
-    # Wir bauen die HTML-Strings in Teilen auf, um Fehler beim PDF-Parsing zu vermeiden
     stats_header = """<tr class="bg-gray"><th rowspan="2">Min</th><th rowspan="2">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr><tr class="bg-gray"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>"""
-    
-    # Zeile mit den Daten (Vorsichtshalber alles in einer Zeile ohne Umbrüche)
     stats_row = f'<tr class="font-bold"><td>{row["MIN_DISPLAY"]}</td><td>{row["PPG"]}</td><td>{row["2M"]}</td><td>{row["2A"]}</td><td>{row["2PCT"]}</td><td>{row["3M"]}</td><td>{row["3A"]}</td><td>{row["3PCT"]}</td><td>{row["FTM"]}</td><td>{row["FTA"]}</td><td>{row["FTPCT"]}</td><td>{row["DR"]}</td><td>{row["OR"]}</td><td>{row["TOT"]}</td><td>{row["AS"]}</td><td>{row["TO"]}</td><td>{row["ST"]}</td><td>{row["PF"]}</td></tr>'
     
-    # Notiz-Zeilen
     note_rows = ""
     for i in range(1, 5):
         l_note = notes.get(f'l{i}', '')
@@ -138,8 +132,8 @@ def generate_team_stats_html(ts):
     if not ts: return ""
     def calc_pct(m, a, api): return api if api > 0 else (m/a*100 if a>0 else 0)
     return f"""
-<div class="team-stats-container"><h2 style="border-bottom: 3px solid #333; font-size: 28px;">Team Stats (AVG)</h2>
-    <table class="stats-table" style="font-size: 20px;">
+<div class="team-stats-container"><h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG)</h2>
+    <table class="stats-table" style="font-size: 16px;">
         <tr class="bg-gray font-bold"><th rowspan="2" style="padding: 4px;">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr>
         <tr class="bg-gray font-bold"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>
         <tr class="font-bold" style="background-color: #f9f9f9;"><td style="padding: 8px;">{ts['ppg']:.1f}</td><td>{ts['2m']:.1f}</td><td>{ts['2a']:.1f}</td><td>{calc_pct(ts['2m'],ts['2a'],ts['2pct']):.1f}</td><td>{ts['3m']:.1f}</td><td>{ts['3a']:.1f}</td><td>{calc_pct(ts['3m'],ts['3a'],ts['3pct']):.1f}</td><td>{ts['ftm']:.1f}</td><td>{ts['fta']:.1f}</td><td>{calc_pct(ts['ftm'],ts['fta'],ts['ftpct']):.1f}</td><td>{ts['dr']:.1f}</td><td>{ts['or']:.1f}</td><td>{ts['tot']:.1f}</td><td>{ts['as']:.1f}</td><td>{ts['to']:.1f}</td><td>{ts['st']:.1f}</td><td>{ts['pf']:.1f}</td></tr>
