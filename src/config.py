@@ -50,101 +50,69 @@ TEAMS_DB = {
 }
 
 # Zentrales CSS - OPTIMIERT FÜR PDF
+# --- IN src/config.py ---
+
 CSS_STYLES = """
 <style>
-    body { font-family: 'Arial', sans-serif; font-size: 12px; }
+    body { 
+        font-family: 'Arial', sans-serif; 
+        font-size: 16px; /* Basis deutlich erhöht */
+        line-height: 1.4;
+    }
     
-    /* --- HEADER BEREICH --- */
-    .report-header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-    .report-title { font-size: 32px; font-weight: bold; margin: 0 0 10px 0; color: #000; }
-    .matchup-container { display: flex; align-items: center; justify-content: center; gap: 50px; margin-top: 15px; }
-    .team-logo-box { text-align: center; }
-    .team-logo-img { height: 90px; max-width: 200px; object-fit: contain; }
-    .team-name-text { font-size: 18px; font-weight: bold; margin-top: 8px; }
-    .vs-text { font-size: 30px; font-weight: bold; color: #333; }
+    /* --- HEADER --- */
+    .report-header { text-align: center; border-bottom: 3px solid #333; padding-bottom: 15px; margin-bottom: 25px; }
+    .report-title { font-size: 36px; font-weight: bold; margin: 0; }
+    .team-name-text { font-size: 22px; font-weight: bold; }
+    .vs-text { font-size: 34px; font-weight: bold; }
 
     /* --- TOP 3 BOXEN --- */
-    .top3-container { display: flex; flex-direction: row; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; }
-    .stat-box { flex: 1; border: 1px solid #ccc; }
-    .top3-table { width: 100%; font-size: 12px; border-collapse: collapse; }
-    /* Headers der Top 3 Boxen */
-    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 4px; border-bottom: 1px solid #999; font-weight: bold;}
-    /* Datenzellen der Top 3 Boxen */
-    .top3-table td { padding: 4px; border-bottom: 1px solid #eee; vertical-align: middle; }
+    .stat-box { flex: 1; border: 2px solid #ccc; }
+    .top3-table { width: 100%; font-size: 18px; border-collapse: collapse; }
+    .top3-table th { background-color: #f2f2f2; padding: 6px; border-bottom: 2px solid #666; font-size: 16px; }
+    .top3-table td { padding: 8px 4px; border-bottom: 1px solid #eee; }
 
     /* --- SPIELER KARTE --- */
-    .player-card { 
-        border: 1px solid #ccc; margin-bottom: 15px; 
-        background-color: white; page-break-inside: avoid; 
-        font-family: Arial, sans-serif;
-    }
+    .player-card { border: 2px solid #999; margin-bottom: 20px; page-break-inside: avoid; }
     
     .card-header { 
-        color: white; padding: 5px 12px; font-weight: bold; font-size: 16px;   
-        display: flex; justify-content: space-between; align-items: center;
-        -webkit-print-color-adjust: exact; print-color-adjust: exact; line-height: 1.2;
+        color: white; padding: 10px 15px; font-weight: bold; 
+        font-size: 22px; /* Große Namen */
+        display: flex; justify-content: space-between; 
+        -webkit-print-color-adjust: exact; 
     }
 
-    .card-body { width: 100%; }
-    
-    .layout-table { width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed; }
-    
-    /* BILDSPALTE: Fix auf 80px Breite */
+    /* BILDSPALTE: Auf ca. 2,5cm skaliert für 2cm Bildinhalt */
     .layout-img-cell {
-        width: 80px;
-        min-width: 80px;
-        max-width: 80px;
+        width: 85px; 
+        min-width: 85px;
         vertical-align: top;
-        padding: 0;
-        border-right: 1px solid #ccc;
-        background-color: #fff;
+        border-right: 2px solid #ccc;
     }
-    
-    /* Das Bild passt sich der Breite an */
-    .player-img { 
-        width: 100%; 
-        height: auto;
-        object-fit: cover; 
-        display: block; 
-    }
-    
-    .layout-stats-cell { vertical-align: top; padding: 0; width: auto; }
-    
-    /* STATS TABELLE */
-    .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; }
-    
-    .stats-table th, .stats-table td { 
-        border: 1px solid #ddd; /* Feinere Linien */
-        padding: 4px 2px;       /* Weniger Padding seitlich für Header */
-        vertical-align: middle;
-    }
+    .player-img { width: 100%; height: auto; display: block; }
 
-    .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
-    .font-bold { font-weight: bold; }
-    
-    /* --- NOTIZEN DESIGN (Gestrichelte Linien) --- */
+    /* STATS TABELLE IN DER KARTE */
+    .stats-table { width: 100%; border-collapse: collapse; font-size: 18px; text-align: center; }
+    .stats-table th { font-size: 14px; padding: 6px 2px; background-color: #f0f0f0; border: 1px solid #ccc; }
+    .stats-table td { padding: 10px 2px; border: 1px solid #ccc; font-weight: bold; font-size: 20px; }
+
+    /* NOTIZEN / SCHREIBLINIEN */
     .note-row td { 
-        height: 28px;           /* Angenehme Höhe zum Schreiben */
-        text-align: left; 
-        padding-left: 5px;
-        font-size: 16px;
-        vertical-align: bottom; /* Text liegt auf der Linie */
-        border: none;           /* Keine Box-Rahmen */
-        border-bottom: 1px dashed #999; /* Schreiblinie */
-        color: #444;            /* Dunkelgrauer Text falls ausgefüllt */
+        height: 35px; /* Mehr Platz zum Schreiben */
+        font-size: 20px;
+        border: none !important;
+        border-bottom: 2px dashed #666 !important; /* Kräftigere Strichlinie */
+        vertical-align: bottom;
+        padding-bottom: 5px;
     }
-    
-    /* Entfernt den Rahmen ganz links und rechts bei Notizen für cleaneren Look */
-    .note-row td:first-child { border-left: none; }
-    .note-row td:last-child { border-right: none; }
+    .note-right { border-left: 2px solid #ccc !important; color: red !important; }
 
-    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; border-left: 1px solid #ccc !important; }
+    /* TEAM STATS UNTEN */
+    .team-stats-container { margin-top: 30px; }
+    .team-stats-container table td { font-size: 22px; padding: 12px; }
 
-    .team-stats-container { margin-top: 30px; page-break-inside: avoid; }
-    
     @media print {
-        body { -webkit-print-color-adjust: exact; zoom: 0.44; }
-        .no-print { display: none; }
+        body { zoom: 1.0; } /* Zoom entfernen für sauberen Druck */
     }
 </style>
 """
