@@ -349,10 +349,13 @@ def fetch_season_games(season_id):
 def fetch_team_rank(team_id, season_id):
     # 1. Staffel ermitteln (Nord/Süd)
     staffel = ""
+    team_name_db = ""
+    
     try:
         tid_int = int(team_id)
         if tid_int in TEAMS_DB:
             staffel = TEAMS_DB[tid_int].get("staffel", "")
+            team_name_db = TEAMS_DB[tid_int].get("name", "")
     except: pass
 
     # 2. URLs aufbauen (mit Priorität für die korrekte Gruppe)
@@ -364,7 +367,6 @@ def fetch_team_rank(team_id, season_id):
         urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
         urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
     
-    # Fallback
     urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}")
     urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}")
 
@@ -378,42 +380,31 @@ def fetch_team_rank(team_id, season_id):
                 items = data if isinstance(data, list) else data.get("items", [])
 
                 for idx, entry in enumerate(items):
-                    tid_found = str(entry.get("team", {}).get("id", ""))
-                    if not tid_found: tid_found = str(entry.get("teamId", ""))
-                    if not tid_found: tid_found = str(entry.get("seasonTeamId", ""))
+                    # NEUE LOGIK BASIEREND AUF POWERSHELL OUTPUT
+                    st_obj = entry.get("seasonTeam", {})
+                    
+                    tid_found = str(st_obj.get("id", ""))
+                    teamId_found = str(st_obj.get("teamId", ""))
+                    name_found = st_obj.get("name", "")
+                    
+                    match_by_id = (tid_found == search_id or teamId_found == search_id)
+                    match_by_name = False
+                    
+                    if team_name_db and name_found:
+                        if team_name_db.lower() in name_found.lower() or name_found.lower() in team_name_db.lower():
+                            match_by_name = True
 
-                    if tid_found == search_id:
-                        rank = entry.get("position") or entry.get("rank") or (idx + 1)
-                        wins = entry.get("wins", 0)
-                        losses = entry.get("losses", 0)
-                        games_played = entry.get("gamesPlayed", 0)
-                        
-                        # LAST 10 PARSING
-                        last10_wins = 0
-                        last10_losses = 0
-                        
-                        # Fall 1: Explizite Felder
-                        if "last10Won" in entry and "last10Lost" in entry:
-                            last10_wins = entry["last10Won"]
-                            last10_losses = entry["last10Lost"]
-                        
-                        # Fall 2: "last10" String (z.B. "7-3" oder "7/3")
-                        elif "last10" in entry and entry["last10"]:
-                            l10_str = str(entry["last10"]).replace("/", "-")
-                            try:
-                                parts = l10_str.split("-")
-                                if len(parts) == 2:
-                                    last10_wins = int(parts[0])
-                                    last10_losses = int(parts[1])
-                            except: pass
-                        
+                    if match_by_id or match_by_name:
+                        # HIER GREIFEN WIR JETZT DIE KORREKTEN FELDER AB
                         return {
-                            "rank": rank,
-                            "totalGames": games_played,
-                            "totalVictories": wins,
-                            "totalLosses": losses,
-                            "last10Victories": last10_wins,
-                            "last10Losses": last10_losses
+                            "rank": entry.get("rank", 0),
+                            "totalGames": entry.get("totalGames", 0),
+                            "totalVictories": entry.get("totalVictories", 0),
+                            "totalLosses": entry.get("totalLosses", 0),
+                            "last10Victories": entry.get("last10Victories", 0),
+                            "last10Losses": entry.get("last10Losses", 0),
+                            # Nutze "totalPointsMade" als Punkte, da die API das so liefert
+                            "points": entry.get("totalPointsMade", 0) 
                         }
         except:
             continue
