@@ -7,6 +7,7 @@ import pytz
 import openai 
 
 # --- KONSTANTEN & HELPERS ---
+
 ACTION_TRANSLATION = {
     "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
     "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
@@ -81,12 +82,14 @@ def convert_elapsed_to_remaining(time_str, period):
     try:
         if int(period) > 4: base_minutes = 5
     except: pass
+    
     try:
         parts = time_str.split(":")
         sec = 0
         if len(parts) == 3: sec = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
         elif len(parts) == 2: sec = int(parts[0])*60 + int(parts[1])
         else: return time_str
+        
         rem = (base_minutes * 60) - sec
         if rem < 0: rem = 0
         return f"{rem // 60:02d}:{rem % 60:02d}"
@@ -158,69 +161,7 @@ def analyze_game_flow(actions, home_name, guest_name):
     summary += "\n".join(crunch_log)
     return summary
 
-def render_season_analysis_page(df_standings):
-    """Zeigt die Saison-Analyse Seite mit echten Tabellendaten."""
-    st.markdown("### 📊 Saison Analyse & Trends (2025)")
-    
-    if df_standings is None or df_standings.empty:
-        st.warning("Keine Tabellendaten gefunden.")
-        return
-
-    # Tabs für Nord / Süd
-    tab_n, tab_s = st.tabs(["Nord", "Süd"])
-    
-    def render_staffel_stats(staffel_name):
-        # Filtern
-        df_s = df_standings[df_standings["Staffel"] == staffel_name].copy()
-        
-        if df_s.empty:
-            st.info(f"Keine Daten für Staffel {staffel_name} verfügbar.")
-            return
-            
-        # Sortieren nach Tabellenpunkten, dann Differenz
-        df_s = df_s.sort_values(by=["Tabellenpunkte", "Differenz"], ascending=False).reset_index(drop=True)
-        # Index bei 1 starten (Platzierung)
-        df_s.index += 1
-        
-        st.dataframe(
-            df_s[["Team", "Spiele", "Siege", "Niederlagen", "Punkte+", "Punkte-", "Differenz", "Tabellenpunkte"]].style.background_gradient(subset=["Differenz"], cmap="RdYlGn"),
-            use_container_width=True
-        )
-        
-        st.divider()
-        
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            st.markdown("#### 🏀 Korb-Differenz")
-            chart_diff = alt.Chart(df_s).mark_bar().encode(
-                x=alt.X("Team", sort="-y"),
-                y="Differenz",
-                color=alt.condition(
-                    alt.datum.Differenz > 0,
-                    alt.value("#28a745"),  
-                    alt.value("#dc3545")   
-                ),
-                tooltip=["Team", "Differenz", "Siege"]
-            ).properties(height=400)
-            st.altair_chart(chart_diff, use_container_width=True)
-            
-        with c2:
-            st.markdown("#### 🏆 Tabellenpunkte")
-            chart_pts = alt.Chart(df_s).mark_bar(color="#0055ff").encode(
-                x=alt.X("Tabellenpunkte", title="Punkte"),
-                y=alt.Y("Team", sort="-x"),
-                tooltip=["Team", "Tabellenpunkte"]
-            ).properties(height=400)
-            st.altair_chart(chart_pts, use_container_width=True)
-
-    with tab_n:
-        render_staffel_stats("Nord")
-        
-    with tab_s:
-        render_staffel_stats("Süd")
-
-# --- ALTE RENDER FUNKTIONEN ---
+# --- RENDERING FUNKTIONEN ---
 
 def render_full_play_by_play(box, height=600):
     actions = box.get("actions", [])
@@ -419,7 +360,6 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                     if metadata_callback:
                         meta = metadata_callback(row["PLAYER_ID"])
                         if meta:
-                            # Falls im DF leer, dann aus Meta nehmen
                             if age in ["-", ""]: age = meta.get("age", "-")
                             if nat in ["-", ""]: nat = meta.get("nationality", "-")
                             if height in ["-", ""]: height = meta.get("height", "-")
@@ -547,79 +487,3 @@ def render_live_view(box):
     with c2:
         st.subheader("📜 Live Ticker")
         render_full_play_by_play(box, height=800)
-
-# --- NEUE FUNKTION: SAISON ANALYSE ---
-def calculate_standings(all_games):
-    """Berechnet Tabelle aus Spielen."""
-    stats = {}
-    team_to_staffel = {}
-    for tid, info in TEAMS_DB.items():
-        team_to_staffel[info["name"]] = info["staffel"]
-
-    for g in all_games:
-        if g.get("status") != "ENDED": continue
-        score = g.get("score", "-:-")
-        if ":" not in score: continue
-        try: h_score, g_score = map(int, score.split(":"))
-        except: continue
-        
-        h_team = g.get("home"); g_team = g.get("guest")
-        if h_team not in stats: stats[h_team] = {"W":0, "L":0, "PF":0, "PA":0, "G":0}
-        if g_team not in stats: stats[g_team] = {"W":0, "L":0, "PF":0, "PA":0, "G":0}
-        
-        stats[h_team]["G"] += 1; stats[g_team]["G"] += 1
-        stats[h_team]["PF"] += h_score; stats[h_team]["PA"] += g_score
-        stats[g_team]["PF"] += g_score; stats[g_team]["PA"] += h_score
-        
-        if h_score > g_score: stats[h_team]["W"] += 1; stats[g_team]["L"] += 1
-        else: stats[g_team]["W"] += 1; stats[h_team]["L"] += 1
-            
-    data_list = []
-    for team, val in stats.items():
-        staffel = team_to_staffel.get(team, "Unbekannt")
-        diff = val["PF"] - val["PA"]
-        avg_pts = val["PF"] / val["G"] if val["G"] > 0 else 0
-        # Tabellenpunkte (2 für Sieg, 1 für Niederlage - DBBL Standard)
-        pts = (val["W"] * 2) + val["L"]
-        
-        data_list.append({
-            "Team": team, "Staffel": staffel, "Spiele": val["G"],
-            "Siege": val["W"], "Niederlagen": val["L"],
-            "Punkte+": val["PF"], "Punkte-": val["PA"], "Differenz": diff,
-            "Tabellenpunkte": pts, "Ø Punkte": round(avg_pts, 1)
-        })
-    return pd.DataFrame(data_list)
-
-def render_season_analysis_page(all_games):
-    st.markdown("### 📊 Saison Analyse & Trends")
-    if not all_games:
-        st.warning("Keine Spieldaten geladen.")
-        return
-    df_standings = calculate_standings(all_games)
-    if df_standings.empty:
-        st.info("Noch keine beendeten Spiele.")
-        return
-
-    tab_n, tab_s = st.tabs(["Nord", "Süd"])
-    def render_staffel(name):
-        df_s = df_standings[df_standings["Staffel"] == name].copy()
-        if df_s.empty: st.info(f"Keine Daten für {name}."); return
-        df_s = df_s.sort_values(by=["Tabellenpunkte", "Differenz"], ascending=False).reset_index(drop=True)
-        df_s.index += 1
-        st.dataframe(df_s, use_container_width=True)
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            chart = alt.Chart(df_s).mark_bar().encode(
-                x=alt.X("Team", sort="-y"), y="Differenz",
-                color=alt.condition(alt.datum.Differenz > 0, alt.value("green"), alt.value("red"))
-            ).properties(height=300)
-            st.altair_chart(chart, use_container_width=True)
-        with c2:
-            chart2 = alt.Chart(df_s).mark_bar().encode(
-                x=alt.X("Ø Punkte"), y=alt.Y("Team", sort="-x")
-            ).properties(height=300)
-            st.altair_chart(chart2, use_container_width=True)
-
-    with tab_n: render_staffel("Nord")
-    with tab_s: render_staffel("Süd")
