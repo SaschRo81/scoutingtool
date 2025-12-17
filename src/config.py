@@ -1,7 +1,7 @@
 import streamlit as st
 
 # Version
-VERSION = "v5.0"
+VERSION = "v5.1"
 
 # --- API KONFIGURATION ---
 try:
@@ -49,34 +49,28 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"},
 }
 
-# Zentrales CSS
+# Zentrales CSS - OPTIMIERT FÜR PDF
 CSS_STYLES = """
 <style>
     body { font-family: 'Arial', sans-serif; font-size: 12px; }
     
     /* --- HEADER BEREICH --- */
     .report-header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-    
-    /* Scouting Report Titel größer (H1) */
     .report-title { font-size: 32px; font-weight: bold; margin: 0 0 10px 0; color: #000; }
-    
     .matchup-container { display: flex; align-items: center; justify-content: center; gap: 50px; margin-top: 15px; }
     .team-logo-box { text-align: center; }
-    
-    /* Logos größer */
     .team-logo-img { height: 90px; max-width: 200px; object-fit: contain; }
-    
-    /* Teamnamen größer */
     .team-name-text { font-size: 18px; font-weight: bold; margin-top: 8px; }
-    
     .vs-text { font-size: 30px; font-weight: bold; color: #333; }
 
     /* --- TOP 3 BOXEN --- */
     .top3-container { display: flex; flex-direction: row; gap: 10px; margin-bottom: 20px; page-break-inside: avoid; }
     .stat-box { flex: 1; border: 1px solid #ccc; }
-    .top3-table { width: 100%; font-size: 11px; border-collapse: collapse; }
-    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
-    .top3-table td { text-align: center; padding: 3px; border-bottom: 1px solid #eee; }
+    .top3-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+    /* Headers der Top 3 Boxen */
+    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 4px; border-bottom: 1px solid #999; font-weight: bold;}
+    /* Datenzellen der Top 3 Boxen */
+    .top3-table td { padding: 4px; border-bottom: 1px solid #eee; vertical-align: middle; }
 
     /* --- SPIELER KARTE --- */
     .player-card { 
@@ -85,86 +79,66 @@ CSS_STYLES = """
         font-family: Arial, sans-serif;
     }
     
-    /* Header (Farb-Balken): Text größer & vertikal zentriert */
     .card-header { 
-        color: white; 
-        padding: 5px 12px; /* Mehr Padding */
-        font-weight: bold; 
-        font-size: 18px;   /* Größere Schrift */
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; /* Vertikal zentrieren */
-        -webkit-print-color-adjust: exact; print-color-adjust: exact;
-        line-height: 1.2;
+        color: white; padding: 5px 12px; font-weight: bold; font-size: 16px;   
+        display: flex; justify-content: space-between; align-items: center;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact; line-height: 1.2;
     }
 
     .card-body { width: 100%; }
     
-    /* Layout Tabelle (Bild links, Stats rechts) */
-    .layout-table {
-        width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;
-    }
+    .layout-table { width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed; }
+    
+    /* BILDSPALTE: Fix auf 80px Breite */
     .layout-img-cell {
-        width: 160px;
-        min-width: 160px;
-        max-width: 160px;
+        width: 80px;
+        min-width: 80px;
+        max-width: 80px;
         vertical-align: top;
         padding: 0;
         border-right: 1px solid #ccc;
+        background-color: #fff;
     }
-    .layout-stats-cell {
-        vertical-align: top;
-        padding: 0;
-        width: auto;
-    }
-    /* Das Bild selbst */
+    
+    /* Das Bild passt sich der Breite an */
     .player-img { 
         width: 100%; 
-        height: 100%;      /* <--- HIER ERHÖHEN (z.B. auf 160px oder 180px) */
+        height: auto;
         object-fit: cover; 
         display: block; 
     }
     
-    /* Stats Tabelle */
-    .stats-table { 
-        width: 100%; 
-        border-collapse: collapse; 
-        font-size: 16px; 
-        text-align: center; 
-        color: black; 
-    }
+    .layout-stats-cell { vertical-align: top; padding: 0; width: auto; }
     
-    /* HIER GEÄNDERT: Mehr Platz und vertikale Zentrierung */
+    /* STATS TABELLE */
+    .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: black; }
+    
     .stats-table th, .stats-table td { 
-        border: 1px solid #ccc; 
-        padding: 5px 0px;       /* Vorher 2px -> Jetzt 5px für mehr Luft oben/unten */
-        vertical-align: middle; /* Zwingt den Text in die vertikale Mitte */
-        letter-spacing: -0.5px;
+        border: 1px solid #ddd; /* Feinere Linien */
+        padding: 4px 2px;       /* Weniger Padding seitlich für Header */
+        vertical-align: middle;
     }
 
-    .bg-gray { 
-        background-color: #e6e6e6; 
-        -webkit-print-color-adjust: exact; 
-    }
-    
+    .bg-gray { background-color: #f0f0f0; -webkit-print-color-adjust: exact; }
     .font-bold { font-weight: bold; }
     
-    /* HIER GEÄNDERT: Schriftgröße für die manuellen Notizen (asdf...) */
+    /* --- NOTIZEN DESIGN (Gestrichelte Linien) --- */
     .note-row td { 
-        height: 24px;           /* Zeile etwas höher machen */
+        height: 28px;           /* Angenehme Höhe zum Schreiben */
         text-align: left; 
         padding-left: 5px;
-        font-size: 20px;        /* Schriftgröße explizit erhöht (wie Header) */
-        vertical-align: middle; /* Auch hier schön mittig */
+        font-size: 16px;
+        vertical-align: bottom; /* Text liegt auf der Linie */
+        border: none;           /* Keine Box-Rahmen */
+        border-bottom: 1px dashed #999; /* Schreiblinie */
+        color: #444;            /* Dunkelgrauer Text falls ausgefüllt */
     }
     
-    .note-left { font-weight: normal; }
-    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; }
+    /* Entfernt den Rahmen ganz links und rechts bei Notizen für cleaneren Look */
+    .note-row td:first-child { border-left: none; }
+    .note-row td:last-child { border-right: none; }
 
-    .font-bold { font-weight: bold; }
-    .note-row td { height: 20px; text-align: left; padding-left: 5px; }
-    .note-left { font-weight: normal; }
-    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; }
+    .note-right { color: red; font-weight: bold; -webkit-print-color-adjust: exact; border-left: 1px solid #ccc !important; }
 
     .team-stats-container { margin-top: 30px; page-break-inside: avoid; }
     
