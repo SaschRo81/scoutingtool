@@ -1,0 +1,86 @@
+🗺️ Legende: Wo ändere ich was?
+1. PDF Design (Farben, Schriftgröße, Bildbreite, Linien)
+Datei: src/config.py
+Variable: CSS_STYLES (ein langer CSS-String)
+Hier stellst du das Aussehen des gedruckten PDFs ein.
+Bildgröße ändern:
+Suche nach .layout-img-cell.
+Ändere width und min-width (aktuell 160px).
+code
+CSS
+.layout-img-cell {
+    width: 160px;      /* Hier Breite ändern */
+    min-width: 160px;  /* Hier auch */
+    /* ... */
+}
+
+Schriftgröße global:
+Suche nach body.
+code
+CSS
+body { font-family: 'Arial', sans-serif; font-size: 18px; } /* Hier die 18px anpassen */
+
+Notiz-Linien (gestrichelt/durchgezogen):
+Suche nach .note-row td.
+CSS
+border-bottom: 2px dashed #666; /* "dashed" = gestrichelt, "solid" = durchgezogen */
+height: 40px;                   /* Zeilenhöhe (Platz zum Schreiben) */
+
+Zahlen-Größe in Tabellen:
+Suche nach .stats-table.
+CSS
+.stats-table { font-size: 20px; ... } /* Allgemeine Tabellenschrift */
+.font-bold { font-size: 22px; ... }   /* Die fetten Zahlenwerte */
+
+2. PDF Seitenränder & Zoom (Passt es auf A4?)
+Datei: app.py
+Funktion: render_scouting_page() (ziemlich weit unten)
+Variable: opts Dictionary
+Hier steuerst du, wie der HTML-Code auf das PDF-Papier "fotografiert" wird.
+Inhalt verkleinern/vergrößern (damit es auf die Seite passt):
+Python
+"zoom": "0.65",  # Kleiner (<1.0) = mehr passt drauf, aber kleiner.
+Seitenränder:
+
+Python
+"margin-top": "5mm",    # Oberer Rand
+"margin-right": "5mm",  # Rechter Rand (wichtig für Breite!)
+"margin-bottom": "5mm", # Unterer Rand
+"margin-left": "5mm",   # Linker Rand
+3. Standard-Texte (Key Facts, About Us)
+Datei: app.py
+Bereich: Ziemlich weit oben, nach den Imports.
+Hier änderst du die Texte, die automatisch in den Tabellen stehen, wenn du die Seite öffnest.
+Listen: DEFAULT_OFFENSE, DEFAULT_DEFENSE, DEFAULT_ABOUT
+Einfach die Texte in den Anführungszeichen ändern:
+code
+Python
+DEFAULT_ABOUT = [
+    {"Fokus": "Be ready", "Beschreibung": "Neuer Text hier..."},
+    # ...
+]
+4. HTML-Struktur (Reihenfolge, Tabellenköpfe)
+Datei: src/html_gen.py
+Hier wird das HTML zusammengebaut.
+Reihenfolge der Spalten ändern:
+In der Funktion generate_card_html findest du die Variable stats_header (HTML Code für die Kopfzeile) und stats_row (Daten).
+Top 3 Boxen Logik:
+In der Funktion generate_top3_html. Hier kannst du z.B. ändern, ob Zahlen fett gedruckt werden oder wie viele Spieler angezeigt werden (.head(3)).
+
+5. Teams & Saison
+Datei: src/config.py (Teams) & app.py (Saison)
+
+Teams hinzufügen/umbenennen:
+In src/config.py im Dictionary TEAMS_DB.
+Python
+158: {"name": "VIMODROM Baskets Jena", "staffel": "Süd"},
+
+Saison ändern:
+In app.py oben:
+Python
+CURRENT_SEASON_ID = "2025"
+
+⚡ Kurz-Checkliste für "Es passt nicht aufs Blatt":
+Zuerst in app.py bei opts den "zoom" etwas verringern (z.B. von 0.65 auf 0.6).
+Wenn das Bild zu breit ist: In src/config.py bei .layout-img-cell die width verringern (z.B. 140px).
+Wenn die Schrift zu klein ist: In src/config.py bei body oder .stats-table die font-size erhöhen.
