@@ -19,7 +19,7 @@ from src.utils import get_logo_url
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
-    fetch_season_games, fetch_standings
+    fetch_season_games
 )
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
@@ -31,7 +31,7 @@ from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
     generate_complex_ai_prompt, render_full_play_by_play, run_openai_generation,
-    render_prep_dashboard, render_live_view, render_season_analysis_page
+    render_prep_dashboard, render_live_view 
 )
 
 # --- KONFIGURATION ---
@@ -41,6 +41,7 @@ st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", pag
 
 # --- ZENTRALE CSS & BILD FUNKTION ---
 def inject_custom_css():
+    # 1. Basis-CSS
     base_css = """
     <style>
     div.stButton > button {
@@ -70,6 +71,7 @@ def inject_custom_css():
     """
     st.markdown(base_css, unsafe_allow_html=True)
 
+    # 2. Hintergrund nur auf Home
     if st.session_state.current_page == "home":
         bg_css = """
         <style>
@@ -126,7 +128,7 @@ for key, default in [
     ("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
     ("roster_df", None), ("team_stats", None), ("game_meta", {}),
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
-    ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])),
+    ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks"}])),
     ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
     ("facts_about", pd.DataFrame([{"Fokus": "Together", "Beschreibung": "Fight!"}])),
     ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None),
@@ -144,7 +146,6 @@ def go_game_venue(): st.session_state.current_page = "game_venue"
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
 def go_team_stats(): st.session_state.current_page = "team_stats"
-def go_season_analysis(): st.session_state.current_page = "season_analysis"
 
 # --- STANDARD-SEITENHEADER ---
 def render_page_header(page_title):
@@ -162,6 +163,7 @@ def render_page_header(page_title):
 # ==========================================
 def render_home():
     inject_custom_css()
+    
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>🏀 DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
@@ -188,11 +190,11 @@ def render_home():
              if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
         with r4_c2:
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
-        st.write("")
-        if st.button("📊 Saison Analyse", use_container_width=True): go_season_analysis(); st.rerun()
 
 def render_team_stats_page():
     if st.session_state.stats_team_id:
+        # DETAILANSICHT
+        inject_custom_css() 
         tid = st.session_state.stats_team_id
         col_back, col_head = st.columns([1, 5])
         with col_back:
@@ -259,6 +261,7 @@ def render_team_stats_page():
             else: st.info("Keine Spielerdaten verfügbar.")
         else: st.error(f"Daten konnten für Saison {CURRENT_SEASON_ID} nicht geladen werden.")
     else:
+        # ÜBERSICHT
         render_page_header("📈 Team Statistiken")
         tab_nord, tab_sued = st.tabs(["Nord", "Süd"])
         def render_logo_grid(staffel_name):
@@ -534,17 +537,7 @@ def render_analysis_page():
                     else: st.error("Fehler beim Laden.")
         else: st.warning("Keine Spiele.")
 
-# NEU: Seite für Saison-Analyse
-def render_season_analysis_wrapper():
-    render_page_header("📊 Saison Analyse")
-    with st.spinner("Lade alle Saisondaten..."):
-        all_games = fetch_season_games(CURRENT_SEASON_ID)
-        render_season_analysis_page(all_games)
-
 def render_scouting_page():
-    # 1. Logos holen (zentral) für Scouting Report
-    real_logos = fetch_real_logo_urls()
-
     render_page_header("📝 PreGame Report") 
     if st.session_state.print_mode:
         st.subheader("Vorschau & Export")
@@ -576,33 +569,22 @@ def render_scouting_page():
             if "home_name" in st.session_state.game_meta and st.session_state.game_meta["home_name"] in to: idx = list(to.keys()).index(st.session_state.game_meta["home_name"])
             hn = st.selectbox("Heim:", list(to.keys()), index=idx, key="sel_home"); hid = to[hn]
             
-            # LOGO FIX REPORT
             if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != hn: 
-                l_url = real_logos.get(str(hid))
-                l_bytes = load_image_bytes(l_url)
-                st.session_state.logo_h = image_to_base64_str(l_bytes) 
+                st.session_state.logo_h = get_best_team_logo(hid)
             
-            # Anzeige in UI
-            if st.session_state.logo_h:
-                st.markdown(f"<img src='{st.session_state.logo_h}' width='80'>", unsafe_allow_html=True)
-            else:
-                st.write(hn)
+            if st.session_state.logo_h: st.image(st.session_state.logo_h, width=80)
+            else: st.markdown("🏀")
 
         with c3:
             idxg = 1
             if "guest_name" in st.session_state.game_meta and st.session_state.game_meta["guest_name"] in to: idxg = list(to.keys()).index(st.session_state.game_meta["guest_name"])
             gn = st.selectbox("Gast:", list(to.keys()), index=idxg, key="sel_guest"); gid = to[gn]
             
-            # LOGO FIX REPORT
             if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != gn: 
-                l_url = real_logos.get(str(gid))
-                l_bytes = load_image_bytes(l_url)
-                st.session_state.logo_g = image_to_base64_str(l_bytes)
+                st.session_state.logo_g = get_best_team_logo(gid)
 
-            if st.session_state.logo_g:
-                st.markdown(f"<img src='{st.session_state.logo_g}' width='80'>", unsafe_allow_html=True)
-            else:
-                st.write(gn)
+            if st.session_state.logo_g: st.image(st.session_state.logo_g, width=80)
+            else: st.markdown("🏀")
 
         st.write("---")
         idx_t = 0
@@ -620,6 +602,7 @@ def render_scouting_page():
                 df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
                 if df is not None and not df.empty: 
                     st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
+                    # FIX: Variable 'tn' (Team Name) wird hier noch nicht gebraucht, erst beim Generieren
                     st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
                     st.session_state.print_mode = False 
                 else: st.error("Fehler API."); st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
@@ -676,4 +659,3 @@ elif st.session_state.current_page == "game_venue": render_game_venue_page()
 elif st.session_state.current_page == "prep": render_prep_page()
 elif st.session_state.current_page == "live": render_live_page()
 elif st.session_state.current_page == "team_stats": render_team_stats_page()
-elif st.session_state.current_page == "season_analysis": render_season_analysis_wrapper()
