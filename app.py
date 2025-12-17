@@ -31,7 +31,7 @@ from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
     generate_complex_ai_prompt, render_full_play_by_play, run_openai_generation,
-    render_prep_dashboard, render_live_view 
+    render_prep_dashboard, render_live_view, render_season_analysis_page
 )
 
 # --- KONFIGURATION ---
@@ -41,7 +41,6 @@ st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", pag
 
 # --- ZENTRALE CSS & BILD FUNKTION ---
 def inject_custom_css():
-    # 1. Basis-CSS
     base_css = """
     <style>
     div.stButton > button {
@@ -71,7 +70,6 @@ def inject_custom_css():
     """
     st.markdown(base_css, unsafe_allow_html=True)
 
-    # 2. Hintergrund nur auf Home
     if st.session_state.current_page == "home":
         bg_css = """
         <style>
@@ -128,7 +126,7 @@ for key, default in [
     ("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
     ("roster_df", None), ("team_stats", None), ("game_meta", {}),
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
-    ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks"}])),
+    ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}])),
     ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
     ("facts_about", pd.DataFrame([{"Fokus": "Together", "Beschreibung": "Fight!"}])),
     ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None),
@@ -146,6 +144,7 @@ def go_game_venue(): st.session_state.current_page = "game_venue"
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
 def go_team_stats(): st.session_state.current_page = "team_stats"
+def go_season_analysis(): st.session_state.current_page = "season_analysis"
 
 # --- STANDARD-SEITENHEADER ---
 def render_page_header(page_title):
@@ -163,7 +162,6 @@ def render_page_header(page_title):
 # ==========================================
 def render_home():
     inject_custom_css()
-    
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>🏀 DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
@@ -190,11 +188,12 @@ def render_home():
              if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
         with r4_c2:
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
+        st.write("")
+        # NEUER BUTTON HIER
+        if st.button("📊 Saison Analyse", use_container_width=True): go_season_analysis(); st.rerun()
 
 def render_team_stats_page():
     if st.session_state.stats_team_id:
-        # DETAILANSICHT
-        inject_custom_css() 
         tid = st.session_state.stats_team_id
         col_back, col_head = st.columns([1, 5])
         with col_back:
@@ -261,7 +260,6 @@ def render_team_stats_page():
             else: st.info("Keine Spielerdaten verfügbar.")
         else: st.error(f"Daten konnten für Saison {CURRENT_SEASON_ID} nicht geladen werden.")
     else:
-        # ÜBERSICHT
         render_page_header("📈 Team Statistiken")
         tab_nord, tab_sued = st.tabs(["Nord", "Süd"])
         def render_logo_grid(staffel_name):
@@ -537,117 +535,12 @@ def render_analysis_page():
                     else: st.error("Fehler beim Laden.")
         else: st.warning("Keine Spiele.")
 
-def render_scouting_page():
-    render_page_header("📝 PreGame Report") 
-    if st.session_state.print_mode:
-        st.subheader("Vorschau & Export")
-        c1, c2 = st.columns([1, 4])
-        with c1:
-            if st.button("⬅️ Bearbeiten", key="exit_print"): st.session_state.print_mode = False; st.rerun()
-        with c2:
-            if st.session_state.pdf_bytes: st.download_button("📄 Download PDF", st.session_state.pdf_bytes, st.session_state.report_filename, "application/pdf")
-            else: st.warning("PDF Fehler.")
-        st.divider()
-        if st.session_state.final_html: st.markdown("### HTML-Vorschau"); st.markdown(CSS_STYLES + st.session_state.final_html, unsafe_allow_html=True)
-    else:
-        with st.sidebar: 
-            st.header("💾 Spielstand")
-            up = st.file_uploader("Laden (JSON)", type=["json"], key="scout_up")
-            if up and st.button("Wiederherstellen", key="scout_restore"):
-                s, m = load_session_state(up); st.success(m) if s else st.error(m)
-            st.divider()
-            if st.session_state.roster_df is not None:
-                st.download_button("💾 Speichern", export_session_state(), f"Save_{date.today()}.json", "application/json", key="scout_save")
-        st.subheader("1. Spieldaten")
-        c1, c2, c3 = st.columns([1, 2, 2])
-        with c1: 
-            s = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="scout_staffel")
-            t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
-            to = {v["name"]: k for k, v in t.items()}
-        with c2:
-            idx = 0
-            if "home_name" in st.session_state.game_meta and st.session_state.game_meta["home_name"] in to: idx = list(to.keys()).index(st.session_state.game_meta["home_name"])
-            hn = st.selectbox("Heim:", list(to.keys()), index=idx, key="sel_home"); hid = to[hn]
-            
-            if "logo_h" not in st.session_state or st.session_state.game_meta.get("home_name") != hn: 
-                st.session_state.logo_h = get_best_team_logo(hid)
-            
-            if st.session_state.logo_h: st.image(st.session_state.logo_h, width=80)
-            else: st.markdown("🏀")
-
-        with c3:
-            idxg = 1
-            if "guest_name" in st.session_state.game_meta and st.session_state.game_meta["guest_name"] in to: idxg = list(to.keys()).index(st.session_state.game_meta["guest_name"])
-            gn = st.selectbox("Gast:", list(to.keys()), index=idxg, key="sel_guest"); gid = to[gn]
-            
-            if "logo_g" not in st.session_state or st.session_state.game_meta.get("guest_name") != gn: 
-                st.session_state.logo_g = get_best_team_logo(gid)
-
-            if st.session_state.logo_g: st.image(st.session_state.logo_g, width=80)
-            else: st.markdown("🏀")
-
-        st.write("---")
-        idx_t = 0
-        if st.session_state.game_meta.get("selected_target") == "Heimteam": idx_t = 1
-        target = st.radio("Target:", ["Gastteam (Gegner)", "Heimteam"], horizontal=True, index=idx_t, key="sel_target") 
-        tid = gid if target == "Gastteam (Gegner)" else hid
-        c_d, c_t = st.columns(2)
-        d_inp = c_d.date_input("Datum", date.today(), key="scout_date"); t_inp = c_t.time_input("Tip-Off", time(16,0), key="scout_time") 
-        st.divider()
-        cur_tid = st.session_state.get("current_tid")
-        click_load = st.button(f"2. Kader von {target} laden", type="primary", key="load_scout")
-        
-        if click_load or (st.session_state.roster_df is None and cur_tid != tid) or (st.session_state.roster_df is not None and cur_tid != tid):
-            with st.spinner("Lade Daten..."):
-                df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
-                if df is not None and not df.empty: 
-                    st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
-                    # FIX: Variable 'tn' (Team Name) wird hier noch nicht gebraucht, erst beim Generieren
-                    st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
-                    st.session_state.print_mode = False 
-                else: st.error("Fehler API."); st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
-        elif st.session_state.roster_df is None or st.session_state.roster_df.empty: st.info("Bitte laden.")
-        
-        if st.session_state.roster_df is not None and not st.session_state.roster_df.empty: 
-            st.subheader("3. Auswahl & Notizen")
-            cols = { "select": st.column_config.CheckboxColumn("Auswahl", default=False, width="small"), "NR": st.column_config.TextColumn("#", width="small"), "NAME_FULL": st.column_config.TextColumn("Name"), "GP": st.column_config.NumberColumn("GP", format="%d"), "PPG": st.column_config.NumberColumn("PPG", format="%.1f"), "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"), "TOT": st.column_config.NumberColumn("REB", format="%.1f") }
-            edited = st.data_editor(st.session_state.roster_df[["select", "NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"]], column_config=cols, disabled=["NR", "NAME_FULL", "GP", "PPG", "FG%", "TOT"], hide_index=True, key="player_table_scout") 
-            sel_idx = edited[edited["select"]].index
-            if len(sel_idx) > 0:
-                st.divider()
-                with st.form("scout_form", clear_on_submit=False): 
-                    sel = st.session_state.roster_df.loc[sel_idx]; res = []; cmap = {"Grau": "#999999", "Grün": "#5c9c30", "Rot": "#d9534f"}
-                    for i, (_, r) in enumerate(sel.iterrows()): 
-                        pid = r["PLAYER_ID"]; c_h, c_c = st.columns([3, 1]); c_h.markdown(f"**#{r['NR']} {r['NAME_FULL']}**"); sc = st.session_state.saved_colors.get(pid, "Grau"); ix = list(cmap.keys()).index(sc) if sc in cmap else 0
-                        col = c_c.selectbox("Farbe", list(cmap.keys()), key=f"c_{pid}_{i}", index=ix, label_visibility="collapsed") 
-                        c1, c2 = st.columns(2); n = {}
-                        for k in ["l1", "l2", "l3", "l4", "r1", "r2", "r3", "r4"]: val = st.session_state.saved_notes.get(f"{k}_{pid}", ""); n[k] = (c1 if k.startswith("l") else c2).text_input(k, value=val, key=f"n_{k}_{pid}_{i}", label_visibility="collapsed")
-                        st.divider(); res.append({"row": r, "pid": pid, "color": col, "notes": n})
-                    c1, c2, c3 = st.columns(3)
-                    with c1: st.caption("Offense"); eo = st.data_editor(st.session_state.facts_offense, num_rows="dynamic", hide_index=True, key="eo_scout")
-                    with c2: st.caption("Defense"); ed = st.data_editor(st.session_state.facts_defense, num_rows="dynamic", hide_index=True, key="ed_scout")
-                    with c3: st.caption("About"); ea = st.data_editor(st.session_state.facts_about, num_rows="dynamic", hide_index=True, key="ea_scout")
-                    up = st.file_uploader("Plays", accept_multiple_files=True, type=["png","jpg"], key="up_scout")
-                    if st.form_submit_button("Generieren", type="primary"):
-                        st.session_state.facts_offense = eo; st.session_state.facts_defense = ed; st.session_state.facts_about = ea
-                        for item in res:
-                            st.session_state.saved_colors[item["pid"]] = item["color"]; 
-                            for k, v in item["notes"].items(): st.session_state.saved_notes[f"{k}_{item['pid']}"] = v
-                        tn = (gn if target == "Gastteam (Gegner)" else hn).replace(" ", "_")
-                        st.session_state.report_filename = f"Scouting_Report_{tn}_{d_inp.strftime('%d.%m.%Y')}.pdf"
-                        html = generate_header_html(st.session_state.game_meta); html += generate_top3_html(st.session_state.roster_df)
-                        for item in res: meta = get_player_metadata_cached(item["pid"]); html += generate_card_html(item["row"].to_dict(), meta, item["notes"], cmap[item["color"]])
-                        html += generate_team_stats_html(st.session_state.team_stats)
-                        if up:
-                            html += "<div style='page-break-before:always'><h2>Plays</h2>"; 
-                            for f in up: b64 = base64.b64encode(f.getvalue()).decode(); html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
-                        html += generate_custom_sections_html(eo, ed, ea); st.session_state.final_html = html
-                        if HAS_PDFKIT:
-                            try:
-                                opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42", "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
-                                st.session_state.pdf_bytes = pdfkit.from_string(f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", False, options=opts); st.session_state.print_mode = True; st.rerun()
-                            except Exception as e: st.error(f"PDF Error: {e}"); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
-                        else: st.warning("PDFKit fehlt."); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
+# NEU: Seite für Saison-Analyse
+def render_season_analysis_wrapper():
+    render_page_header("📊 Saison Analyse")
+    with st.spinner("Lade alle Saisondaten..."):
+        all_games = fetch_season_games(CURRENT_SEASON_ID)
+        render_season_analysis_page(all_games)
 
 # --- MAIN LOOP ---
 if st.session_state.current_page == "home": render_home()
@@ -659,3 +552,4 @@ elif st.session_state.current_page == "game_venue": render_game_venue_page()
 elif st.session_state.current_page == "prep": render_prep_page()
 elif st.session_state.current_page == "live": render_live_page()
 elif st.session_state.current_page == "team_stats": render_team_stats_page()
+elif st.session_state.current_page == "season_analysis": render_season_analysis_wrapper()
