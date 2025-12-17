@@ -694,19 +694,19 @@ def render_scouting_page():
                             for f in up: b64 = base64.b64encode(f.getvalue()).decode(); html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
                         html += generate_custom_sections_html(eo, ed, ea); st.session_state.final_html = html
                         if HAS_PDFKIT:
-    try:
-        opts = {
-            "page-size": "A4",
-            "orientation": "Portrait",
-            "margin-top": "10mm",
-            "margin-right": "10mm",
-            "margin-bottom": "10mm",
-            "margin-left": "10mm",
-            "encoding": "UTF-8",
-            "zoom": "1.0", # Wichtig: Auf 1.0 setzen für echte Größen
-            "no-outline": None,
-            "quiet": ""
-        }
+                        try:
+                        opts = {
+                        "page-size": "A4",
+                        "orientation": "Portrait",
+                        "margin-top": "10mm",
+                        "margin-right": "10mm",
+                        "margin-bottom": "10mm",
+                        "margin-left": "10mm",
+                        "encoding": "UTF-8",
+                        "zoom": "1.0", # Wichtig: Auf 1.0 setzen für echte Größen
+                        "no-outline": None,
+                        "quiet": ""
+                        }
         
                                 st.session_state.pdf_bytes = pdfkit.from_string(f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", False, options=opts); st.session_state.print_mode = True; st.rerun()
                             except Exception as e: st.error(f"PDF Error: {e}"); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
