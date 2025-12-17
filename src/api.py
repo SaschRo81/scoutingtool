@@ -350,12 +350,30 @@ def fetch_season_games(season_id):
 
 @st.cache_data(ttl=1800)
 def fetch_team_rank(team_id, season_id):
-    # Try both servers to be safe
-    domains = ["api-s.dbbl.scb.world", "api-n.dbbl.scb.world"]
+    # 1. Staffel ermitteln (Nord/Süd)
+    staffel = ""
+    try:
+        tid_int = int(team_id)
+        if tid_int in TEAMS_DB:
+            staffel = TEAMS_DB[tid_int].get("staffel", "")
+    except: pass
+
+    # 2. URLs aufbauen (mit Priorität für die korrekte Gruppe)
+    urls = []
+    if staffel == "Süd":
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
+    elif staffel == "Nord":
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
+    
+    # Fallback: Ohne Gruppe versuchen (falls API Logik ändert)
+    urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}")
+    urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}")
+
     search_id = str(team_id)
 
-    for domain in domains:
-        url = f"https://{domain}/standings?seasonId={season_id}"
+    for url in urls:
         try:
             r = requests.get(url, headers=API_HEADERS, timeout=3)
             if r.status_code == 200:
@@ -363,12 +381,11 @@ def fetch_team_rank(team_id, season_id):
                 items = data if isinstance(data, list) else data.get("items", [])
 
                 for idx, entry in enumerate(items):
-                    # IDs finden
-                    tid = str(entry.get("team", {}).get("id", ""))
-                    if not tid: tid = str(entry.get("teamId", ""))
-                    if not tid: tid = str(entry.get("seasonTeamId", ""))
+                    tid_found = str(entry.get("team", {}).get("id", ""))
+                    if not tid_found: tid_found = str(entry.get("teamId", ""))
+                    if not tid_found: tid_found = str(entry.get("seasonTeamId", ""))
 
-                    if tid == search_id:
+                    if tid_found == search_id:
                         rank = entry.get("position") or entry.get("rank") or (idx + 1)
                         return {
                             "rank": rank,
