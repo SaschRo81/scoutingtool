@@ -104,7 +104,8 @@ def generate_card_html(row, metadata, notes, color_code):
     for i in range(1, 5):
         l_note = notes.get(f'l{i}', '')
         r_note = notes.get(f'r{i}', '')
-        note_rows += f'<tr class="note-row"><td colspan="6">{l_note}</td><td colspan="12" class="note-right">{r_note}</td></tr>'
+        # HIER IST DER FIX: Inline Style 'color: #d9534f' erzwingt die rote Farbe im PDF
+        note_rows += f'<tr class="note-row"><td colspan="6">{l_note}</td><td colspan="12" class="note-right" style="color: #d9534f; font-weight: bold;">{r_note}</td></tr>'
 
     return f"""
 <div class="player-card">
