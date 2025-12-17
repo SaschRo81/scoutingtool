@@ -1,10 +1,12 @@
+# --- START OF FILE src/html_gen.py ---
+
 import pandas as pd
+import copy
 from src.utils import clean_pos
 
 def generate_header_html(meta):
     return f"""
 <div class="report-header">
-    <!-- HIER GEÄNDERT: Neuer Titel im PDF -->
     <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
     <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
     <div class="matchup-container">
@@ -63,39 +65,24 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     html += build_box(rebounders, ["#", "Name", "D", "O", "TOT"], ["NR", "NAME_FULL", "DR", "OR", "TOT"], [4], "#0055ff", "Rebounds")
     html += build_box(shooters, ["#", "Name", "M", "A", "%"], ["NR", "NAME_FULL", "3M", "3A", "3PCT"], [4], "#28a745", "3-Points")
     html += "</div>"
-    
     html += "<div class='top3-container'>"
     html += build_box(fts, ["#", "Name", "M", "A", "%"], ["NR", "NAME_FULL", "FTM", "FTA", "FTPCT"], [4], "#dc3545", "Weak FT")
     html += build_box(assisters, ["#", "Name", "AS"], ["NR", "NAME_FULL", "AS"], [2], "#ffc107", "Assists")
     html += build_box(turnovers, ["#", "Name", "TO"], ["NR", "NAME_FULL", "TO"], [2], "#fd7e14", "Turnovers")
     html += "</div>"
-    
     html += "<div class='top3-container'>"
     html += build_box(stealers, ["#", "Name", "ST"], ["NR", "NAME_FULL", "ST"], [2], "#6f42c1", "Steals")
     html += build_box(blocks, ["#", "Name", "BS"], ["NR", "NAME_FULL", "BS"], [2], "#343a40", "Blocks")
     html += build_box(fouls, ["#", "Name", "PF"], ["NR", "NAME_FULL", "PF"], [2], "#20c997", "Fouls")
     html += "</div>"
 
-    c_green = "#5c9c30"
-    c_gray = "#999999"
-    c_red = "#d9534f"
-
+    c_green = "#5c9c30"; c_gray = "#999999"; c_red = "#d9534f"
     legend_html = f"""
 <div style="display: flex; gap: 30px; margin-top: 5px; margin-bottom: 20px; font-size: 18px; color: #333;">
-    <div style="display: flex; align-items: center;">
-        <div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div>
-        <strong>Shooter</strong>
-    </div>
-    <div style="display: flex; align-items: center;">
-        <div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>
-        Normal
-    </div>
-    <div style="display: flex; align-items: center;">
-        <div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>
-        Non-Shooter
-    </div>
-</div>
-"""
+    <div style="display: flex; align-items: center;"><div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div><strong>Shooter</strong></div>
+    <div style="display: flex; align-items: center;"><div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>Normal</div>
+    <div style="display: flex; align-items: center;"><div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>Non-Shooter</div>
+</div>"""
     return html + legend_html
 
 def generate_card_html(row, metadata, notes, color_code):
@@ -106,78 +93,38 @@ def generate_card_html(row, metadata, notes, color_code):
         height_str = f"{h:.2f}".replace(".", ",")
     except: height_str = "-"
     pos_str = clean_pos(metadata["pos"])
-
     return f"""
 <div class="player-card">
-    <div class="card-header" style="background-color: {color_code};">
-        <span>#{row['NR']} {row['NAME_FULL']}</span>
-        <span>{height_str} m | Pos: {pos_str}</span>
-    </div>
+    <div class="card-header" style="background-color: {color_code};"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
     <div class="card-body">
-        <table class="layout-table">
-            <tr>
-                <td class="layout-img-cell">
-                    <img src="{img_url}" class="player-img">
-                </td>
-                <td class="layout-stats-cell">
-                    <table class="stats-table">
-                        <tr class="bg-gray">
-                            <th rowspan="2">Min</th><th rowspan="2">PPG</th>
-                            <th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th>
-                            <th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th>
-                        </tr>
-                        <tr class="bg-gray">
-                            <th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th>
-                            <th>D</th><th>O</th><th>TOT</th>
-                        </tr>
-                        <tr class="font-bold">
-                            <td>{row['MIN_DISPLAY']}</td><td>{row['PPG']}</td>
-                            <td>{row['2M']}</td><td>{row['2A']}</td><td>{row['2PCT']}</td>
-                            <td>{row['3M']}</td><td>{row['3A']}</td><td>{row['3PCT']}</td>
-                            <td>{row['FTM']}</td><td>{row['FTA']}</td><td>{row['FTPCT']}</td>
-                            <td>{row['DR']}</td><td>{row['OR']}</td><td>{row['TOT']}</td>
-                            <td>{row['AS']}</td><td>{row['TO']}</td><td>{row['ST']}</td><td>{row['PF']}</td>
-                        </tr>
-                        <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l1','')}</td><td colspan="10" class="note-right">{notes.get('r1','')}</td></tr>
-                        <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l2','')}</td><td colspan="10" class="note-right">{notes.get('r2','')}</td></tr>
-                        <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l3','')}</td><td colspan="10" class="note-right">{notes.get('r3','')}</td></tr>
-                        <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l4','')}</td><td colspan="10" class="note-right">{notes.get('r4','')}</td></tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
+        <table class="layout-table"><tr>
+            <td class="layout-img-cell"><img src="{img_url}" class="player-img"></td>
+            <td class="layout-stats-cell">
+                <table class="stats-table">
+                    <tr class="bg-gray"><th rowspan="2">Min</th><th rowspan="2">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr>
+                    <tr class="bg-gray"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>
+                    <tr class="font-bold"><td>{row['MIN_DISPLAY']}</td><td>{row['PPG']}</td><td>{row['2M']}</td><td>{row['2A']}</td><td>{row['2PCT']}</td><td>{row['3M']}</td><td>{row['3A']}</td><td>{row['3PCT']}</td><td>{row['FTM']}</td><td>{row['FTA']}</td><td>{row['FTPCT']}</td><td>{row['DR']}</td><td>{row['OR']}</td><td>{row['TOT']}</td><td>{row['AS']}</td><td>{row['TO']}</td><td>{row['ST']}</td><td>{row['PF']}</td></tr>
+                    <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l1','')}</td><td colspan="10" class="note-right">{notes.get('r1','')}</td></tr>
+                    <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l2','')}</td><td colspan="10" class="note-right">{notes.get('r2','')}</td></tr>
+                    <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l3','')}</td><td colspan="10" class="note-right">{notes.get('r3','')}</td></tr>
+                    <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l4','')}</td><td colspan="10" class="note-right">{notes.get('r4','')}</td></tr>
+                </table>
+            </td>
+        </tr></table>
     </div>
-</div>
-"""
+</div>"""
 
 def generate_team_stats_html(ts):
     if not ts: return ""
     def calc_pct(m, a, api): return api if api > 0 else (m/a*100 if a>0 else 0)
-    
     return f"""
-<div class="team-stats-container">
-    <h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG)</h2>
+<div class="team-stats-container"><h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG)</h2>
     <table class="stats-table" style="font-size: 20px;">
-        <tr class="bg-gray font-bold">
-            <th rowspan="2" style="padding: 4px;">PPG</th>
-            <th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th>
-            <th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th>
-        </tr>
-        <tr class="bg-gray font-bold">
-            <th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th>
-            <th>D</th><th>O</th><th>TOT</th>
-        </tr>
-        <tr class="font-bold" style="background-color: #f9f9f9;">
-            <td style="padding: 8px;">{ts['ppg']:.1f}</td>
-            <td>{ts['2m']:.1f}</td><td>{ts['2a']:.1f}</td><td>{calc_pct(ts['2m'],ts['2a'],ts['2pct']):.1f}</td>
-            <td>{ts['3m']:.1f}</td><td>{ts['3a']:.1f}</td><td>{calc_pct(ts['3m'],ts['3a'],ts['3pct']):.1f}</td>
-            <td>{ts['ftm']:.1f}</td><td>{ts['fta']:.1f}</td><td>{calc_pct(ts['ftm'],ts['fta'],ts['ftpct']):.1f}</td>
-            <td>{ts['dr']:.1f}</td><td>{ts['or']:.1f}</td><td>{ts['tot']:.1f}</td>
-            <td>{ts['as']:.1f}</td><td>{ts['to']:.1f}</td><td>{ts['st']:.1f}</td><td>{ts['pf']:.1f}</td>
-        </tr>
+        <tr class="bg-gray font-bold"><th rowspan="2" style="padding: 4px;">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr>
+        <tr class="bg-gray font-bold"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>
+        <tr class="font-bold" style="background-color: #f9f9f9;"><td style="padding: 8px;">{ts['ppg']:.1f}</td><td>{ts['2m']:.1f}</td><td>{ts['2a']:.1f}</td><td>{calc_pct(ts['2m'],ts['2a'],ts['2pct']):.1f}</td><td>{ts['3m']:.1f}</td><td>{ts['3a']:.1f}</td><td>{calc_pct(ts['3m'],ts['3a'],ts['3pct']):.1f}</td><td>{ts['ftm']:.1f}</td><td>{ts['fta']:.1f}</td><td>{calc_pct(ts['ftm'],ts['fta'],ts['ftpct']):.1f}</td><td>{ts['dr']:.1f}</td><td>{ts['or']:.1f}</td><td>{ts['tot']:.1f}</td><td>{ts['as']:.1f}</td><td>{ts['to']:.1f}</td><td>{ts['st']:.1f}</td><td>{ts['pf']:.1f}</td></tr>
     </table>
-</div>
-"""
+</div>"""
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
     html = "<div style='page-break-before: always;'>"
@@ -185,50 +132,29 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
         if df.empty: return ""
         sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-size: 26px;'>{title}</h3>"
         sh += "<table style='width:100%; border-collapse:collapse; margin-bottom:20px;'>"
-        
-        font_size = "22px"
-
         for _, r in df.iterrows():
-            c1 = r.get(df.columns[0], "")
-            c2 = r.get(df.columns[1], "")
-            sh += "<tr>"
-            sh += f"<td style='width:30%; border:1px solid #ccc; padding:8px; font-weight:bold; vertical-align:top; font-size:{font_size};'>{c1}</td>"
-            sh += f"<td style='border:1px solid #ccc; padding:8px; vertical-align:top; font-size:{font_size};'>{c2}</td>"
-            sh += "</tr>"
-        sh += "</table>"
-        return sh
-
+            c1 = r.get(df.columns[0], ""); c2 = r.get(df.columns[1], "")
+            sh += f"<tr><td style='width:30%; border:1px solid #ccc; padding:8px; font-weight:bold; vertical-align:top; font-size:22px;'>{c1}</td><td style='border:1px solid #ccc; padding:8px; vertical-align:top; font-size:22px;'>{c2}</td></tr>"
+        return sh + "</table>"
     html += make_section("Key Facts Offense", offense_df)
     html += make_section("Key Facts Defense", defense_df)
     html += make_section("ALL ABOUT US", about_df)
-    html += "</div>"
-    return html
+    return html + "</div>"
 
-def generate_comparison_html(h_stats, g_stats, h_name, g_name):
+def generate_comparison_html(h_stats_in, g_stats_in, h_name, g_name):
     """Erstellt eine HTML-Vergleichstabelle für zwei Teams."""
-    if not h_stats or not g_stats:
-        return "Keine Daten für Vergleich verfügbar."
+    if not h_stats_in or not g_stats_in: return "Keine Daten für Vergleich verfügbar."
+    
+    # Sicherheitskopien erstellen, damit die Originaldaten nicht verändert werden
+    h_stats = copy.deepcopy(h_stats_in)
+    g_stats = copy.deepcopy(g_stats_in)
 
     def get_pct(stats, cat):
         if stats.get(f'{cat}pct', 0) > 0: return stats[f'{cat}pct']
-        m = stats.get(f'{cat}m', 0)
-        a = stats.get(f'{cat}a', 0)
+        m = stats.get(f'{cat}m', 0); a = stats.get(f'{cat}a', 0)
         return (m / a * 100) if a > 0 else 0.0
 
-    metrics = [
-        ("Points Per Game", "ppg", False, False),
-        ("Field Goal %", "FG%", True, False), 
-        ("3-Point %", "3pct", True, False),
-        ("Free Throw %", "ftpct", True, False),
-        ("Rebounds (Total)", "tot", False, False),
-        ("Defensive Rebs", "dr", False, False), 
-        ("Offensive Rebs", "or", False, False),
-        ("Assists", "as", False, False),
-        ("Turnovers", "to", False, True), 
-        ("Steals", "st", False, False),
-        ("Blocks", "bs", False, False),   
-        ("Fouls", "pf", False, True)      
-    ]
+    metrics = [("Points Per Game", "ppg", False, False), ("Field Goal %", "FG%", True, False), ("3-Point %", "3pct", True, False), ("Free Throw %", "ftpct", True, False), ("Rebounds (Total)", "tot", False, False), ("Defensive Rebs", "dr", False, False), ("Offensive Rebs", "or", False, False), ("Assists", "as", False, False), ("Turnovers", "to", False, True), ("Steals", "st", False, False), ("Blocks", "bs", False, False), ("Fouls", "pf", False, True)]
 
     for stats in [h_stats, g_stats]:
         fg_m = stats.get('2m', 0) + stats.get('3m', 0)
@@ -238,37 +164,16 @@ def generate_comparison_html(h_stats, g_stats, h_name, g_name):
         stats['ftpct'] = get_pct(stats, 'ft')
         if 'bs' not in stats: stats['bs'] = 0.0
 
-    html = f"""<div style="margin: 20px 0; font-family: sans-serif;">
-<h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 0;">Head-to-Head (Saison-Schnitt)</h3>
-<table style="width: 100%; border-collapse: collapse; font-size: 16px;">
-<tr style="background-color: #333; color: white;">
-<th style="padding: 12px; text-align: right; width: 35%;">{h_name}</th>
-<th style="padding: 12px; text-align: center; width: 30%; background-color: #555;">Statistik</th>
-<th style="padding: 12px; text-align: left; width: 35%;">{g_name}</th>
-</tr>"""
+    html = f"""<div style="margin: 20px 0; font-family: sans-serif;"><h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 0;">Head-to-Head (Saison-Schnitt)</h3><table style="width: 100%; border-collapse: collapse; font-size: 16px;"><tr style="background-color: #333; color: white;"><th style="padding: 12px; text-align: right; width: 35%;">{h_name}</th><th style="padding: 12px; text-align: center; width: 30%; background-color: #555;">Statistik</th><th style="padding: 12px; text-align: left; width: 35%;">{g_name}</th></tr>"""
 
     for label, key, is_pct, lower_better in metrics:
-        val_h = h_stats.get(key, 0.0)
-        val_g = g_stats.get(key, 0.0)
-        
-        fmt_h = f"{val_h:.1f}" + ("%" if is_pct else "")
-        fmt_g = f"{val_g:.1f}" + ("%" if is_pct else "")
-
+        val_h = h_stats.get(key, 0.0); val_g = g_stats.get(key, 0.0)
+        fmt_h = f"{val_h:.1f}" + ("%" if is_pct else ""); fmt_g = f"{val_g:.1f}" + ("%" if is_pct else "")
         style_h = "padding: 8px; text-align: right; border-bottom: 1px solid #eee;"
         style_g = "padding: 8px; text-align: left; border-bottom: 1px solid #eee;"
-        
         if val_h != val_g:
             is_h_better = (val_h < val_g) if lower_better else (val_h > val_g)
-            if is_h_better:
-                style_h += " font-weight: bold; color: #2e7d32;"
-            else:
-                style_g += " font-weight: bold; color: #2e7d32;"
-
-        html += f"""<tr>
-<td style="{style_h}">{fmt_h}</td>
-<td style="padding: 8px; text-align: center; color: #666; font-size: 14px; border-bottom: 1px solid #eee;">{label}</td>
-<td style="{style_g}">{fmt_g}</td>
-</tr>"""
-
-    html += "</table></div>"
-    return html
+            if is_h_better: style_h += " font-weight: bold; color: #2e7d32;"
+            else: style_g += " font-weight: bold; color: #2e7d32;"
+        html += f"""<tr><td style="{style_h}">{fmt_h}</td><td style="padding: 8px; text-align: center; color: #666; font-size: 14px; border-bottom: 1px solid #eee;">{label}</td><td style="{style_g}">{fmt_g}</td></tr>"""
+    return html + "</table></div>"
