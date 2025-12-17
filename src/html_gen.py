@@ -37,7 +37,7 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     blocks = df.sort_values(by="BS", ascending=False).head(3)
     fouls = df.sort_values(by="PF", ascending=False).head(3)
 
-    FONT_SIZE = "14px" # Etwas kleiner für die Top 3, damit es sauberer wirkt
+    FONT_SIZE = "14px"
 
     def build_box(d, headers, keys, bolds, color, title):
         h = f"<div class='stat-box'>"
@@ -51,16 +51,11 @@ def generate_top3_html(df: pd.DataFrame) -> str:
             h += "<tr>"
             for i, k in enumerate(keys):
                 val = r[k]
-                
-                # Ausrichtungs-Logik: Namen Links, Zahlen Zentriert
                 align = "left" if k == "NAME_FULL" else "center"
-                # Name kürzen (nur Nachname oder kurz)
                 if k == "NAME_FULL": val = val.split(" ")[-1]
                 elif isinstance(val, float): val = f"{val:.1f}"
-                
                 style = f"text-align:{align}; font-size: {FONT_SIZE};"
                 if i in bolds: style += " font-weight:bold;"
-                
                 h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
         h += "</table></div>"
@@ -100,9 +95,19 @@ def generate_card_html(row, metadata, notes, color_code):
     except: height_str = "-"
     pos_str = clean_pos(metadata["pos"])
     
-    # CSS Klassen steuern jetzt das Layout (siehe config.py)
-    # Die Notizen (l1-l4, r1-r4) sind in der Tabelle unten.
+    # Wir bauen die HTML-Strings in Teilen auf, um Fehler beim PDF-Parsing zu vermeiden
+    stats_header = """<tr class="bg-gray"><th rowspan="2">Min</th><th rowspan="2">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr><tr class="bg-gray"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>"""
     
+    # Zeile mit den Daten (Vorsichtshalber alles in einer Zeile ohne Umbrüche)
+    stats_row = f'<tr class="font-bold"><td>{row["MIN_DISPLAY"]}</td><td>{row["PPG"]}</td><td>{row["2M"]}</td><td>{row["2A"]}</td><td>{row["2PCT"]}</td><td>{row["3M"]}</td><td>{row["3A"]}</td><td>{row["3PCT"]}</td><td>{row["FTM"]}</td><td>{row["FTA"]}</td><td>{row["FTPCT"]}</td><td>{row["DR"]}</td><td>{row["OR"]}</td><td>{row["TOT"]}</td><td>{row["AS"]}</td><td>{row["TO"]}</td><td>{row["ST"]}</td><td>{row["PF"]}</td></tr>'
+    
+    # Notiz-Zeilen
+    note_rows = ""
+    for i in range(1, 5):
+        l_note = notes.get(f'l{i}', '')
+        r_note = notes.get(f'r{i}', '')
+        note_rows += f'<tr class="note-row"><td colspan="6">{l_note}</td><td colspan="12" class="note-right">{r_note}</td></tr>'
+
     return f"""
 <div class="player-card">
     <div class="card-header" style="background-color: {color_code};"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
@@ -111,15 +116,9 @@ def generate_card_html(row, metadata, notes, color_code):
             <td class="layout-img-cell"><img src="{img_url}" class="player-img"></td>
             <td class="layout-stats-cell">
                 <table class="stats-table">
-                    <tr class="bg-gray"><th rowspan="2">Min</th><th rowspan="2">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr>
-                    <tr class="bg-gray"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>
-                    <tr class="font-bold"><td>{row['MIN_DISPLAY']}</td><td>{row['PPG']}</td><td>{row['2M']}</td><td>{row['2A']}</td><td>{row['2PCT']}</td><td>{row['3M']}</td><td>{row['3A']}</td><td>{row['3PCT']}</td><td>{row['FTM']}</td><td>{row['FTA']}</td><td>{row['FTPCT']}</td><td>{row['DR']}</td><td>{row['OR']}</td><td>{row['TOT']}</td><td>{row['AS']}</td><td>{row['TO']}</td><td>{row['ST']}</td><td>{row['PF']}</td></tr>
-                    
-                    <!-- HIER DIE NOTIZ-ZEILEN -->
-                    <tr class="note-row"><td colspan="6">{notes.get('l1','')}</td><td colspan="12" class="note-right">{notes.get('r1','')}</td></tr>
-                    <tr class="note-row"><td colspan="6">{notes.get('l2','')}</td><td colspan="12" class="note-right">{notes.get('r2','')}</td></tr>
-                    <tr class="note-row"><td colspan="6">{notes.get('l3','')}</td><td colspan="12" class="note-right">{notes.get('r3','')}</td></tr>
-                    <tr class="note-row"><td colspan="6">{notes.get('l4','')}</td><td colspan="12" class="note-right">{notes.get('r4','')}</td></tr>
+                    {stats_header}
+                    {stats_row}
+                    {note_rows}
                 </table>
             </td>
         </tr></table>
