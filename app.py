@@ -638,10 +638,25 @@ def render_scouting_page():
                 df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
                 if df is not None and not df.empty: 
                     st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
-                    # FIX: Variable 'tn' (Team Name) wird hier noch nicht gebraucht, erst beim Generieren
-                    st.session_state.game_meta = { "home_name": hn, "home_logo": st.session_state.logo_h, "guest_name": gn, "guest_logo": st.session_state.logo_g, "date": d_inp.strftime("%d.%m.%Y"), "time": t_inp.strftime("%H-%M"), "selected_target": target }
+                    
+                    # --- ZEITFORMAT FIX ---
+                    # Format: 16:00 Uhr / 04 pm
+                    # Wir nutzen ein Dummy-Datum, um strftime für %I (12h) und %p (AM/PM) nutzen zu können
+                    dummy_dt = datetime.combine(date.today(), t_inp)
+                    time_str_de = t_inp.strftime("%H:%M Uhr")
+                    time_str_us = dummy_dt.strftime("%I %p").lower() # z.B. 04 pm
+                    final_time_str = f"{time_str_de} / {time_str_us}"
+
+                    st.session_state.game_meta = { 
+                        "home_name": hn, "home_logo": st.session_state.logo_h, 
+                        "guest_name": gn, "guest_logo": st.session_state.logo_g, 
+                        "date": d_inp.strftime("%d.%m.%Y"), 
+                        "time": final_time_str, # Hier die neue Zeit
+                        "selected_target": target 
+                    }
                     st.session_state.print_mode = False 
-                else: st.error("Fehler API."); st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
+                else: 
+                    st.error("Fehler API."); st.session_state.roster_df = pd.DataFrame(); st.session_state.team_stats = {}; st.session_state.game_meta = {} 
         elif st.session_state.roster_df is None or st.session_state.roster_df.empty: st.info("Bitte laden.")
         
         if st.session_state.roster_df is not None and not st.session_state.roster_df.empty: 
