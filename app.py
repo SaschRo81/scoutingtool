@@ -640,12 +640,12 @@ def render_scouting_page():
                     st.session_state.roster_df = df; st.session_state.team_stats = ts; st.session_state.current_tid = tid 
                     
                     # --- ZEITFORMAT FIX ---
-                    # Format: 16:00 Uhr / 04 pm
+                    # Format: 16:00 Uhr - 04 pm
                     # Wir nutzen ein Dummy-Datum, um strftime für %I (12h) und %p (AM/PM) nutzen zu können
                     dummy_dt = datetime.combine(date.today(), t_inp)
                     time_str_de = t_inp.strftime("%H:%M Uhr")
                     time_str_us = dummy_dt.strftime("%I %p").lower() # z.B. 04 pm
-                    final_time_str = f"{time_str_de} / {time_str_us}"
+                    final_time_str = f"{time_str_de} - {time_str_us}"
 
                     st.session_state.game_meta = { 
                         "home_name": hn, "home_logo": st.session_state.logo_h, 
@@ -694,8 +694,20 @@ def render_scouting_page():
                             for f in up: b64 = base64.b64encode(f.getvalue()).decode(); html += f"<div style='margin-bottom:20px'><img src='data:image/png;base64,{b64}' style='max-width:100%;max-height:900px;border:1px solid #ccc'></div>"
                         html += generate_custom_sections_html(eo, ed, ea); st.session_state.final_html = html
                         if HAS_PDFKIT:
-                            try:
-                                opts = {"page-size": "A4", "orientation": "Portrait", "margin-top": "5mm", "margin-right": "5mm", "margin-bottom": "5mm", "margin-left": "5mm", "encoding": "UTF-8", "zoom": "0.42", "load-error-handling": "ignore", "load-media-error-handling": "ignore", "javascript-delay": "1000"}
+    try:
+        opts = {
+            "page-size": "A4",
+            "orientation": "Portrait",
+            "margin-top": "10mm",
+            "margin-right": "10mm",
+            "margin-bottom": "10mm",
+            "margin-left": "10mm",
+            "encoding": "UTF-8",
+            "zoom": "1.0", # Wichtig: Auf 1.0 setzen für echte Größen
+            "no-outline": None,
+            "quiet": ""
+        }
+        
                                 st.session_state.pdf_bytes = pdfkit.from_string(f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", False, options=opts); st.session_state.print_mode = True; st.rerun()
                             except Exception as e: st.error(f"PDF Error: {e}"); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
                         else: st.warning("PDFKit fehlt."); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
