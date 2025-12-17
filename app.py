@@ -46,17 +46,39 @@ st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", pag
 def inject_custom_css():
     base_css = """
     <style>
+    /* Buttons */
     div.stButton > button {
         width: 100%; height: 3em; font-size: 16px; font-weight: bold; border-radius: 8px;
         box-shadow: 0px 2px 4px rgba(0,0,0,0.1); background-color: #ffffff !important; 
         color: #333333 !important; border: 1px solid #ddd; opacity: 1 !important; 
     }
     div.stButton > button:hover { transform: scale(1.01); border-color: #ff4b4b; color: #ff4b4b !important; }
+    
+    /* Title Container */
     .title-container {
         background-color: #ffffff; padding: 20px; border-radius: 15px; 
         box-shadow: 0px 4px 6px rgba(0,0,0,0.1); text-align: center; 
         margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto; 
         border: 1px solid #f0f0f0; opacity: 1 !important;
+    }
+
+    /* --- SPEZIAL-TRICK FÜR EINGABEFELDER IM FORMULAR --- */
+    /* 
+       Wir zielen auf das Formular [data-testid="stForm"].
+       Darin suchen wir Spalten [data-testid="column"].
+       :nth-of-type(2) bedeutet: Die 2. Spalte (also Rechts).
+       Darin färben wir den Input-Text rot.
+    */
+    [data-testid="stForm"] [data-testid="stHorizontalBlock"] [data-testid="column"]:nth-of-type(2) [data-testid="stTextInput"] input {
+        color: #d9534f !important;
+        -webkit-text-fill-color: #d9534f !important; /* Für Safari/Chrome */
+        font-weight: bold !important;
+    }
+    
+    /* Die linke Spalte (1) explizit Schwarz/Grau lassen */
+    [data-testid="stForm"] [data-testid="stHorizontalBlock"] [data-testid="column"]:nth-of-type(1) [data-testid="stTextInput"] input {
+        color: #333333 !important;
+        -webkit-text-fill-color: #333333 !important;
     }
     </style>
     """
