@@ -58,7 +58,12 @@ CSS_STYLES = """
     
     /* --- HEADER BEREICH --- */
     .report-header { text-align: center; border-bottom: 4px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-    .report-title { font-size: 38px; font-weight: bold; margin: 0 0 15px 0; color: #000; }
+    font-size: 48px;      /* <--- HIER DIE GRÖSSE ÄNDERN (z.B. auf 40px oder 50px) */
+    font-weight: bold; 
+    margin: 0 0 15px 0; 
+    color: #000; 
+    line-height: 1.2;     /* <--- WICHTIG: Damit die zwei Zeilen nicht ineinander kleben */
+}
     
     .matchup-container { display: flex; align-items: center; justify-content: center; gap: 40px; margin-top: 20px; }
     .team-logo-box { text-align: center; }
