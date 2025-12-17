@@ -695,17 +695,17 @@ def render_scouting_page():
                         html += generate_custom_sections_html(eo, ed, ea); st.session_state.final_html = html
                         if HAS_PDFKIT:
                             try:
-                        opts = {
-                        "page-size": "A4",
-                        "orientation": "Portrait",
-                        "margin-top": "10mm",
-                        "margin-right": "10mm",
-                        "margin-bottom": "10mm",
-                        "margin-left": "10mm",
-                        "encoding": "UTF-8",
-                        "zoom": "1.0", # Wichtig: Auf 1.0 setzen für echte Größen
-                        "no-outline": None,
-                        "quiet": ""
+                            opts = {
+                            "page-size": "A4",
+                            "orientation": "Portrait",
+                            "margin-top": "10mm",
+                            "margin-right": "10mm",
+                            "margin-bottom": "10mm",
+                            "margin-left": "10mm",
+                            "encoding": "UTF-8",
+                            "zoom": "1.0", # Wichtig: Auf 1.0 setzen für echte Größen
+                            "no-outline": None,
+                            "quiet": ""
                         }
         
                                 st.session_state.pdf_bytes = pdfkit.from_string(f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", False, options=opts); st.session_state.print_mode = True; st.rerun()
