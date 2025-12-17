@@ -8,7 +8,13 @@ def generate_header_html(meta):
     return f"""
 <div class="report-header">
     <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
-    <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']}</h1>
+    
+    <!-- HIER GEÄNDERT: <br> für Umbruch eingefügt -->
+    <h1 class="report-title">
+        Scouting Report | {meta['date']}<br>
+        <span style="font-size: 0.6em;">{meta['time']}</span>
+    </h1>
+
     <div class="matchup-container">
         <div class="team-logo-box">
             <img src="{meta['home_logo']}" class="team-logo-img">
