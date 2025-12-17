@@ -54,11 +54,11 @@ TEAMS_DB = {
 CSS_STYLES = """
 <style>
     /* Basis: Sehr groß, damit es nach dem Rauszoomen im PDF lesbar bleibt */
-    body { font-family: 'Arial', sans-serif; font-size: 18px; }
+    body { font-family: 'Arial', sans-serif; font-size: 16px; }
     
     /* --- HEADER BEREICH --- */
     .report-header { text-align: center; border-bottom: 4px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-    .report-title { font-size: 48px; font-weight: bold; margin: 0 0 15px 0; color: #000; }
+    .report-title { font-size: 38px; font-weight: bold; margin: 0 0 15px 0; color: #000; }
     
     .matchup-container { display: flex; align-items: center; justify-content: center; gap: 40px; margin-top: 20px; }
     .team-logo-box { text-align: center; }
@@ -68,14 +68,14 @@ CSS_STYLES = """
 
     /* --- TOP 3 BOXEN --- */
     .top3-container { display: flex; flex-direction: row; gap: 15px; margin-bottom: 30px; page-break-inside: avoid; }
-    .stat-box { flex: 1; border: 2px solid #999; }
+    .stat-box { flex: 1; border: 1px solid #999; }
     .top3-table { width: 100%; font-size: 18px; border-collapse: collapse; }
-    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 8px; border-bottom: 2px solid #999; font-weight: bold; font-size: 20px;}
+    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 8px; border-bottom: 2px solid #999; font-weight: bold; font-size: 18px;}
     .top3-table td { padding: 8px; border-bottom: 1px solid #ccc; vertical-align: middle; font-weight: bold;}
 
     /* --- SPIELER KARTE --- */
     .player-card { 
-        border: 2px solid #999; margin-bottom: 25px; 
+        border: 1px solid #999; margin-bottom: 25px; 
         background-color: white; page-break-inside: avoid; 
         font-family: Arial, sans-serif;
     }
