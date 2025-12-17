@@ -8,7 +8,7 @@ def generate_header_html(meta):
     return f"""
 <div class="report-header">
     <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
-    <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']} Uhr</h1>
+    <h1 class="report-title">Scouting Report | {meta['date']} - {meta['time']}</h1>
     <div class="matchup-container">
         <div class="team-logo-box">
             <img src="{meta['home_logo']}" class="team-logo-img">
@@ -37,24 +37,30 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     blocks = df.sort_values(by="BS", ascending=False).head(3)
     fouls = df.sort_values(by="PF", ascending=False).head(3)
 
-    FONT_SIZE = "20px"
+    FONT_SIZE = "14px" # Etwas kleiner für die Top 3, damit es sauberer wirkt
 
     def build_box(d, headers, keys, bolds, color, title):
         h = f"<div class='stat-box'>"
-        h += f"<div class='stat-title' style='border-top: 4px solid {color}; color: {color}; font-size: 22px; padding: 5px;'>{title}</div>"
-        h += f"<table class='top3-table' style='width:100%; font-size: {FONT_SIZE}; border-collapse: collapse;'>"
+        h += f"<div class='stat-title' style='border-top: 4px solid {color}; color: {color}; font-size: 18px; padding: 5px; font-weight:bold;'>{title}</div>"
+        h += f"<table class='top3-table'>"
         h += "<tr>"
         for head in headers: 
-            h += f"<th style='padding:4px; background-color:#f2f2f2; border-bottom:1px solid #ccc;'>{head}</th>"
+            h += f"<th>{head}</th>"
         h += "</tr>"
         for _, r in d.iterrows():
             h += "<tr>"
             for i, k in enumerate(keys):
                 val = r[k]
-                style = f"padding:4px; border-bottom:1px solid #eee; font-size: {FONT_SIZE};"
-                if i in bolds: style += " font-weight:bold;"
+                
+                # Ausrichtungs-Logik: Namen Links, Zahlen Zentriert
+                align = "left" if k == "NAME_FULL" else "center"
+                # Name kürzen (nur Nachname oder kurz)
                 if k == "NAME_FULL": val = val.split(" ")[-1]
                 elif isinstance(val, float): val = f"{val:.1f}"
+                
+                style = f"text-align:{align}; font-size: {FONT_SIZE};"
+                if i in bolds: style += " font-weight:bold;"
+                
                 h += f"<td style='{style}'>{val}</td>"
             h += "</tr>"
         h += "</table></div>"
@@ -78,10 +84,10 @@ def generate_top3_html(df: pd.DataFrame) -> str:
 
     c_green = "#5c9c30"; c_gray = "#999999"; c_red = "#d9534f"
     legend_html = f"""
-<div style="display: flex; gap: 30px; margin-top: 5px; margin-bottom: 20px; font-size: 18px; color: #333;">
-    <div style="display: flex; align-items: center;"><div style="width: 20px; height: 20px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div><strong>Shooter</strong></div>
-    <div style="display: flex; align-items: center;"><div style="width: 20px; height: 20px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>Normal</div>
-    <div style="display: flex; align-items: center;"><div style="width: 20px; height: 20px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>Non-Shooter</div>
+<div style="display: flex; gap: 30px; margin-top: 5px; margin-bottom: 20px; font-size: 14px; color: #333;">
+    <div style="display: flex; align-items: center;"><div style="width: 15px; height: 15px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div><strong>Shooter</strong></div>
+    <div style="display: flex; align-items: center;"><div style="width: 15px; height: 15px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>Normal</div>
+    <div style="display: flex; align-items: center;"><div style="width: 15px; height: 15px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>Non-Shooter</div>
 </div>"""
     return html + legend_html
 
@@ -93,6 +99,10 @@ def generate_card_html(row, metadata, notes, color_code):
         height_str = f"{h:.2f}".replace(".", ",")
     except: height_str = "-"
     pos_str = clean_pos(metadata["pos"])
+    
+    # CSS Klassen steuern jetzt das Layout (siehe config.py)
+    # Die Notizen (l1-l4, r1-r4) sind in der Tabelle unten.
+    
     return f"""
 <div class="player-card">
     <div class="card-header" style="background-color: {color_code};"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
@@ -104,10 +114,12 @@ def generate_card_html(row, metadata, notes, color_code):
                     <tr class="bg-gray"><th rowspan="2">Min</th><th rowspan="2">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr>
                     <tr class="bg-gray"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>
                     <tr class="font-bold"><td>{row['MIN_DISPLAY']}</td><td>{row['PPG']}</td><td>{row['2M']}</td><td>{row['2A']}</td><td>{row['2PCT']}</td><td>{row['3M']}</td><td>{row['3A']}</td><td>{row['3PCT']}</td><td>{row['FTM']}</td><td>{row['FTA']}</td><td>{row['FTPCT']}</td><td>{row['DR']}</td><td>{row['OR']}</td><td>{row['TOT']}</td><td>{row['AS']}</td><td>{row['TO']}</td><td>{row['ST']}</td><td>{row['PF']}</td></tr>
-                    <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l1','')}</td><td colspan="10" class="note-right">{notes.get('r1','')}</td></tr>
-                    <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l2','')}</td><td colspan="10" class="note-right">{notes.get('r2','')}</td></tr>
-                    <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l3','')}</td><td colspan="10" class="note-right">{notes.get('r3','')}</td></tr>
-                    <tr class="note-row"><td colspan="6" class="note-left">{notes.get('l4','')}</td><td colspan="10" class="note-right">{notes.get('r4','')}</td></tr>
+                    
+                    <!-- HIER DIE NOTIZ-ZEILEN -->
+                    <tr class="note-row"><td colspan="6">{notes.get('l1','')}</td><td colspan="12" class="note-right">{notes.get('r1','')}</td></tr>
+                    <tr class="note-row"><td colspan="6">{notes.get('l2','')}</td><td colspan="12" class="note-right">{notes.get('r2','')}</td></tr>
+                    <tr class="note-row"><td colspan="6">{notes.get('l3','')}</td><td colspan="12" class="note-right">{notes.get('r3','')}</td></tr>
+                    <tr class="note-row"><td colspan="6">{notes.get('l4','')}</td><td colspan="12" class="note-right">{notes.get('r4','')}</td></tr>
                 </table>
             </td>
         </tr></table>
@@ -119,7 +131,7 @@ def generate_team_stats_html(ts):
     def calc_pct(m, a, api): return api if api > 0 else (m/a*100 if a>0 else 0)
     return f"""
 <div class="team-stats-container"><h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG)</h2>
-    <table class="stats-table" style="font-size: 20px;">
+    <table class="stats-table" style="font-size: 16px;">
         <tr class="bg-gray font-bold"><th rowspan="2" style="padding: 4px;">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr>
         <tr class="bg-gray font-bold"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>
         <tr class="font-bold" style="background-color: #f9f9f9;"><td style="padding: 8px;">{ts['ppg']:.1f}</td><td>{ts['2m']:.1f}</td><td>{ts['2a']:.1f}</td><td>{calc_pct(ts['2m'],ts['2a'],ts['2pct']):.1f}</td><td>{ts['3m']:.1f}</td><td>{ts['3a']:.1f}</td><td>{calc_pct(ts['3m'],ts['3a'],ts['3pct']):.1f}</td><td>{ts['ftm']:.1f}</td><td>{ts['fta']:.1f}</td><td>{calc_pct(ts['ftm'],ts['fta'],ts['ftpct']):.1f}</td><td>{ts['dr']:.1f}</td><td>{ts['or']:.1f}</td><td>{ts['tot']:.1f}</td><td>{ts['as']:.1f}</td><td>{ts['to']:.1f}</td><td>{ts['st']:.1f}</td><td>{ts['pf']:.1f}</td></tr>
@@ -130,11 +142,11 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
     html = "<div style='page-break-before: always;'>"
     def make_section(title, df):
         if df.empty: return ""
-        sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-size: 26px;'>{title}</h3>"
+        sh = f"<h3 style='border-bottom: 2px solid #333; margin-bottom:10px; font-size: 20px;'>{title}</h3>"
         sh += "<table style='width:100%; border-collapse:collapse; margin-bottom:20px;'>"
         for _, r in df.iterrows():
             c1 = r.get(df.columns[0], ""); c2 = r.get(df.columns[1], "")
-            sh += f"<tr><td style='width:30%; border:1px solid #ccc; padding:8px; font-weight:bold; vertical-align:top; font-size:22px;'>{c1}</td><td style='border:1px solid #ccc; padding:8px; vertical-align:top; font-size:22px;'>{c2}</td></tr>"
+            sh += f"<tr><td style='width:25%; border:1px solid #ccc; padding:6px; font-weight:bold; vertical-align:top; font-size:14px; background:#f9f9f9;'>{c1}</td><td style='border:1px solid #ccc; padding:6px; vertical-align:top; font-size:14px;'>{c2}</td></tr>"
         return sh + "</table>"
     html += make_section("Key Facts Offense", offense_df)
     html += make_section("Key Facts Defense", defense_df)
@@ -142,30 +154,19 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
     return html + "</div>"
 
 def generate_comparison_html(h_stats_in, g_stats_in, h_name, g_name):
-    """Erstellt eine HTML-Vergleichstabelle für zwei Teams."""
     if not h_stats_in or not g_stats_in: return "Keine Daten für Vergleich verfügbar."
-    
-    # Sicherheitskopien erstellen, damit die Originaldaten nicht verändert werden
-    h_stats = copy.deepcopy(h_stats_in)
-    g_stats = copy.deepcopy(g_stats_in)
-
+    h_stats = copy.deepcopy(h_stats_in); g_stats = copy.deepcopy(g_stats_in)
     def get_pct(stats, cat):
         if stats.get(f'{cat}pct', 0) > 0: return stats[f'{cat}pct']
         m = stats.get(f'{cat}m', 0); a = stats.get(f'{cat}a', 0)
         return (m / a * 100) if a > 0 else 0.0
-
     metrics = [("Points Per Game", "ppg", False, False), ("Field Goal %", "FG%", True, False), ("3-Point %", "3pct", True, False), ("Free Throw %", "ftpct", True, False), ("Rebounds (Total)", "tot", False, False), ("Defensive Rebs", "dr", False, False), ("Offensive Rebs", "or", False, False), ("Assists", "as", False, False), ("Turnovers", "to", False, True), ("Steals", "st", False, False), ("Blocks", "bs", False, False), ("Fouls", "pf", False, True)]
-
     for stats in [h_stats, g_stats]:
-        fg_m = stats.get('2m', 0) + stats.get('3m', 0)
-        fg_a = stats.get('2a', 0) + stats.get('3a', 0)
+        fg_m = stats.get('2m', 0) + stats.get('3m', 0); fg_a = stats.get('2a', 0) + stats.get('3a', 0)
         stats['FG%'] = (fg_m / fg_a * 100) if fg_a > 0 else 0.0
-        stats['3pct'] = get_pct(stats, '3')
-        stats['ftpct'] = get_pct(stats, 'ft')
+        stats['3pct'] = get_pct(stats, '3'); stats['ftpct'] = get_pct(stats, 'ft')
         if 'bs' not in stats: stats['bs'] = 0.0
-
     html = f"""<div style="margin: 20px 0; font-family: sans-serif;"><h3 style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 0;">Head-to-Head (Saison-Schnitt)</h3><table style="width: 100%; border-collapse: collapse; font-size: 16px;"><tr style="background-color: #333; color: white;"><th style="padding: 12px; text-align: right; width: 35%;">{h_name}</th><th style="padding: 12px; text-align: center; width: 30%; background-color: #555;">Statistik</th><th style="padding: 12px; text-align: left; width: 35%;">{g_name}</th></tr>"""
-
     for label, key, is_pct, lower_better in metrics:
         val_h = h_stats.get(key, 0.0); val_g = g_stats.get(key, 0.0)
         fmt_h = f"{val_h:.1f}" + ("%" if is_pct else ""); fmt_g = f"{val_g:.1f}" + ("%" if is_pct else "")
