@@ -153,10 +153,3 @@ CSS_STYLES = """
     }
 </style>
 """
-Use Arrow Up and Arrow Down to select a turn, Enter to jump to it, and Escape to return to the chat.
-Start typing a prompt
-1
-
-
-65536
-0,95
