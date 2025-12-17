@@ -127,14 +127,46 @@ def image_to_base64_str(img_bytes):
     try: return f"data:image/png;base64,{base64.b64encode(img_bytes).decode()}"
     except: return ""
 
+# --- DEFAULT DATA FOR TABLES ---
+DEFAULT_OFFENSE = [
+    {"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"},
+    {"Fokus": "Spacing", "Beschreibung": "swing or skip the ball to get it inside"},
+    {"Fokus": "Rules", "Beschreibung": "Stick to our offense rules"},
+    {"Fokus": "Automatics", "Beschreibung": "use cuts and shifts to get movement on court"},
+    {"Fokus": "Share", "Beschreibung": "the ball / always look for an extra pass"},
+    {"Fokus": "Set Offense", "Beschreibung": "look inside a lot"},
+    {"Fokus": "Pick´n Roll", "Beschreibung": "watch out for the half rol against the hetch"},
+    {"Fokus": "Pace", "Beschreibung": "Execution over speed, take care of the ball"}
+]
+
+DEFAULT_DEFENSE = [
+    {"Fokus": "Rebound", "Beschreibung": "box out!"},
+    {"Fokus": "Transition", "Beschreibung": "Slow the ball down! Pick up the ball early!"},
+    {"Fokus": "Communication", "Beschreibung": "Talk on positioning, helpside & on screens"},
+    {"Fokus": "Positioning", "Beschreibung": "close the middle on close outs and drives"},
+    {"Fokus": "Pick´n Roll", "Beschreibung": "red (yellow, last 8 sec. from shot clock)"},
+    {"Fokus": "DHO", "Beschreibung": "aggressive switch - same size / gap - small and big"},
+    {"Fokus": "Offball screens", "Beschreibung": "yellow"}
+]
+
+DEFAULT_ABOUT = [
+    {"Fokus": "Be ready", "Beschreibung": "for wild caotic / a lot of 1-1 and shooting"},
+    {"Fokus": "Stay ready", "Beschreibung": "no matter what happens Don’t be bothered by calls/no calls"},
+    {"Fokus": "No matter what", "Beschreibung": "the score is, we always give 100%."},
+    {"Fokus": "Together", "Beschreibung": "Fight for & trust in each other!"},
+    {"Fokus": "Take care", "Beschreibung": "of the ball no easy turnovers to prevent easy fastbreaks!"},
+    {"Fokus": "Halfcourt", "Beschreibung": "Take responsibility! Stop them as a team!"},
+    {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"}
+]
+
 # --- SESSION STATE ---
 for key, default in [
     ("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None),
     ("roster_df", None), ("team_stats", None), ("game_meta", {}),
     ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}),
-    ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks"}])),
-    ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
-    ("facts_about", pd.DataFrame([{"Fokus": "Together", "Beschreibung": "Fight!"}])),
+    ("facts_offense", pd.DataFrame(DEFAULT_OFFENSE)),
+    ("facts_defense", pd.DataFrame(DEFAULT_DEFENSE)),
+    ("facts_about", pd.DataFrame(DEFAULT_ABOUT)),
     ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None),
     ("stats_team_id", None)
 ]:
