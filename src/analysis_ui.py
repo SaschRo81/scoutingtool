@@ -328,10 +328,8 @@ def generate_complex_ai_prompt(box):
     if not box: return "Keine Daten."
     h_data = box.get("homeTeam", {}); g_data = box.get("guestTeam", {}); h_name = get_team_name(h_data, "Heim"); g_name = get_team_name(g_data, "Gast"); res = box.get("result", {}); pbp_summary = analyze_game_flow(box.get("actions", []), h_name, g_name)
     
-    # Ermittlung Gegner & Spielort-Typ
     is_home_jena = "Jena" in h_name or "VIMODROM" in h_name
     is_guest_jena = "Jena" in g_name or "VIMODROM" in g_name
-    
     opponent = g_name if is_home_jena else (h_name if is_guest_jena else f"{h_name} vs {g_name}")
     location = "Heimspiel" if is_home_jena else ("Auswärtsspiel" if is_guest_jena else "Neutral")
     
@@ -429,9 +427,9 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
     c1, c2 = st.columns([2, 1])
     
     with c1:
-        st.markdown("#### Top 5 Spieler (nach PPG)") # Header angepasst
+        st.markdown("#### Top 5 Spieler (nach PPG)") 
         if df_roster is not None and not df_roster.empty:
-            top5 = df_roster.sort_values(by="PPG", ascending=False).head(5) # .head(5) statt 4
+            top5 = df_roster.sort_values(by="PPG", ascending=False).head(5) 
             for _, row in top5.iterrows():
                 with st.container(border=True):
                     col_img, col_stats = st.columns([1, 3])
@@ -455,11 +453,33 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
     with c2:
         st.markdown("#### Aktueller Status")
         if rank_info:
-            r = rank_info['rank']; w = rank_info['wins']; l = rank_info['losses']; pts = rank_info['points']
+            r = rank_info['rank']
+            games = rank_info['totalGames']
+            wins = rank_info['totalVictories']
+            losses = rank_info['totalLosses']
+            
+            # Last 10 String bauen
+            l10_wins = rank_info.get('last10Victories', 0)
+            l10_losses = rank_info.get('last10Losses', 0)
+            last10_str = f"{l10_wins}-{l10_losses}" if (l10_wins + l10_losses) > 0 else "-"
+
             rank_color = "#28a745" if r <= 8 else "#6c757d"
             if r >= 11: rank_color = "#dc3545"
-            st.markdown(f"""<div style="background-color: white; border: 1px solid #ddd; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);"><div style="font-size: 14px; color: #666; margin-bottom: 5px;">Tabellenplatz</div><div style="font-size: 48px; font-weight: bold; color: {rank_color}; line-height: 1;">{r}.</div><div style="margin-top: 10px; font-size: 16px; font-weight: bold;">{w} Siege - {l} Niederlagen</div><div style="font-size: 12px; color: #888;">{pts} Punkte</div></div>""", unsafe_allow_html=True)
+            
+            st.markdown(f"""
+            <div style="background-color: white; border: 1px solid #ddd; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <div style="font-size: 14px; color: #666; margin-bottom: 5px;">Tabellenplatz</div>
+                <div style="font-size: 48px; font-weight: bold; color: {rank_color}; line-height: 1;">{r}.</div>
+                <div style="margin-top: 10px; font-size: 16px; font-weight: bold;">
+                    Bilanz: {wins}-{losses}
+                </div>
+                <div style="font-size: 12px; color: #888; margin-top: 5px;">
+                    Spiele: {games} | Last 10: {last10_str}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         else: st.info("Tabellenplatz konnte nicht geladen werden.")
+        
         st.markdown("#### Formkurve (Letzte 5)")
         if last_games:
             played_games = [g for g in last_games if g.get('has_result')]
