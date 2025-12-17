@@ -49,21 +49,15 @@ TEAMS_DB = {
     159: {"name": "Medikamente per Klick Bamberg Baskets", "staffel": "Süd"},
 }
 
-# Zentrales CSS - OPTIMIERT FÜR PDF
 # Zentrales CSS - EXTREM VERGRÖßERT FÜR DRUCK
 CSS_STYLES = """
 <style>
     /* Basis: Sehr groß, damit es nach dem Rauszoomen im PDF lesbar bleibt */
-    body { font-family: 'Arial', sans-serif; font-size: 16px; }
+    body { font-family: 'Arial', sans-serif; font-size: 18px; }
     
     /* --- HEADER BEREICH --- */
     .report-header { text-align: center; border-bottom: 4px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-    font-size: 48px;      /* <--- HIER DIE GRÖSSE ÄNDERN (z.B. auf 40px oder 50px) */
-    font-weight: bold; 
-    margin: 0 0 15px 0; 
-    color: #000; 
-    line-height: 1.2;     /* <--- WICHTIG: Damit die zwei Zeilen nicht ineinander kleben */
-}
+    .report-title { font-size: 48px; font-weight: bold; margin: 0 0 15px 0; color: #000; }
     
     .matchup-container { display: flex; align-items: center; justify-content: center; gap: 40px; margin-top: 20px; }
     .team-logo-box { text-align: center; }
@@ -73,14 +67,14 @@ CSS_STYLES = """
 
     /* --- TOP 3 BOXEN --- */
     .top3-container { display: flex; flex-direction: row; gap: 15px; margin-bottom: 30px; page-break-inside: avoid; }
-    .stat-box { flex: 1; border: 1px solid #999; }
+    .stat-box { flex: 1; border: 2px solid #999; }
     .top3-table { width: 100%; font-size: 18px; border-collapse: collapse; }
-    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 8px; border-bottom: 2px solid #999; font-weight: bold; font-size: 18px;}
+    .top3-table th { background-color: #f2f2f2; text-align: center; padding: 8px; border-bottom: 2px solid #999; font-weight: bold; font-size: 20px;}
     .top3-table td { padding: 8px; border-bottom: 1px solid #ccc; vertical-align: middle; font-weight: bold;}
 
     /* --- SPIELER KARTE --- */
     .player-card { 
-        border: 1px solid #999; margin-bottom: 25px; 
+        border: 2px solid #999; margin-bottom: 25px; 
         background-color: white; page-break-inside: avoid; 
         font-family: Arial, sans-serif;
     }
@@ -116,7 +110,7 @@ CSS_STYLES = """
     .layout-stats-cell { vertical-align: top; padding: 0; width: auto; }
     
     /* STATS TABELLE */
-    .stats-table { width: 100%; border-collapse: collapse; font-size: 18px; text-align: center; color: black; }
+    .stats-table { width: 100%; border-collapse: collapse; font-size: 20px; text-align: center; color: black; }
     
     .stats-table th, .stats-table td { 
         border: 1px solid #999; 
@@ -144,12 +138,11 @@ CSS_STYLES = """
     .note-row td:first-child { border-left: none; }
     .note-row td:last-child { border-right: none; }
 
-    /* HIER GEÄNDERT: Spezifischer Selektor + !important für Rot */
-    .note-row td.note-right { 
-        color: #d9534f !important; 
-        font-weight: bold !important; 
-        -webkit-print-color-adjust: exact; 
+    /* Die Farbe wird jetzt per Inline-Style erzwungen (src/html_gen.py), 
+       aber der Rahmen bleibt hier definiert */
+    .note-right { 
         border-left: 3px solid #999 !important; 
+        -webkit-print-color-adjust: exact; 
     }
 
     .team-stats-container { margin-top: 30px; page-break-inside: avoid; }
@@ -160,3 +153,10 @@ CSS_STYLES = """
     }
 </style>
 """
+Use Arrow Up and Arrow Down to select a turn, Enter to jump to it, and Escape to return to the chat.
+Start typing a prompt
+1
+
+
+65536
+0,95
