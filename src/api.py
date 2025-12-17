@@ -97,27 +97,19 @@ def fetch_team_data(team_id, season_id):
         if r_team.status_code == 200:
             data = r_team.json()
             td = None
-            
-            # --- FIX: Suche nach der korrekten Team-ID im Array ---
             if isinstance(data, list):
-                # Wir suchen das Objekt, dessen ID oder seasonTeamId mit der angefragten übereinstimmt
                 search_id = str(team_id)
                 for item in data:
-                    # IDs prüfen (verschiedene Felder möglich)
                     item_tid = str(item.get("teamId", ""))
                     item_stid = str(item.get("seasonTeamId", ""))
                     item_obj_id = str(item.get("seasonTeam", {}).get("id", ""))
-                    
                     if search_id in [item_tid, item_stid, item_obj_id]:
                         td = item
                         break
-                
-                # Fallback: Wenn wir nichts gefunden haben, aber die Liste nur 1 Element hat, nehmen wir das
                 if td is None and len(data) == 1:
                     td = data[0]
             elif isinstance(data, dict):
                 td = data
-            # -----------------------------------------------------
 
             if isinstance(td, dict) and td.get("gamesPlayed"):
                 gp = td.get("gamesPlayed") or 1
@@ -358,40 +350,32 @@ def fetch_season_games(season_id):
 
 @st.cache_data(ttl=1800)
 def fetch_team_rank(team_id, season_id):
-    """Holt den aktuellen Tabellenplatz und die Bilanz."""
-    base_url = get_base_url(team_id)
-    # Versuche gängige Endpunkte für Tabellen
-    urls = [
-        f"{base_url}/standings?seasonId={season_id}",
-        f"{base_url}/statistics/standings?seasonId={season_id}"
-    ]
-    
-    for url in urls:
+    # Try both servers to be safe
+    domains = ["api-s.dbbl.scb.world", "api-n.dbbl.scb.world"]
+    search_id = str(team_id)
+
+    for domain in domains:
+        url = f"https://{domain}/standings?seasonId={season_id}"
         try:
             r = requests.get(url, headers=API_HEADERS, timeout=3)
             if r.status_code == 200:
                 data = r.json()
-                # Manchmal ist die Liste direkt data, manchmal data['items']
                 items = data if isinstance(data, list) else data.get("items", [])
-                
-                # Sortieren sicherstellen (falls API nicht sortiert liefert)
-                # Wir gehen davon aus, dass die API eine Liste von Teams liefert.
-                # Wir suchen unser Team.
-                
-                search_id = str(team_id)
+
                 for idx, entry in enumerate(items):
                     # IDs finden
                     tid = str(entry.get("team", {}).get("id", ""))
                     if not tid: tid = str(entry.get("teamId", ""))
-                    
+                    if not tid: tid = str(entry.get("seasonTeamId", ""))
+
                     if tid == search_id:
-                        # Rang gefunden (idx + 1, da 0-basiert)
                         rank = entry.get("position") or entry.get("rank") or (idx + 1)
-                        wins = entry.get("wins", 0)
-                        losses = entry.get("losses", 0)
-                        points = entry.get("points", 0)
-                        return {"rank": rank, "wins": wins, "losses": losses, "points": points}
+                        return {
+                            "rank": rank,
+                            "wins": entry.get("wins", 0),
+                            "losses": entry.get("losses", 0),
+                            "points": entry.get("points", 0)
+                        }
         except:
-            pass
-            
+            continue
     return None
