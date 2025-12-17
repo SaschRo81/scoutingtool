@@ -5,6 +5,7 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
+from src.api import fetch_team_rank  # Wichtig: Import für die Tabellenplatz-Funktion
 
 # --- KONSTANTEN & HELPERS ---
 
@@ -339,37 +340,21 @@ def run_openai_generation(api_key, prompt):
         return response.choices[0].message.content
     except Exception as e: return f"Fehler: {str(e)}"
 
-# --- TEIL VON src/analysis_ui.py ---
-# (Stelle sicher, dass fetch_team_rank oben importiert ist, falls du Imports explizit machst, 
-# oder lade es über src.api)
-
-from src.api import fetch_team_rank # <-- Falls nötig oben importieren oder in src/api.py sicherstellen
-
 def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
-    # Rank holen
-    from src.config import CURRENT_SEASON_ID # Sicherstellen, dass die ID da ist
-    rank_info = fetch_team_rank(team_id, CURRENT_SEASON_ID)
+    from src.config import SEASON_ID  # FIX: Hier stand vorher CURRENT_SEASON_ID
+    rank_info = fetch_team_rank(team_id, SEASON_ID)
 
     st.subheader(f"Analyse: {team_name}")
-    
-    # Layout Spalten
     c1, c2 = st.columns([2, 1])
     
     with c1:
         st.markdown("#### Top 4 Spieler (nach PPG)")
         if df_roster is not None and not df_roster.empty:
-            # Sortieren
             top4 = df_roster.sort_values(by="PPG", ascending=False).head(4)
-            
             for _, row in top4.iterrows():
                 with st.container(border=True):
                     col_img, col_stats = st.columns([1, 3])
-                    
-                    # Metadaten holen
-                    age = row.get('AGE', '-')
-                    nat = row.get('NATIONALITY', '-')
-                    height = row.get('HEIGHT_ROSTER', '-') 
-                    img_url = None
+                    age = row.get('AGE', '-'); nat = row.get('NATIONALITY', '-'); height = row.get('HEIGHT_ROSTER', '-'); img_url = None
                     if metadata_callback:
                         meta = metadata_callback(row["PLAYER_ID"])
                         if meta:
@@ -377,188 +362,74 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
                             if nat in ["-", ""]: nat = meta.get("nationality", "-")
                             if height in ["-", ""]: height = meta.get("height", "-")
                             img_url = meta.get("img")
-                    
                     with col_img:
-                        if img_url:
-                            st.image(img_url, width=110)
-                        else:
-                            st.markdown(f"<div style='font-size:40px; text-align:center;'>👤</div>", unsafe_allow_html=True)
-
+                        if img_url: st.image(img_url, width=110)
+                        else: st.markdown(f"<div style='font-size:40px; text-align:center;'>👤</div>", unsafe_allow_html=True)
                     with col_stats:
                         st.markdown(f"**#{row['NR']} {row['NAME_FULL']}** <span style='color:gray; font-size:0.9em;'>({age} J | {nat} | {height})</span>", unsafe_allow_html=True)
-                        
-                        # Neue Tabellen-Ansicht für Stats
-                        stats_html = f"""
-                        <table style="width:100%; text-align:center; border-collapse: collapse; font-size: 14px;">
-                            <tr style="background-color: #f0f0f0; border-bottom: 1px solid #ddd; color: #555;">
-                                <th style="padding: 4px;">PPG</th>
-                                <th style="padding: 4px;">FG%</th>
-                                <th style="padding: 4px;">3P%</th>
-                                <th style="padding: 4px;">REB</th>
-                                <th style="padding: 4px;">AST</th>
-                            </tr>
-                            <tr style="font-weight: bold;">
-                                <td style="padding: 4px; color: #333;">{row['PPG']}</td>
-                                <td style="padding: 4px;">{row['FG%']}%</td>
-                                <td style="padding: 4px;">{row['3PCT']}%</td>
-                                <td style="padding: 4px;">{row['TOT']}</td>
-                                <td style="padding: 4px;">{row['AS']}</td>
-                            </tr>
-                        </table>
-                        """
+                        stats_html = f"""<table style="width:100%; text-align:center; border-collapse: collapse; font-size: 14px;"><tr style="background-color: #f0f0f0; border-bottom: 1px solid #ddd; color: #555;"><th style="padding: 4px;">PPG</th><th style="padding: 4px;">FG%</th><th style="padding: 4px;">3P%</th><th style="padding: 4px;">REB</th><th style="padding: 4px;">AST</th></tr><tr style="font-weight: bold;"><td style="padding: 4px; color: #333;">{row['PPG']}</td><td style="padding: 4px;">{row['FG%']}%</td><td style="padding: 4px;">{row['3PCT']}%</td><td style="padding: 4px;">{row['TOT']}</td><td style="padding: 4px;">{row['AS']}</td></tr></table>"""
                         st.markdown(stats_html, unsafe_allow_html=True)
-        else:
-            st.warning("Keine Kaderdaten verfügbar.")
+        else: st.warning("Keine Kaderdaten verfügbar.")
 
     with c2:
-        # --- TEIL 1: TABELLENPLATZ ---
         st.markdown("#### Aktueller Status")
         if rank_info:
-            r = rank_info['rank']
-            w = rank_info['wins']
-            l = rank_info['losses']
-            pts = rank_info['points']
-            
-            # Farbe je nach Platzierung (Top 8 Playoff grün, unten rot)
+            r = rank_info['rank']; w = rank_info['wins']; l = rank_info['losses']; pts = rank_info['points']
             rank_color = "#28a745" if r <= 8 else "#6c757d"
             if r >= 11: rank_color = "#dc3545"
-
-            st.markdown(f"""
-            <div style="background-color: white; border: 1px solid #ddd; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                <div style="font-size: 14px; color: #666; margin-bottom: 5px;">Tabellenplatz</div>
-                <div style="font-size: 48px; font-weight: bold; color: {rank_color}; line-height: 1;">{r}.</div>
-                <div style="margin-top: 10px; font-size: 16px; font-weight: bold;">
-                    {w} Siege - {l} Niederlagen
-                </div>
-                <div style="font-size: 12px; color: #888;">{pts} Punkte</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.info("Tabellenplatz konnte nicht geladen werden.")
-
-        # --- TEIL 2: FORMKURVE ---
+            st.markdown(f"""<div style="background-color: white; border: 1px solid #ddd; border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);"><div style="font-size: 14px; color: #666; margin-bottom: 5px;">Tabellenplatz</div><div style="font-size: 48px; font-weight: bold; color: {rank_color}; line-height: 1;">{r}.</div><div style="margin-top: 10px; font-size: 16px; font-weight: bold;">{w} Siege - {l} Niederlagen</div><div style="font-size: 12px; color: #888;">{pts} Punkte</div></div>""", unsafe_allow_html=True)
+        else: st.info("Tabellenplatz konnte nicht geladen werden.")
         st.markdown("#### Formkurve (Letzte 5)")
         if last_games:
             played_games = [g for g in last_games if g.get('has_result')]
             def parse_date(d_str):
                 try: return datetime.strptime(d_str, "%d.%m.%Y %H:%M")
                 except: return datetime.min
-            
-            # Sortiere nach Datum absteigend, nimm die letzten 5
             games_sorted = sorted(played_games, key=lambda x: parse_date(x['date']), reverse=True)[:5]
-            
             if games_sorted:
-                # Wir drehen die Liste um, damit links das älteste der 5 und rechts das aktuellste ist (klassische Lesart) 
-                # ODER wir lassen es so: Links = Neuestes. Meistens ist Links = Neuestes bei "Last 5 Games".
-                # Ich lasse es Links = Neuestes (Matchday -1).
-                
                 cols_form = st.columns(5)
                 for idx, g in enumerate(games_sorted):
-                    h_score = g.get('home_score', 0)
-                    g_score = g.get('guest_score', 0)
-                    is_home = (g.get('homeTeamId') == str(team_id))
-                    
-                    # Win/Loss Logik
-                    win = False
-                    if is_home and h_score > g_score: win = True
-                    elif not is_home and g_score > h_score: win = True
-                    
-                    bg_color = "#28a745" if win else "#dc3545" 
-                    char = "W" if win else "L"
-                    score_text = f"{g['home_score']}:{g['guest_score']}"
-                    opp_name = g['guest'] if is_home else g['home']
-                    # Kurzname Gegner (erste 3 Buchstaben)
-                    opp_short = opp_name[:3].upper()
-                    loc_char = "vs" if is_home else "@"
-
+                    h_score = g.get('home_score', 0); g_score = g.get('guest_score', 0); is_home = (g.get('homeTeamId') == str(team_id))
+                    win = (is_home and h_score > g_score) or (not is_home and g_score > h_score)
+                    bg_color = "#28a745" if win else "#dc3545"; char = "W" if win else "L"
+                    score_text = f"{g['home_score']}:{g['guest_score']}"; opp_name = g['guest'] if is_home else g['home']
+                    opp_short = opp_name[:3].upper(); loc_char = "vs" if is_home else "@"
                     tooltip_text = f"{g['date'].split(' ')[0]} | {loc_char} {opp_name} ({score_text})"
-                    
                     with cols_form[idx]:
-                        st.markdown(f"""
-                        <div style='background-color:{bg_color}; color:white; text-align:center; padding:5px 0; border-radius:5px; font-weight:bold; font-size:14px; margin-bottom:2px;' title='{tooltip_text}'>
-                            {char}
-                        </div>
-                        <div style='text-align:center; font-size:10px; color:#555;'>
-                            {loc_char} {opp_short}
-                        </div>
-                        """, unsafe_allow_html=True)
-            else: 
-                st.info("Keine gespielten Spiele.")
-        else: 
-            st.info("Keine Spiele.")
+                        st.markdown(f"""<div style='background-color:{bg_color}; color:white; text-align:center; padding:5px 0; border-radius:5px; font-weight:bold; font-size:14px; margin-bottom:2px;' title='{tooltip_text}'>{char}</div><div style='text-align:center; font-size:10px; color:#555;'>{loc_char} {opp_short}</div>""", unsafe_allow_html=True)
+            else: st.info("Keine gespielten Spiele.")
+        else: st.info("Keine Spiele.")
 
 def render_live_view(box):
-    """Zeigt Live Stats und PBP nebeneinander für Mobile optimiert."""
     if not box: return
-
-    h_name = get_team_name(box.get("homeTeam", {}), "Heim")
-    g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-    res = box.get("result", {})
-    s_h = res.get("homeTeamFinalScore", 0)
-    s_g = res.get("guestTeamFinalScore", 0)
-    actions = box.get("actions", [])
+    h_name = get_team_name(box.get("homeTeam", {}), "Heim"); g_name = get_team_name(box.get("guestTeam", {}), "Gast"); res = box.get("result", {})
+    s_h = res.get("homeTeamFinalScore", 0); s_g = res.get("guestTeamFinalScore", 0); actions = box.get("actions", [])
     period = res.get("period") or box.get("period", 1)
-    
     last_h_live = 0; last_g_live = 0; found_score = False
-
     if actions:
         for act in reversed(actions):
             if act.get("homeTeamPoints") is not None and act.get("guestTeamPoints") is not None:
-                last_h_live = safe_int(act.get("homeTeamPoints"))
-                last_g_live = safe_int(act.get("guestTeamPoints"))
+                last_h_live = safe_int(act.get("homeTeamPoints")); last_g_live = safe_int(act.get("guestTeamPoints")); 
                 if not period: period = act.get("period")
-                found_score = True
-                break
-    
-    if found_score:
-        s_h = last_h_live; s_g = last_g_live
-    
+                found_score = True; break
+    if found_score: s_h = last_h_live; s_g = last_g_live
     p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
     if safe_int(period) > 4: p_str = f"OT{safe_int(period)-4}"
     else: p_str = p_map.get(safe_int(period), f"Q{period}") if period else "-"
-    
     time_str = convert_elapsed_to_remaining(box.get('gameTime', ''), period)
-
-    st.markdown(f"""
-    <div style='text-align: center; background-color: #222; color: #fff; padding: 10px; border-radius: 10px; margin-bottom: 20px;'>
-        <div style='font-size: 1.2em;'>{h_name} vs {g_name}</div>
-        <div style='font-size: 3em; font-weight: bold;'>{s_h} : {s_g}</div>
-        <div style='font-size: 0.9em; color: #ccc;'>{p_str} | {time_str}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown(f"""<div style='text-align: center; background-color: #222; color: #fff; padding: 10px; border-radius: 10px; margin-bottom: 20px;'><div style='font-size: 1.2em;'>{h_name} vs {g_name}</div><div style='font-size: 3em; font-weight: bold;'>{s_h} : {s_g}</div><div style='font-size: 0.9em; color: #ccc;'>{p_str} | {time_str}</div></div>""", unsafe_allow_html=True)
     c1, c2 = st.columns([1, 1])
-    
     with c1:
         st.subheader("📊 Live Stats")
         def create_live_player_table(team_data):
-            players = team_data.get("playerStats", [])
-            data = []
+            players = team_data.get("playerStats", []); data = []
             for p in players:
-                sec = safe_int(p.get("secondsPlayed"))
-                min_s = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "00:00"
+                sec = safe_int(p.get("secondsPlayed")); min_s = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "00:00"
                 if sec > 0 or safe_int(p.get("points")) > 0:
-                    data.append({
-                        "Nr": p.get('seasonPlayer', {}).get('shirtNumber', '-'),
-                        "Name": p.get('seasonPlayer', {}).get('lastName', 'Unk'),
-                        "Min": min_s,
-                        "PTS": safe_int(p.get("points")),
-                        "PF": safe_int(p.get("foulsCommitted"))
-                    })
+                    data.append({"Nr": p.get('seasonPlayer', {}).get('shirtNumber', '-'), "Name": p.get('seasonPlayer', {}).get('lastName', 'Unk'), "Min": min_s, "PTS": safe_int(p.get("points")), "PF": safe_int(p.get("foulsCommitted"))})
             df = pd.DataFrame(data)
-            if not df.empty:
-                df = df.sort_values(by="PTS", ascending=False)
+            if not df.empty: df = df.sort_values(by="PTS", ascending=False)
             return df
-
-        df_home = create_live_player_table(box.get("homeTeam", {}))
-        df_guest = create_live_player_table(box.get("guestTeam", {}))
-
-        st.markdown(f"**{h_name}**")
-        st.dataframe(df_home, hide_index=True, use_container_width=True)
-        st.write("")
-        st.markdown(f"**{g_name}**")
-        st.dataframe(df_guest, hide_index=True, use_container_width=True)
-
-    with c2:
-        st.subheader("📜 Live Ticker")
-        render_full_play_by_play(box, height=800)
+        st.markdown(f"**{h_name}**"); st.dataframe(create_live_player_table(box.get("homeTeam", {})), hide_index=True, use_container_width=True)
+        st.write(""); st.markdown(f"**{g_name}**"); st.dataframe(create_live_player_table(box.get("guestTeam", {})), hide_index=True, use_container_width=True)
+    with c2: st.subheader("📜 Live Ticker"); render_full_play_by_play(box, height=800)
