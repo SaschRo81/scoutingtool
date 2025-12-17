@@ -19,7 +19,7 @@ from src.utils import get_logo_url
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
-    fetch_season_games
+    fetch_season_games, fetch_standings # NEU IMPORTIERT
 )
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
@@ -189,7 +189,6 @@ def render_home():
         with r4_c2:
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
         st.write("")
-        # NEUER BUTTON HIER
         if st.button("📊 Saison Analyse", use_container_width=True): go_season_analysis(); st.rerun()
 
 def render_team_stats_page():
@@ -518,38 +517,4 @@ def render_analysis_page():
                 with st.spinner("Lade Daten..."):
                     box = fetch_game_boxscore(gid); details = fetch_game_details(gid)
                     if box and details: 
-                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("referee1"); box["referee2"] = details.get("referee2"); box["referee3"] = details.get("referee3"); box["scheduledTime"] = details.get("scheduledTime"); box["attendance"] = details.get("result", {}).get("spectators"); box["id"] = details.get("id") 
-                        render_game_header(box)
-                        st.markdown("### 📝 Spielberichte & PBP")
-                        t1, t2, t3 = st.tabs(["⚡ Kurzbericht", "📋 Prompt Kopieren", "📜 Play-by-Play"])
-                        with t1:
-                            st.markdown(generate_game_summary(box)); st.divider()
-                            hn = get_team_name(box.get("homeTeam", {}), "Heim"); gn = get_team_name(box.get("guestTeam", {}), "Gast")
-                            hc = box.get("homeTeam", {}).get("headCoachName", "-"); gc = box.get("guestTeam", {}).get("headCoachName", "-")
-                            render_boxscore_table_pro(box.get("homeTeam", {}).get("playerStats", []), box.get("homeTeam", {}).get("gameStat", {}), hn, hc)
-                            st.write(""); render_boxscore_table_pro(box.get("guestTeam", {}).get("playerStats", []), box.get("guestTeam", {}).get("gameStat", {}), gn, gc)
-                            st.divider(); render_game_top_performers(box); st.divider(); render_charts_and_stats(box)
-                        with t2:
-                            st.info("ChatGPT Prompt:"); st.code(generate_complex_ai_prompt(box), language="text")
-                        with t3: render_full_play_by_play(box)
-                    else: st.error("Fehler beim Laden.")
-        else: st.warning("Keine Spiele.")
-
-# NEU: Seite für Saison-Analyse
-def render_season_analysis_wrapper():
-    render_page_header("📊 Saison Analyse")
-    with st.spinner("Lade alle Saisondaten..."):
-        all_games = fetch_season_games(CURRENT_SEASON_ID)
-        render_season_analysis_page(all_games)
-
-# --- MAIN LOOP ---
-if st.session_state.current_page == "home": render_home()
-elif st.session_state.current_page == "scouting": render_scouting_page()
-elif st.session_state.current_page == "comparison": render_comparison_page()
-elif st.session_state.current_page == "analysis": render_analysis_page()
-elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
-elif st.session_state.current_page == "game_venue": render_game_venue_page()
-elif st.session_state.current_page == "prep": render_prep_page()
-elif st.session_state.current_page == "live": render_live_page()
-elif st.session_state.current_page == "team_stats": render_team_stats_page()
-elif st.session_state.current_page == "season_analysis": render_season_analysis_wrapper()
+                        box["venue"] = details.get("venue"); box["result"] = details.get("result"); box["referee1"] = details.get("
