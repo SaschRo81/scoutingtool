@@ -5,7 +5,7 @@ import altair as alt
 from datetime import datetime
 import pytz
 import openai 
-from src.api import fetch_team_rank  # Wichtig: Import für die Tabellenplatz-Funktion
+from src.api import fetch_team_rank 
 
 # --- KONSTANTEN & HELPERS ---
 
@@ -341,17 +341,17 @@ def run_openai_generation(api_key, prompt):
     except Exception as e: return f"Fehler: {str(e)}"
 
 def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
-    from src.config import SEASON_ID  # FIX: Hier stand vorher CURRENT_SEASON_ID
+    from src.config import SEASON_ID 
     rank_info = fetch_team_rank(team_id, SEASON_ID)
 
     st.subheader(f"Analyse: {team_name}")
     c1, c2 = st.columns([2, 1])
     
     with c1:
-        st.markdown("#### Top 4 Spieler (nach PPG)")
+        st.markdown("#### Top 5 Spieler (nach PPG)") # Header angepasst
         if df_roster is not None and not df_roster.empty:
-            top4 = df_roster.sort_values(by="PPG", ascending=False).head(4)
-            for _, row in top4.iterrows():
+            top5 = df_roster.sort_values(by="PPG", ascending=False).head(5) # .head(5) statt 4
+            for _, row in top5.iterrows():
                 with st.container(border=True):
                     col_img, col_stats = st.columns([1, 3])
                     age = row.get('AGE', '-'); nat = row.get('NATIONALITY', '-'); height = row.get('HEIGHT_ROSTER', '-'); img_url = None
