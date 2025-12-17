@@ -91,7 +91,6 @@ def fetch_team_data(team_id, season_id):
     ts = {}
     df = pd.DataFrame()
 
-    # 1. TEAM STATS LADEN
     try:
         r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
         if r_team.status_code == 200:
@@ -133,7 +132,6 @@ def fetch_team_data(team_id, season_id):
     except Exception as e:
         print(f"Fehler Team Stats {team_id}: {e}")
 
-    # 2. PLAYER STATS LADEN
     try:
         roster_lookup = {}
         raw_details = fetch_team_details_raw(team_id, season_id)
@@ -226,7 +224,6 @@ def fetch_team_data(team_id, season_id):
                 df["select"] = False
     except Exception as e: print(f"Error Player Stats ({base_url}): {e}")
 
-    # Fallback Berechnung Team Stats
     if not ts and not df.empty:
         tg = df["GP"].max() if not df.empty else 1
         if tg == 0: tg = 1
@@ -367,7 +364,7 @@ def fetch_team_rank(team_id, season_id):
         urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
         urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
     
-    # Fallback: Ohne Gruppe versuchen (falls API Logik ändert)
+    # Fallback
     urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}")
     urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}")
 
@@ -387,11 +384,36 @@ def fetch_team_rank(team_id, season_id):
 
                     if tid_found == search_id:
                         rank = entry.get("position") or entry.get("rank") or (idx + 1)
+                        wins = entry.get("wins", 0)
+                        losses = entry.get("losses", 0)
+                        games_played = entry.get("gamesPlayed", 0)
+                        
+                        # LAST 10 PARSING
+                        last10_wins = 0
+                        last10_losses = 0
+                        
+                        # Fall 1: Explizite Felder
+                        if "last10Won" in entry and "last10Lost" in entry:
+                            last10_wins = entry["last10Won"]
+                            last10_losses = entry["last10Lost"]
+                        
+                        # Fall 2: "last10" String (z.B. "7-3" oder "7/3")
+                        elif "last10" in entry and entry["last10"]:
+                            l10_str = str(entry["last10"]).replace("/", "-")
+                            try:
+                                parts = l10_str.split("-")
+                                if len(parts) == 2:
+                                    last10_wins = int(parts[0])
+                                    last10_losses = int(parts[1])
+                            except: pass
+                        
                         return {
                             "rank": rank,
-                            "wins": entry.get("wins", 0),
-                            "losses": entry.get("losses", 0),
-                            "points": entry.get("points", 0)
+                            "totalGames": games_played,
+                            "totalVictories": wins,
+                            "totalLosses": losses,
+                            "last10Victories": last10_wins,
+                            "last10Losses": last10_losses
                         }
         except:
             continue
