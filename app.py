@@ -478,12 +478,12 @@ def render_scouting_page():
                                 opts = {
                                     "page-size": "A4",
                                     "orientation": "Portrait",
-                                    "margin-top": "10mm",
-                                    "margin-right": "10mm",
-                                    "margin-bottom": "10mm",
-                                    "margin-left": "10mm",
+                                    "margin-top": "5mm",
+                                    "margin-right": "5mm",
+                                    "margin-bottom": "5mm",
+                                    "margin-left": "5mm",
                                     "encoding": "UTF-8",
-                                    "zoom": "0.6",
+                                    "zoom": "0.65",
                                     "no-outline": None,
                                     "disable-smart-shrinking": None,
                                     "quiet": ""
