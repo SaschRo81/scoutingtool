@@ -9,19 +9,22 @@ def generate_header_html(meta):
 <div class="report-header">
     <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
     
-    <!-- HIER GEÄNDERT: <br> für Umbruch eingefügt -->
-    <h1 class="report-title">
+    <!-- ÜBERSCHRIFT: Datum oben, Uhrzeit unten (durch <br>) -->
+    <h1 class="report-title" style="line-height: 1.3;">
         Scouting Report | {meta['date']}<br>
-        <span style="font-size: 0.6em;">{meta['time']}</span>
+        <span style="font-size: 0.6em; font-weight: normal;">{meta['time']}</span>
     </h1>
 
-    <div class="matchup-container">
-        <div class="team-logo-box">
+    <!-- LOGOS: Flexbox erzwingt 'row' (nebeneinander) -->
+    <div class="matchup-container" style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 50px; margin-top: 20px;">
+        <div class="team-logo-box" style="text-align: center;">
             <img src="{meta['home_logo']}" class="team-logo-img">
             <div class="team-name-text">{meta['home_name']}</div>
         </div>
-        <div class="vs-text">VS</div>
-        <div class="team-logo-box">
+        
+        <div class="vs-text" style="margin: 0 20px;">VS</div>
+        
+        <div class="team-logo-box" style="text-align: center;">
             <img src="{meta['guest_logo']}" class="team-logo-img">
             <div class="team-name-text">{meta['guest_name']}</div>
         </div>
