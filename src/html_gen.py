@@ -1,32 +1,27 @@
 # --- START OF FILE src/html_gen.py ---
 
 import pandas as pd
-import copy
 from src.utils import clean_pos
 
 def generate_header_html(meta):
     return f"""
 <div class="report-header">
-    <div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
-    
-    <h1 class="report-title" style="line-height: 1.3;">
-        Scouting Report | {meta['date']}<br>
-        <span style="font-size: 0.6em; font-weight: normal;">{meta['time']}</span>
-    </h1>
-
-    <div class="matchup-container" style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 50px; margin-top: 20px;">
-        <div class="team-logo-box" style="text-align: center;">
-            <img src="{meta['home_logo']}" class="team-logo-img">
-            <div class="team-name-text">{meta['home_name']}</div>
-        </div>
-        
-        <div class="vs-text" style="margin: 0 20px;">VS</div>
-        
-        <div class="team-logo-box" style="text-align: center;">
-            <img src="{meta['guest_logo']}" class="team-logo-img">
-            <div class="team-name-text">{meta['guest_name']}</div>
-        </div>
-    </div>
+<div style="text-align: right; font-size: 12px; color: #888; margin-bottom: 5px;">DBBL Scouting Pro by Sascha Rosanke</div>
+<h1 class="report-title" style="line-height: 1.3;">
+Scouting Report | {meta['date']}<br>
+<span style="font-size: 0.6em; font-weight: normal;">{meta['time']}</span>
+</h1>
+<div class="matchup-container" style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 50px; margin-top: 20px;">
+<div class="team-logo-box" style="text-align: center;">
+<img src="{meta['home_logo']}" class="team-logo-img">
+<div class="team-name-text">{meta['home_name']}</div>
+</div>
+<div class="vs-text" style="margin: 0 20px;">VS</div>
+<div class="team-logo-box" style="text-align: center;">
+<img src="{meta['guest_logo']}" class="team-logo-img">
+<div class="team-name-text">{meta['guest_name']}</div>
+</div>
+</div>
 </div>
 """
 
@@ -87,9 +82,9 @@ def generate_top3_html(df: pd.DataFrame) -> str:
     c_green = "#5c9c30"; c_gray = "#999999"; c_red = "#d9534f"
     legend_html = f"""
 <div style="display: flex; gap: 30px; margin-top: 5px; margin-bottom: 20px; font-size: 14px; color: #333;">
-    <div style="display: flex; align-items: center;"><div style="width: 15px; height: 15px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div><strong>Shooter</strong></div>
-    <div style="display: flex; align-items: center;"><div style="width: 15px; height: 15px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>Normal</div>
-    <div style="display: flex; align-items: center;"><div style="width: 15px; height: 15px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>Non-Shooter</div>
+<div style="display: flex; align-items: center;"><div style="width: 15px; height: 15px; background-color: {c_green}; margin-right: 8px; border: 1px solid #ccc;"></div><strong>Shooter</strong></div>
+<div style="display: flex; align-items: center;"><div style="width: 15px; height: 15px; background-color: {c_gray}; margin-right: 8px; border: 1px solid #ccc;"></div>Normal</div>
+<div style="display: flex; align-items: center;"><div style="width: 15px; height: 15px; background-color: {c_red}; margin-right: 8px; border: 1px solid #ccc;"></div>Non-Shooter</div>
 </div>"""
     return html + legend_html
 
@@ -113,19 +108,19 @@ def generate_card_html(row, metadata, notes, color_code):
 
     return f"""
 <div class="player-card">
-    <div class="card-header" style="background-color: {color_code};"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
-    <div class="card-body">
-        <table class="layout-table"><tr>
-            <td class="layout-img-cell"><img src="{img_url}" class="player-img"></td>
-            <td class="layout-stats-cell">
-                <table class="stats-table">
-                    {stats_header}
-                    {stats_row}
-                    {note_rows}
-                </table>
-            </td>
-        </tr></table>
-    </div>
+<div class="card-header" style="background-color: {color_code};"><span>#{row['NR']} {row['NAME_FULL']}</span><span>{height_str} m | Pos: {pos_str}</span></div>
+<div class="card-body">
+<table class="layout-table"><tr>
+<td class="layout-img-cell"><img src="{img_url}" class="player-img"></td>
+<td class="layout-stats-cell">
+<table class="stats-table">
+{stats_header}
+{stats_row}
+{note_rows}
+</table>
+</td>
+</tr></table>
+</div>
 </div>"""
 
 def generate_team_stats_html(ts):
@@ -133,11 +128,11 @@ def generate_team_stats_html(ts):
     def calc_pct(m, a, api): return api if api > 0 else (m/a*100 if a>0 else 0)
     return f"""
 <div class="team-stats-container"><h2 style="border-bottom: 2px solid #333; padding-bottom: 5px;">Team Stats (AVG)</h2>
-    <table class="stats-table" style="font-size: 16px;">
-        <tr class="bg-gray font-bold"><th rowspan="2" style="padding: 4px;">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr>
-        <tr class="bg-gray font-bold"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>
-        <tr class="font-bold" style="background-color: #f9f9f9;"><td style="padding: 8px;">{ts['ppg']:.1f}</td><td>{ts['2m']:.1f}</td><td>{ts['2a']:.1f}</td><td>{calc_pct(ts['2m'],ts['2a'],ts['2pct']):.1f}</td><td>{ts['3m']:.1f}</td><td>{ts['3a']:.1f}</td><td>{calc_pct(ts['3m'],ts['3a'],ts['3pct']):.1f}</td><td>{ts['ftm']:.1f}</td><td>{ts['fta']:.1f}</td><td>{calc_pct(ts['ftm'],ts['fta'],ts['ftpct']):.1f}</td><td>{ts['dr']:.1f}</td><td>{ts['or']:.1f}</td><td>{ts['tot']:.1f}</td><td>{ts['as']:.1f}</td><td>{ts['to']:.1f}</td><td>{ts['st']:.1f}</td><td>{ts['pf']:.1f}</td></tr>
-    </table>
+<table class="stats-table" style="font-size: 16px;">
+<tr class="bg-gray font-bold"><th rowspan="2" style="padding: 4px;">PPG</th><th colspan="3">2P FG</th><th colspan="3">3P FG</th><th colspan="3">FT</th><th colspan="3">REB</th><th rowspan="2">AS</th><th rowspan="2">TO</th><th rowspan="2">ST</th><th rowspan="2">PF</th></tr>
+<tr class="bg-gray font-bold"><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>M</th><th>A</th><th>%</th><th>D</th><th>O</th><th>TOT</th></tr>
+<tr class="font-bold" style="background-color: #f9f9f9;"><td style="padding: 8px;">{ts['ppg']:.1f}</td><td>{ts['2m']:.1f}</td><td>{ts['2a']:.1f}</td><td>{calc_pct(ts['2m'],ts['2a'],ts['2pct']):.1f}</td><td>{ts['3m']:.1f}</td><td>{ts['3a']:.1f}</td><td>{calc_pct(ts['3m'],ts['3a'],ts['3pct']):.1f}</td><td>{ts['ftm']:.1f}</td><td>{ts['fta']:.1f}</td><td>{calc_pct(ts['ftm'],ts['fta'],ts['ftpct']):.1f}</td><td>{ts['dr']:.1f}</td><td>{ts['or']:.1f}</td><td>{ts['tot']:.1f}</td><td>{ts['as']:.1f}</td><td>{ts['to']:.1f}</td><td>{ts['st']:.1f}</td><td>{ts['pf']:.1f}</td></tr>
+</table>
 </div>"""
 
 def generate_custom_sections_html(offense_df, defense_df, about_df):
@@ -157,6 +152,7 @@ def generate_custom_sections_html(offense_df, defense_df, about_df):
 
 def generate_comparison_html(h_stats_in, g_stats_in, h_name, g_name):
     if not h_stats_in or not g_stats_in: return "Keine Daten für Vergleich verfügbar."
+    import copy
     h_stats = copy.deepcopy(h_stats_in); g_stats = copy.deepcopy(g_stats_in)
     def get_pct(stats, cat):
         if stats.get(f'{cat}pct', 0) > 0: return stats[f'{cat}pct']
