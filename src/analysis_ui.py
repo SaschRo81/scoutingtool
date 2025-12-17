@@ -327,10 +327,91 @@ def generate_game_summary(box):
 def generate_complex_ai_prompt(box):
     if not box: return "Keine Daten."
     h_data = box.get("homeTeam", {}); g_data = box.get("guestTeam", {}); h_name = get_team_name(h_data, "Heim"); g_name = get_team_name(g_data, "Gast"); res = box.get("result", {}); pbp_summary = analyze_game_flow(box.get("actions", []), h_name, g_name)
+    
+    # Ermittlung Gegner & Spielort-Typ
+    is_home_jena = "Jena" in h_name or "VIMODROM" in h_name
+    is_guest_jena = "Jena" in g_name or "VIMODROM" in g_name
+    
+    opponent = g_name if is_home_jena else (h_name if is_guest_jena else f"{h_name} vs {g_name}")
+    location = "Heimspiel" if is_home_jena else ("Auswärtsspiel" if is_guest_jena else "Neutral")
+    
     def get_stats_str(team_data):
-        s = team_data.get("gameStat", {}); p_list = team_data.get("playerStats", []); top_p = sorted([p for p in p_list if p.get("points", 0) is not None], key=lambda x: x.get("points", 0), reverse=True)[:2]; top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')} Pkt)" for p in top_p])
-        return f"FG: {safe_int(s.get('fieldGoalsSuccessPercent'))}%, Reb: {safe_int(s.get('totalRebounds'))}, TO: {safe_int(s.get('turnovers'))}, Top: {top_str}"
-    prompt = f"""Erstelle 3 journalistische Spielberichte (Heim-Sicht, Neutral, Gäste-Sicht) basierend auf diesen Daten:\nHeim: {h_name}, Gast: {g_name}, Ergebnis: {res.get('homeTeamFinalScore')} : {res.get('guestTeamFinalScore')}\nViertel: Q1 {res.get('homeTeamQ1Score')}:{res.get('guestTeamQ1Score')}, Q2 {res.get('homeTeamQ2Score')}:{res.get('guestTeamQ2Score')}, Q3 {res.get('homeTeamQ3Score')}:{res.get('guestTeamQ3Score')}, Q4 {res.get('homeTeamQ4Score')}:{res.get('guestTeamQ4Score')}\nStats Heim: {get_stats_str(h_data)}\nStats Gast: {get_stats_str(g_data)}\nZuschauer: {res.get('spectators', 'k.A.')}, Halle: {box.get('venue', {}).get('name', 'Halle')}\n\nSPIELVERLAUF (PBP):\n{pbp_summary}\n\nANWEISUNGEN:\nSchreibe lebendig, emotional und detailreich. Nutze die PBP-Daten für Crunchtime-Beschreibung."""
+        s = team_data.get("gameStat", {}); p_list = team_data.get("playerStats", []); top_p = sorted([p for p in p_list if p.get("points", 0) is not None], key=lambda x: x.get("points", 0), reverse=True)[:3]; top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')})" for p in top_p])
+        return f"FG: {safe_int(s.get('fieldGoalsSuccessPercent'))}%, Reb: {safe_int(s.get('totalRebounds'))}, TO: {safe_int(s.get('turnovers'))}. Top: {top_str}"
+
+    prompt = f"""Du agierst als erfahrener Sportjournalist und SEO-Experte für den Basketballverein VIMODROM Baskets Jena (2. DBBL). Deine Aufgabe ist es, hochwertige, emotionale und suchmaschinenoptimierte Texte zu erstellen.
+
+Bitte verarbeite die untenstehenden [SPIELDATEN] und erstelle darauf basierend die folgenden Inhalte. Halte dich strikt an die Stilvorgaben.
+
+### ALLGEMEINE STILVORGABEN & TONALITÄT
+1. **Sprache:** Deutsch.
+2. **Formatierung:** Keine Zwischenüberschriften in den Fließtexten. Absätze müssen kurz und prägnant sein (max. 3 Sätze pro Absatz).
+3. **Wortwahl:** Vermeide das Wort "beeindruckend". Nutze präzisere, neutralere oder bildhaftere Formulierungen.
+4. **Emotionen:** Flechte folgende Emotionen subtil ein: Spannung (Ungewissheit), Begeisterung (Spektakel), Teamgeist, Stolz (Heimat), Adrenalin (Tempo), Hoffnung, Identifikation und Neugierde.
+5. **Struktur:** Beginne Berichte mit Einordnung in den Saisonkontext, Analyse des Gegners/Spielverlaufs, Zitaten und Statistiken.
+
+---
+
+### AUFGABE 1: DREI DYNAMISCHE SPIELBERICHTE
+Erstelle drei separate Artikel (jeweils mind. 3000 Zeichen für Artikel A und B).
+
+**Artikel A: Für die VIMODROM-Website**
+*   **Perspektive:** Subjektiv, parteiisch ("Wir"-Gefühl), aus Sicht der VIMODROM Baskets Jena.
+*   **Ziel:** Fans emotional binden, Stolz und Teamgeist vermitteln.
+
+**Artikel B: Für die 2. DBBL-Website**
+*   **Perspektive:** Streng neutral, journalistisch ausgewogen.
+*   **Ziel:** Sachliche Berichterstattung über den Spielverlauf für ligaweite Interessierte.
+
+**Artikel C: Für das Spieltagsmagazin (Heutige Perspektive)**
+*   **Perspektive:** Rückblickend-analytisch, als Feature-Story für das Magazin.
+*   **Stil:** Lebhafte Beschreibungen, Fokus auf Atmosphäre und Dramatik.
+
+**Output-Format für jeden der drei Artikel:**
+1. Der Text (ohne Zwischenüberschriften).
+2. 3 aussagekräftige Headlines zur Auswahl.
+3. 10 Keywords (kommagetrennt).
+4. Eine klickstarke Meta-Beschreibung.
+
+---
+
+### AUFGABE 2: SEO-OPTIMIERTER ALLGEMEINER VEREINSTEXT
+Erstelle einen zeitlosen Text (600–1.000 Wörter) zum Thema "Basketball, VIMODROM Baskets Jena".
+*   **Zielgruppe:** Sportinteressierte aller Altersklassen.
+*   **Keywords integrieren:** VIMODROM Baskets Jena, Basketball in Jena, Basketball Training Jena, Basketballspiele Thüringen.
+*   **Inhalt:** Vorstellung des Teams, Trainingstipps, Möglichkeiten für neue Spieler (Tryouts/Beitritt), Verweise auf Ticketkauf (fiktiver Link) und Community.
+*   **Multimedia-Platzhalter:** Füge an passenden Stellen Platzhalter für Bilder/Videos ein, inklusive SEO-optimierter Alt-Tags (z.B. [BILD: Spielszene Dunking - Alt-Tag: Dynamisches Basketballspiel in Jena]).
+*   **Struktur:** Fließtext ohne Zwischenüberschriften, kurze Absätze.
+*   **Meta:** Max 150 Zeichen, spannend.
+
+---
+
+### AUFGABE 3: KREATIVER MATCH-REPORT (STORYTELLING)
+Schreibe einen zusätzlichen Bericht über das Spiel gegen {opponent} mit Fokus auf Storytelling.
+*   **Einstieg:** Überraschender Moment oder besonderes Zitat.
+*   **Inhalt:** Unerwartete Wendungen, taktische Feinheiten, "Hidden Heroes" (weniger beachtete Spielerinnen), Geschichten hinter den Zahlen.
+*   **Stil:** Variiere den Satzbau, vermeide Redundanzen, nutze frische Metaphern.
+
+---
+
+### ABSCHLUSS
+Erstelle ganz am Ende eine Zusammenfassung aller Inhalte mit 10 Meta-Tags (kommagetrennt) und einer globalen Meta-Beschreibung.
+
+---
+
+### [SPIELDATEN]
+**Gegner:** {opponent}
+**Ergebnis:** {h_name} {res.get('homeTeamFinalScore')} : {res.get('guestTeamFinalScore')} {g_name} (Halbzeit: {res.get('homeTeamQ1Score',0)+res.get('homeTeamQ2Score',0)}:{res.get('guestTeamQ1Score',0)+res.get('guestTeamQ2Score',0)})
+**Spielort:** {location} in {box.get('venue', {}).get('name', 'Halle')}
+**Viertelergebnisse:** Q1 {res.get('homeTeamQ1Score')}:{res.get('guestTeamQ1Score')}, Q2 {res.get('homeTeamQ2Score')}:{res.get('guestTeamQ2Score')}, Q3 {res.get('homeTeamQ3Score')}:{res.get('guestTeamQ3Score')}, Q4 {res.get('homeTeamQ4Score')}:{res.get('guestTeamQ4Score')}
+**Stats {h_name}:** {get_stats_str(h_data)}
+**Stats {g_name}:** {get_stats_str(g_data)}
+**Besondere Vorkommnisse (PBP-Analyse):**
+{pbp_summary}
+
+**Zitate (Trainer/Spieler):** [Hier bitte manuell Zitate einfügen]
+**Tabellensituation:** [Hier bitte aktuelle Platzierung ergänzen]
+"""
     return prompt
 
 def run_openai_generation(api_key, prompt):
