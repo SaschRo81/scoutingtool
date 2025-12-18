@@ -16,7 +16,7 @@ def get_base_url(team_id=None):
                     return "https://api-n.dbbl.scb.world"
                 elif TEAMS_DB[tid]["staffel"] == "Süd":
                     return "https://api-s.dbbl.scb.world"
-        except: pass
+    except: pass
     return "https://api-s.dbbl.scb.world"
 
 def format_minutes(seconds):
@@ -114,12 +114,63 @@ def fetch_standings_complete(season_id, group_name):
                     "games": entry.get("totalGames"),
                     "wins": entry.get("totalVictories"),
                     "losses": entry.get("totalLosses"),
-                    "points": entry.get("points")
+                    "points": entry.get("points"),
+                    # Zusätzliche Felder für fetch_team_rank Kompatibilität
+                    "totalVictories": entry.get("totalVictories"),
+                    "totalLosses": entry.get("totalLosses"),
+                    "totalGames": entry.get("totalGames"),
+                    "last10Victories": entry.get("last10Victories", 0),
+                    "last10Losses": entry.get("last10Losses", 0)
                 })
             return sorted(standings, key=lambda x: x['rank'])
     except Exception as e:
         print(f"Standings Error: {e}")
     return []
+
+# --- KOMPATIBILITÄTS-FUNKTION (RESTORED) ---
+@st.cache_data(ttl=1800)
+def fetch_team_rank(team_id, season_id):
+    """
+    Sucht den Tabellenplatz eines Teams basierend auf der ID.
+    Nutzt intern fetch_standings_complete, um Redundanz zu vermeiden.
+    """
+    try:
+        tid = int(team_id)
+        group = None
+        
+        # 1. Staffel ermitteln
+        if tid in TEAMS_DB:
+            staffel = TEAMS_DB[tid]["staffel"]
+            if staffel == "Nord": group = "NORTH"
+            elif staffel == "Süd": group = "SOUTH"
+        
+        # Wenn nicht in DB, könnte es 1. Liga sein
+        if not group:
+            # Check 1. Liga
+            dbbl1 = fetch_1dbbl_teams(season_id)
+            if tid in dbbl1:
+                group = "1. DBBL"
+        
+        # Fallback: Suche überall
+        groups_to_check = [group] if group else ["NORTH", "SOUTH", "1. DBBL"]
+        
+        for g in groups_to_check:
+            standings = fetch_standings_complete(season_id, g)
+            for entry in standings:
+                # Vergleiche IDs (String vs Int sicherstellen)
+                if str(entry.get("teamId")) == str(tid):
+                    return {
+                        "rank": entry.get("rank", 0),
+                        "totalGames": entry.get("totalGames", 0),
+                        "totalVictories": entry.get("totalVictories", 0),
+                        "totalLosses": entry.get("totalLosses", 0),
+                        "last10Victories": entry.get("last10Victories", 0),
+                        "last10Losses": entry.get("last10Losses", 0),
+                        "points": entry.get("points", 0)
+                    }
+    except: pass
+    return None
+
 
 def fetch_team_data(team_id, season_id):
     base_urls = []
@@ -173,7 +224,6 @@ def fetch_team_data(team_id, season_id):
                     df = pd.json_normalize(p_list)
                     df.columns = [str(c).lower() for c in df.columns]
 
-                    # Sichere Spaltenermittlung
                     col_id = None
                     for opt in ["seasonplayer.id", "seasonplayerid", "personid", "playerid", "id"]:
                         matches = [c for c in df.columns if opt in c]
@@ -189,7 +239,6 @@ def fetch_team_data(team_id, season_id):
                     df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
                     df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
 
-                    # Hilfsfunktion für Werte (inline definiert zur Vermeidung von Scope-Problemen)
                     def get_v(row, key, df_cols):
                         matches = [c for c in df_cols if key == c or (key in c and 'pergame' not in c and 'percent' not in c)]
                         if matches:
@@ -198,11 +247,8 @@ def fetch_team_data(team_id, season_id):
                             return 0.0 if pd.isna(val) else val
                         return 0.0
 
-                    # Berechnungen iterativ oder via apply (hier via Vektorisierung ist sicherer mit explizitem Loop für Spaltenwahl)
-                    # Wir nutzen hier apply für Robustheit
                     df["GP"] = df.apply(lambda x: get_v(x, "gamesplayed", df.columns), axis=1).replace(0, 1)
                     
-                    # Massenberechnung
                     for k_dest, k_src in [
                         ("PTS_TOT", "points"), ("REB_TOT", "totalrebounds"), ("AST_TOT", "assists"),
                         ("STL_TOT", "steals"), ("TO_TOT", "turnovers"), ("BLK_TOT", "blocks"),
@@ -232,13 +278,11 @@ def fetch_team_data(team_id, season_id):
                     df["FTM"] = (df["FTM_TOT"] / df["GP"]).round(1)
                     df["FTA"] = (df["FTA_TOT"] / df["GP"]).round(1)
                     
-                    # 2 Points
                     df["2M_TOT"] = df["FGM"] - df["3M_TOT"]
                     df["2A_TOT"] = df["FGA"] - df["3A_TOT"]
                     df["2M"] = (df["2M_TOT"] / df["GP"]).round(1)
                     df["2A"] = (df["2A_TOT"] / df["GP"]).round(1)
 
-                    # Percentages
                     df["FG%"] = (df["FGM"] / df["FGA"] * 100).fillna(0).round(1)
                     df["3PCT"] = (df["3M_TOT"] / df["3A_TOT"] * 100).fillna(0).round(1)
                     df["FTPCT"] = (df["FTM_TOT"] / df["FTA_TOT"] * 100).fillna(0).round(1)
