@@ -134,13 +134,35 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
 
 def analyze_game_flow(actions, home_name, guest_name):
     if not actions: return "Keine Play-by-Play Daten verfügbar."
+    
     lead_changes = 0; ties = 0; last_leader = None; crunch_log = []
+    
+    # Laufenden Spielstand mitführen
+    cur_h = 0
+    cur_g = 0
+    
+    # Wir erstellen eine Liste mit angereicherten Aktionen (inkl. Spielstand)
+    enriched_actions = []
+    
     for act in actions:
-        h_score = safe_int(act.get("homeTeamPoints")); g_score = safe_int(act.get("guestTeamPoints"))
-        if h_score == 0 and g_score == 0: continue
-        if h_score > g_score: current_leader = 'home'
-        elif g_score > h_score: current_leader = 'guest'
+        h = act.get("homeTeamPoints")
+        g = act.get("guestTeamPoints")
+        
+        # Wenn Spielstand im Event ist, aktualisiere Running Score
+        if h is not None: cur_h = int(h)
+        if g is not None: cur_g = int(g)
+        
+        # Kopie anlegen und aktuellen Score speichern
+        act_enriched = act.copy()
+        act_enriched['_current_h'] = cur_h
+        act_enriched['_current_g'] = cur_g
+        enriched_actions.append(act_enriched)
+        
+        # Führungswechsel-Logik
+        if cur_h > cur_g: current_leader = 'home'
+        elif cur_g > cur_h: current_leader = 'guest'
         else: current_leader = 'tie'
+        
         if last_leader is not None:
             if current_leader != last_leader:
                 if current_leader == 'tie': ties += 1
@@ -149,12 +171,18 @@ def analyze_game_flow(actions, home_name, guest_name):
         last_leader = current_leader
 
     relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
-    filtered_actions = [a for a in actions if a.get("type") in relevant_types]
-    last_events = filtered_actions[-15:]  # Etwas mehr PBP Daten für den neuen Prompt
+    
+    # Filtern auf Basis der angereicherten Liste
+    filtered_actions = [a for a in enriched_actions if a.get("type") in relevant_types]
+    last_events = filtered_actions[-15:]  # Die letzten 15 Events
     
     crunch_log.append("\n**Chronologie der letzten wichtigen Aktionen:**")
     for ev in last_events:
-        h_pts = ev.get('homeTeamPoints'); g_pts = ev.get('guestTeamPoints'); score_str = f"{h_pts}:{g_pts}"
+        # Hier nutzen wir jetzt den mitgeführten Score
+        h_pts = ev['_current_h']
+        g_pts = ev['_current_g']
+        score_str = f"{h_pts}:{g_pts}"
+        
         action_desc = translate_text(ev.get("type", ""))
         if ev.get("points"): action_desc += f" (+{ev.get('points')})"
         crunch_log.append(f"- {score_str}: {action_desc}")
