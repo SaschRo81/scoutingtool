@@ -85,7 +85,6 @@ def inject_custom_css():
 @st.cache_data(ttl=3600)
 def get_best_team_logo(team_id):
     if not team_id: return None
-    # Jetzt auch api-1 prüfen
     candidates = [
         f"https://api-1.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
         f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
@@ -104,7 +103,6 @@ def get_best_team_logo(team_id):
 def search_player_and_redirect(query):
     with st.spinner(f"Suche nach '{query}'..."):
         found = []
-        # Kombiniere TEAMS_DB (2. Liga) mit 1. Liga Teams
         all_teams = TEAMS_DB.copy()
         dbbl1 = fetch_1dbbl_teams(CURRENT_SEASON_ID)
         all_teams.update(dbbl1)
@@ -118,7 +116,6 @@ def search_player_and_redirect(query):
         return found
 
 # --- RENDER PAGES ---
-
 def render_header(title):
     inject_custom_css()
     c1, c2 = st.columns([1, 6])
@@ -134,7 +131,6 @@ def render_home():
         c_search, _ = st.columns([2, 1])
         with c_search:
             st.markdown("##### 🔍 Spieler Schnellsuche")
-            # FIXED KEY to prevent DuplicateElementError
             sq = st.text_input("Name eingeben...", key="home_search_v6", label_visibility="collapsed", placeholder="Spielername...")
             if sq and len(sq) > 2:
                 results = search_player_and_redirect(sq)
@@ -151,7 +147,6 @@ def render_home():
     
     st.markdown("---")
     
-    # GRID LAYOUT
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         with st.container(border=True):
@@ -232,11 +227,9 @@ def render_league_view():
     
     render_header(f"{league} Übersicht")
     
-    # Logik: 2. Liga aus Config, 1. Liga dynamisch laden
     if league == "1. DBBL":
         with st.spinner("Lade 1. DBBL Teams..."):
             teams = fetch_1dbbl_teams(CURRENT_SEASON_ID)
-            # Standings fetcher für 1. DBBL
             standings = fetch_standings_complete(CURRENT_SEASON_ID, "1. DBBL")
     else:
         teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == league}
@@ -251,7 +244,6 @@ def render_league_view():
         for idx, (tid, info) in enumerate(teams.items()):
             with cols[idx % 4]:
                 with st.container(border=True):
-                    # Bei 1. DBBL ist logo_url schon im dict, sonst holen
                     if "logo_url" in info:
                         st.image(info["logo_url"], use_container_width=True)
                     else:
@@ -277,18 +269,10 @@ def render_team_view():
     tid = st.session_state.selected_team_id
     if not tid: nav_to("team_stats_hub"); return
     
-    # Info aus Config ODER dynamisch (für 1. DBBL)
     if tid in TEAMS_DB:
         info = TEAMS_DB[tid]
     else:
-        # Versuche 1. DBBL Map wiederherzustellen oder generischer Fall
-        # Wir machen es einfach: wir haben keine Infos, wir laden einfach Logo und Name
-        info = {"name": f"Team {tid}"} # Fallback Name
-
-    # Wenn wir in 1. DBBL sind, können wir den Namen evtl. aus den API Daten fischen
-    # Aber `fetch_team_data` liefert keine Meta-Daten zurück, nur Stats.
-    # Wir lassen es beim Fallback oder holen es via fetch_team_info_basic
-    basic = fetch_team_info_basic(tid)
+        info = {"name": f"Team {tid}"} 
     
     render_header(f"Team Stats (ID: {tid})")
     
@@ -401,30 +385,24 @@ def render_player_profile():
         df_sched = pd.DataFrame(schedule[:8])
         st.dataframe(df_sched[["date_display", "home", "guest", "score"]], hide_index=True, use_container_width=True)
 
-# --- COMPARISON ---
-
 def render_comparison():
     render_header("🤼 Spieler Vergleich")
-    
     num = st.slider("Anzahl Spieler für Vergleich wählen:", 1, 4, 2)
     st.divider()
     
     cols = st.columns(num)
     selected_players = []
     
-    # Hole alle Teams (2. + 1. Liga) für die Auswahl
     all_teams_data = TEAMS_DB.copy()
     all_teams_data.update(fetch_1dbbl_teams(CURRENT_SEASON_ID))
     
     for i in range(num):
         with cols[i]:
             st.markdown(f"##### Spieler {i+1}")
-            # Ligen Filter
             leagues = ["1. DBBL", "Nord", "Süd"]
             s = st.selectbox(f"Liga", leagues, key=f"c_s_{i}", label_visibility="collapsed")
             
-            # Team Filter
-            t_subset = {k: v for k, v in all_teams_data.items() if v["staffel"] == s}
+            t_subset = {k: v for k, v in all_teams_data.items() if v.get("staffel") == s}
             if not t_subset:
                  st.info("Keine Teams")
                  continue
@@ -438,13 +416,11 @@ def render_comparison():
                 row = df[df["NAME_FULL"] == p_name].iloc[0]
                 meta = get_player_metadata_cached(row["PLAYER_ID"])
                 selected_players.append({"row": row, "meta": meta})
-                
                 if meta.get("img"): st.image(meta["img"], width=120)
             else:
                 st.error("Ladefehler")
 
     st.divider()
-    
     if selected_players:
         metrics = ["GP", "MIN_DISPLAY", "PPG", "FG%", "3PCT", "FTPCT", "TOT", "AS", "ST", "TO", "PF"]
         comp_data = {}
@@ -458,10 +434,8 @@ def render_comparison():
         df_comp = pd.DataFrame(comp_data, index=metrics)
         st.dataframe(df_comp, use_container_width=True, height=500)
 
-# --- WRAPPERS ---
 def render_prep_page():
     render_header("🔮 Spielvorbereitung")
-    # Nur 2. Liga vorerst, da Scouting DB auf 2. Liga config basiert (kann man erweitern)
     c1, c2 = st.columns([1, 2])
     with c1:
         s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="prep_staffel")
@@ -517,7 +491,6 @@ def render_venue_page():
         st.markdown(f"**Adresse:** {v.get('address')}")
 
 # --- MAIN ROUTING ---
-
 if st.session_state.current_page == "home": render_home()
 elif st.session_state.current_page == "team_stats_hub": render_stats_hub()
 elif st.session_state.current_page == "league_view": render_league_view()
