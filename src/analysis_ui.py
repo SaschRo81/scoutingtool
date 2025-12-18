@@ -134,35 +134,13 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
 
 def analyze_game_flow(actions, home_name, guest_name):
     if not actions: return "Keine Play-by-Play Daten verfügbar."
-    
     lead_changes = 0; ties = 0; last_leader = None; crunch_log = []
-    
-    # Laufenden Spielstand mitführen
-    cur_h = 0
-    cur_g = 0
-    
-    # Wir erstellen eine Liste mit angereicherten Aktionen (inkl. Spielstand)
-    enriched_actions = []
-    
     for act in actions:
-        h = act.get("homeTeamPoints")
-        g = act.get("guestTeamPoints")
-        
-        # Wenn Spielstand im Event ist, aktualisiere Running Score
-        if h is not None: cur_h = int(h)
-        if g is not None: cur_g = int(g)
-        
-        # Kopie anlegen und aktuellen Score speichern
-        act_enriched = act.copy()
-        act_enriched['_current_h'] = cur_h
-        act_enriched['_current_g'] = cur_g
-        enriched_actions.append(act_enriched)
-        
-        # Führungswechsel-Logik
-        if cur_h > cur_g: current_leader = 'home'
-        elif cur_g > cur_h: current_leader = 'guest'
+        h_score = safe_int(act.get("homeTeamPoints")); g_score = safe_int(act.get("guestTeamPoints"))
+        if h_score == 0 and g_score == 0: continue
+        if h_score > g_score: current_leader = 'home'
+        elif g_score > h_score: current_leader = 'guest'
         else: current_leader = 'tie'
-        
         if last_leader is not None:
             if current_leader != last_leader:
                 if current_leader == 'tie': ties += 1
@@ -171,18 +149,12 @@ def analyze_game_flow(actions, home_name, guest_name):
         last_leader = current_leader
 
     relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
-    
-    # Filtern auf Basis der angereicherten Liste
-    filtered_actions = [a for a in enriched_actions if a.get("type") in relevant_types]
-    last_events = filtered_actions[-15:]  # Die letzten 15 Events
+    filtered_actions = [a for a in actions if a.get("type") in relevant_types]
+    last_events = filtered_actions[-15:]  # Etwas mehr PBP Daten für den neuen Prompt
     
     crunch_log.append("\n**Chronologie der letzten wichtigen Aktionen:**")
     for ev in last_events:
-        # Hier nutzen wir jetzt den mitgeführten Score
-        h_pts = ev['_current_h']
-        g_pts = ev['_current_g']
-        score_str = f"{h_pts}:{g_pts}"
-        
+        h_pts = ev.get('homeTeamPoints'); g_pts = ev.get('guestTeamPoints'); score_str = f"{h_pts}:{g_pts}"
         action_desc = translate_text(ev.get("type", ""))
         if ev.get("points"): action_desc += f" (+{ev.get('points')})"
         crunch_log.append(f"- {score_str}: {action_desc}")
@@ -508,3 +480,28 @@ def render_live_view(box):
     last_h_live = 0; last_g_live = 0; found_score = False
     if actions:
         for act in reversed(actions):
+            if act.get("homeTeamPoints") is not None and act.get("guestTeamPoints") is not None:
+                last_h_live = safe_int(act.get("homeTeamPoints")); last_g_live = safe_int(act.get("guestTeamPoints")); 
+                if not period: period = act.get("period")
+                found_score = True; break
+    if found_score: s_h = last_h_live; s_g = last_g_live
+    p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
+    if safe_int(period) > 4: p_str = f"OT{safe_int(period)-4}"
+    else: p_str = p_map.get(safe_int(period), f"Q{period}") if period else "-"
+    time_str = convert_elapsed_to_remaining(box.get('gameTime', ''), period)
+    st.markdown(f"""<div style='text-align: center; background-color: #222; color: #fff; padding: 10px; border-radius: 10px; margin-bottom: 20px;'><div style='font-size: 1.2em;'>{h_name} vs {g_name}</div><div style='font-size: 3em; font-weight: bold;'>{s_h} : {s_g}</div><div style='font-size: 0.9em; color: #ccc;'>{p_str} | {time_str}</div></div>""", unsafe_allow_html=True)
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.subheader("📊 Live Stats")
+        def create_live_player_table(team_data):
+            players = team_data.get("playerStats", []); data = []
+            for p in players:
+                sec = safe_int(p.get("secondsPlayed")); min_s = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "00:00"
+                if sec > 0 or safe_int(p.get("points")) > 0:
+                    data.append({"Nr": p.get('seasonPlayer', {}).get('shirtNumber', '-'), "Name": p.get('seasonPlayer', {}).get('lastName', 'Unk'), "Min": min_s, "PTS": safe_int(p.get("points")), "PF": safe_int(p.get("foulsCommitted"))})
+            df = pd.DataFrame(data)
+            if not df.empty: df = df.sort_values(by="PTS", ascending=False)
+            return df
+        st.markdown(f"**{h_name}**"); st.dataframe(create_live_player_table(box.get("homeTeam", {})), hide_index=True, use_container_width=True)
+        st.write(""); st.markdown(f"**{g_name}**"); st.dataframe(create_live_player_table(box.get("guestTeam", {})), hide_index=True, use_container_width=True)
+    with c2: st.subheader("📜 Live Ticker"); render_full_play_by_play(box, height=800)
