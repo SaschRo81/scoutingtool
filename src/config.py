@@ -1,7 +1,7 @@
 import streamlit as st
 
 # Version
-VERSION = "v6.0"
+VERSION = "v5.1"
 
 # --- API KONFIGURATION ---
 try:
