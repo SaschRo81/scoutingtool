@@ -6,14 +6,13 @@ from datetime import datetime
 import pytz
 from src.config import API_HEADERS, TEAMS_DB
 
-# --- URL KONFIGURATION ---
-# Gemäß Screenshot
+# --- URL KONFIGURATION (GLOBAL DEFINIERT FÜR IMPORT) ---
 URL_1_DBBL = "https://api-1.dbbl.scb.world"
 URL_2_NORD = "https://api-n.dbbl.scb.world"
 URL_2_SUED = "https://api-s.dbbl.scb.world"
 URL_2_PO   = "https://api-2.dbbl.scb.world"
 
-# Alle relevanten Endpunkte für Such-Iterationen
+# Liste aller Endpunkte für Iterationen
 ALL_URLS = [URL_1_DBBL, URL_2_NORD, URL_2_SUED, URL_2_PO]
 
 # --- HILFSFUNKTIONEN ---
@@ -28,7 +27,6 @@ def get_base_url_for_team(team_id):
             if staffel == "Nord": return URL_2_NORD
             elif staffel == "Süd": return URL_2_SUED
     except: pass
-    # Default Fallback: Wir wissen es nicht -> wir müssen eh suchen
     return URL_1_DBBL
 
 def format_minutes(seconds):
@@ -72,17 +70,11 @@ def fetch_1dbbl_teams(season_id):
             elif isinstance(data, dict): items = data.get("items") or data.get("data") or []
             
             for item in items:
-                # 1. Versuch: seasonTeam Objekt
                 st_obj = item.get("seasonTeam") or {}
-                # 2. Versuch: team Objekt
                 t_obj = item.get("team") or {}
-                # 3. Versuch: Root Item
                 root = item
                 
-                # Name finden (Priorität: seasonTeam > team > root)
                 name = st_obj.get("name") or t_obj.get("name") or root.get("name") or "Unknown Team"
-                
-                # ID finden
                 tid = st_obj.get("teamId") or t_obj.get("id") or root.get("id")
                 
                 if tid:
@@ -101,7 +93,6 @@ def fetch_1dbbl_teams(season_id):
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_player_metadata_cached(player_id):
     clean_id = str(player_id).replace(".0", "")
-    # Wir iterieren durch alle Server, da Spieler überall sein könnten
     for base_url in ALL_URLS:
         url = f"{base_url}/season-players/{clean_id}"
         try:
@@ -125,11 +116,7 @@ def get_player_metadata_cached(player_id):
 
 @st.cache_data(ttl=600)
 def fetch_standings_complete(season_id, group_name):
-    """
-    group_name kann sein: '1. DBBL', 'NORTH', 'SOUTH'
-    """
     target_url = ""
-    
     if group_name == "1. DBBL":
         target_url = f"{URL_1_DBBL}/standings?seasonId={season_id}"
     elif group_name == "NORTH":
@@ -137,7 +124,6 @@ def fetch_standings_complete(season_id, group_name):
     elif group_name == "SOUTH":
         target_url = f"{URL_2_SUED}/standings?seasonId={season_id}&group=SOUTH"
     else:
-        # Fallback auf api-2 PO/PD
         target_url = f"{URL_2_PO}/standings?seasonId={season_id}"
 
     try:
@@ -172,11 +158,7 @@ def fetch_standings_complete(season_id, group_name):
 # --- TEAM DATA ---
 
 def fetch_team_data(team_id, season_id):
-    # Strategie: Wir prüfen die URLs in einer logischen Reihenfolge
-    # Wenn Team in Config -> spezifische URL zuerst
     urls_to_try = ALL_URLS.copy()
-    
-    # Prio-Sortierung
     prio_url = get_base_url_for_team(team_id)
     if prio_url in urls_to_try:
         urls_to_try.remove(prio_url)
@@ -186,7 +168,7 @@ def fetch_team_data(team_id, season_id):
     df = pd.DataFrame()
     found_url = None
 
-    # 1. Team Stats (Versuche URL zu finden, die Daten liefert)
+    # 1. Team Stats
     for base_url in urls_to_try:
         try:
             r = requests.get(f"{base_url}/teams/{team_id}/{season_id}/statistics/season", headers=API_HEADERS, timeout=2)
@@ -197,7 +179,7 @@ def fetch_team_data(team_id, season_id):
                 elif isinstance(data, dict): td = data
                 
                 if td:
-                    found_url = base_url # Wir haben den richtigen Server gefunden!
+                    found_url = base_url
                     gp = td.get("gamesPlayed") or 1
                     fgm = td.get("fieldGoalsMade") or 0; fga = td.get("fieldGoalsAttempted") or 0
                     m3 = td.get("threePointShotsMade") or 0; a3 = td.get("threePointShotsAttempted") or 0
@@ -216,7 +198,7 @@ def fetch_team_data(team_id, season_id):
                     break
         except: pass
 
-    # 2. Player Stats (Nutze gefundene URL oder iteriere weiter)
+    # 2. Player Stats
     loop_urls = [found_url] if found_url else urls_to_try
     
     for base_url in loop_urls:
@@ -233,9 +215,8 @@ def fetch_team_data(team_id, season_id):
                     df = pd.json_normalize(p_list)
                     df.columns = [str(c).lower() for c in df.columns]
 
-                    # Dynamische Spaltenermittlung
                     col_id = next((c for c in df.columns if any(x in c for x in ["seasonplayer.id", "seasonplayerid", "personid", "playerid"])), None)
-                    if not col_id: # Fallback: suche 'id' spalte die nicht 'team' ist
+                    if not col_id:
                          col_id = "id" if "id" in df.columns else None
 
                     col_fn = next((c for c in df.columns if "firstname" in c), None)
@@ -247,7 +228,6 @@ def fetch_team_data(team_id, season_id):
                     df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
 
                     def get_v(row, key, df_cols):
-                        # Sucht spalte die 'key' enthält
                         matches = [c for c in df_cols if key == c or (key in c and 'pergame' not in c and 'percent' not in c)]
                         if matches:
                             col = sorted(matches, key=len)[0]
@@ -257,7 +237,6 @@ def fetch_team_data(team_id, season_id):
 
                     df["GP"] = df.apply(lambda x: get_v(x, "gamesplayed", df.columns), axis=1).replace(0, 1)
                     
-                    # Werte extrahieren
                     for k_dest, k_src in [
                         ("PTS_TOT", "points"), ("REB_TOT", "totalrebounds"), ("AST_TOT", "assists"),
                         ("STL_TOT", "steals"), ("TO_TOT", "turnovers"), ("BLK_TOT", "blocks"),
@@ -271,7 +250,6 @@ def fetch_team_data(team_id, season_id):
 
                     df["MIN_DISPLAY"] = (df["SEC_TOT"] / df["GP"]).apply(format_minutes)
                     
-                    # Averages berechnen
                     df["PPG"] = (df["PTS_TOT"] / df["GP"]).round(1)
                     df["TOT"] = (df["REB_TOT"] / df["GP"]).round(1)
                     df["AS"] = (df["AST_TOT"] / df["GP"]).round(1)
@@ -282,13 +260,24 @@ def fetch_team_data(team_id, season_id):
                     df["OR"] = (df["OR_TOT"] / df["GP"]).round(1)
                     df["DR"] = (df["DR_TOT"] / df["GP"]).round(1)
                     
-                    # Percentages
+                    df["FGM_AVG"] = (df["FGM"] / df["GP"]).round(1)
+                    df["FGA_AVG"] = (df["FGA"] / df["GP"]).round(1)
+                    df["3M"] = (df["3M_TOT"] / df["GP"]).round(1)
+                    df["3A"] = (df["3A_TOT"] / df["GP"]).round(1)
+                    df["FTM"] = (df["FTM_TOT"] / df["GP"]).round(1)
+                    df["FTA"] = (df["FTA_TOT"] / df["GP"]).round(1)
+                    
+                    df["2M_TOT"] = df["FGM"] - df["3M_TOT"]
+                    df["2A_TOT"] = df["FGA"] - df["3A_TOT"]
+                    df["2M"] = (df["2M_TOT"] / df["GP"]).round(1)
+                    df["2A"] = (df["2A_TOT"] / df["GP"]).round(1)
+
                     df["FG%"] = (df["FGM"] / df["FGA"] * 100).fillna(0).round(1)
                     df["3PCT"] = (df["3M_TOT"] / df["3A_TOT"] * 100).fillna(0).round(1)
                     df["FTPCT"] = (df["FTM_TOT"] / df["FTA_TOT"] * 100).fillna(0).round(1)
                     
                     df["select"] = False
-                    break # Success
+                    break 
         except: pass
     
     return df, ts
@@ -296,7 +285,6 @@ def fetch_team_data(team_id, season_id):
 @st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
     clean = []
-    # Versuche alle URLs
     for base_url in ALL_URLS:
         try:
             r = requests.get(f"{base_url}/games?currentPage=1&seasonTeamId={team_id}&pageSize=100&seasonId={season_id}", headers=API_HEADERS, timeout=2)
@@ -311,7 +299,6 @@ def fetch_schedule(team_id, season_id):
                         if any(x['id'] == g.get('id') for x in clean): continue
                         res = g.get("result", {}) or {}
                         h_s = res.get('homeTeamFinalScore')
-                        
                         ht = g.get("homeTeam", {})
                         gt = g.get("guestTeam", {})
                         
@@ -324,7 +311,7 @@ def fetch_schedule(team_id, season_id):
                             "homeTeamId": str(ht.get("teamId") or ht.get("id")),
                             "has_result": (h_s is not None)
                         })
-                    break # Wir haben Daten gefunden
+                    break 
         except: pass
     
     def get_date(x): return x.get('date') or "1970-01-01T00:00:00Z"
@@ -336,6 +323,39 @@ def fetch_schedule(team_id, season_id):
             g['date_display'] = dt.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y")
         except: g['date_display'] = "-"
     return clean
+
+# Legacy Support
+@st.cache_data(ttl=1800)
+def fetch_team_rank(team_id, season_id):
+    try:
+        tid = int(team_id)
+        group = None
+        if tid in TEAMS_DB:
+            staffel = TEAMS_DB[tid]["staffel"]
+            if staffel == "Nord": group = "NORTH"
+            elif staffel == "Süd": group = "SOUTH"
+        
+        if not group:
+            dbbl1 = fetch_1dbbl_teams(season_id)
+            if tid in dbbl1: group = "1. DBBL"
+        
+        groups_to_check = [group] if group else ["NORTH", "SOUTH", "1. DBBL"]
+        
+        for g in groups_to_check:
+            standings = fetch_standings_complete(season_id, g)
+            for entry in standings:
+                if str(entry.get("teamId")) == str(tid):
+                    return {
+                        "rank": entry.get("rank", 0),
+                        "totalGames": entry.get("totalGames", 0),
+                        "totalVictories": entry.get("totalVictories", 0),
+                        "totalLosses": entry.get("totalLosses", 0),
+                        "last10Victories": entry.get("last10Victories", 0),
+                        "last10Losses": entry.get("last10Losses", 0),
+                        "points": entry.get("points", 0)
+                    }
+    except: pass
+    return None
 
 @st.cache_data(ttl=10)
 def fetch_game_boxscore(game_id):
@@ -371,16 +391,11 @@ def fetch_team_info_basic(team_id):
 @st.cache_data(ttl=600)
 def fetch_season_games(season_id):
     all_games = []
-    # Scanne alle Server
     for base_url in ALL_URLS:
         try:
             r = requests.get(f"{base_url}/games?seasonId={season_id}&pageSize=3000", headers=API_HEADERS, timeout=4)
             if r.status_code == 200:
-                data = r.json()
-                items = []
-                if isinstance(data, list): items = data
-                elif isinstance(data, dict): items = data.get("items") or data.get("data") or []
-                
+                items = r.json().get("items") or []
                 for g in items:
                     if not any(x['id'] == g.get("id") for x in all_games):
                         try:
