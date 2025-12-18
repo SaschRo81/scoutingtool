@@ -100,7 +100,10 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
     stats = {"h_lead": 0, "g_lead": 0, "h_run": 0, "g_run": 0, "h_paint": 0, "g_paint": 0, "h_2nd": 0, "g_2nd": 0, "h_fb": 0, "g_fb": 0}
     if not actions: return stats
     cur_h = 0; cur_g = 0; run_team = None; run_score = 0; hid_str = str(home_id)
-    for act in actions:
+    
+    sorted_actions = sorted(actions, key=lambda x: x.get('actionNumber', 0))
+
+    for act in sorted_actions:
          new_h = safe_int(act.get("homeTeamPoints")); new_g = safe_int(act.get("guestTeamPoints"))
          if new_h == 0 and new_g == 0 and act.get("homeTeamPoints") is None: new_h = cur_h; new_g = cur_g
          pts_h = new_h - cur_h; pts_g = new_g - cur_g
@@ -134,13 +137,28 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
 
 def analyze_game_flow(actions, home_name, guest_name):
     if not actions: return "Keine Play-by-Play Daten verfügbar."
+    
+    sorted_actions = sorted(actions, key=lambda x: x.get('actionNumber', 0))
     lead_changes = 0; ties = 0; last_leader = None; crunch_log = []
-    for act in actions:
-        h_score = safe_int(act.get("homeTeamPoints")); g_score = safe_int(act.get("guestTeamPoints"))
-        if h_score == 0 and g_score == 0: continue
-        if h_score > g_score: current_leader = 'home'
-        elif g_score > h_score: current_leader = 'guest'
+    
+    cur_h = 0; cur_g = 0
+    enriched_actions = []
+    
+    for act in sorted_actions:
+        h = act.get("homeTeamPoints")
+        g = act.get("guestTeamPoints")
+        if h is not None: cur_h = int(h)
+        if g is not None: cur_g = int(g)
+        
+        act_enriched = act.copy()
+        act_enriched['_running_h'] = cur_h
+        act_enriched['_running_g'] = cur_g
+        enriched_actions.append(act_enriched)
+        
+        if cur_h > cur_g: current_leader = 'home'
+        elif cur_g > cur_h: current_leader = 'guest'
         else: current_leader = 'tie'
+        
         if last_leader is not None:
             if current_leader != last_leader:
                 if current_leader == 'tie': ties += 1
@@ -148,14 +166,25 @@ def analyze_game_flow(actions, home_name, guest_name):
                 elif last_leader == 'tie': lead_changes += 1
         last_leader = current_leader
 
-    relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
-    filtered_actions = [a for a in actions if a.get("type") in relevant_types]
-    last_events = filtered_actions[-12:] 
-    crunch_log.append("\n**Die Schlussphase (Chronologie der letzten Ereignisse):**")
+    # Relevante Typen erweitert
+    relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT", "SUBSTITUTION"]
+    filtered_actions = [a for a in enriched_actions if a.get("type") in relevant_types]
+    
+    # Letzte 20 Events, damit mehr Kontext da ist
+    last_events = filtered_actions[-20:] 
+    
+    crunch_log.append("\n**⏱️ Die Schlussphase (Chronologie der letzten Ereignisse):**")
     for ev in last_events:
-        h_pts = ev.get('homeTeamPoints'); g_pts = ev.get('guestTeamPoints'); score_str = f"{h_pts}:{g_pts}"
+        h_pts = ev.get('_running_h', 0)
+        g_pts = ev.get('_running_g', 0)
+        score_str = f"{h_pts}:{g_pts}"
+        
         action_desc = translate_text(ev.get("type", ""))
+        
+        # Details hinzufügen wenn vorhanden (z.B. Spielername für KI Kontext)
+        # Wir haben hier keine Namen, aber die KI versteht den Flow
         if ev.get("points"): action_desc += f" (+{ev.get('points')})"
+        
         crunch_log.append(f"- {score_str}: {action_desc}")
 
     summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
@@ -169,48 +198,59 @@ def render_full_play_by_play(box, height=600):
     if not actions:
         st.info("Keine Play-by-Play Daten verfügbar.")
         return
+    
+    actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
     player_map = get_player_lookup(box)
     player_team_map = get_player_team_lookup(box)
     home_name = get_team_name(box.get("homeTeam", {}), "Heim")
     guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
     home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
     guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
+    
     data = []
     running_h = 0; running_g = 0
-    for act in actions:
-        h_pts = act.get("homeTeamPoints"); g_pts = act.get("guestTeamPoints")
+    
+    for act in actions_sorted:
+        h_pts = act.get("homeTeamPoints")
+        g_pts = act.get("guestTeamPoints")
         if h_pts is not None: running_h = safe_int(h_pts)
         if g_pts is not None: running_g = safe_int(g_pts)
+        
         score_str = f"{running_h} : {running_g}"
         period = act.get("period", ""); game_time = act.get("gameTime", ""); time_in_game = act.get("timeInGame", "")
+        
         if game_time: display_time = convert_elapsed_to_remaining(game_time, period)
         else:
             display_time = "-"
             if time_in_game and "M" in time_in_game:
-                try:
-                    t = time_in_game.replace("PT", "").replace("S", "")
-                    m, s = t.split("M")
-                    display_time = f"{m}:{s.zfill(2)}"
+                try: t = time_in_game.replace("PT", "").replace("S", ""); m, s = t.split("M"); display_time = f"{m}:{s.zfill(2)}"
                 except: pass
+                
         time_label = f"Q{period} {display_time}" if period else "-"
         pid = str(act.get("seasonPlayerId")); actor = player_map.get(pid, "")
         tid = str(act.get("seasonTeamId"))
+        
         if tid == home_id: team_display = home_name
         elif tid == guest_id: team_display = guest_name
         elif pid in player_team_map: team_display = player_team_map[pid]
         else: team_display = "-"
+        
         raw_type = act.get("type", ""); action_german = translate_text(raw_type)
         is_successful = act.get("isSuccessful")
+        
         if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
              if "Treffer" not in action_german and "Fehlwurf" not in action_german:
                  if is_successful is True: action_german += " (Treffer)"
                  elif is_successful is False: action_german += " (Fehlwurf)"
+                 
         qualifiers = act.get("qualifiers", [])
         if qualifiers:
             qual_german = [translate_text(q) for q in qualifiers]
             action_german += f" ({', '.join(qual_german)})"
         if act.get("points"): action_german += f" (+{act.get('points')})"
+        
         data.append({"Zeit": time_label, "Score": score_str, "Team": team_display, "Spieler": actor, "Aktion": action_german})
+    
     df = pd.DataFrame(data)
     if not df.empty: df = df.iloc[::-1]
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
@@ -328,8 +368,10 @@ def generate_complex_ai_prompt(box):
     if not box: return "Keine Daten."
     h_data = box.get("homeTeam", {}); g_data = box.get("guestTeam", {}); h_name = get_team_name(h_data, "Heim"); g_name = get_team_name(g_data, "Gast"); res = box.get("result", {}); pbp_summary = analyze_game_flow(box.get("actions", []), h_name, g_name)
     
+    # Ermittlung Gegner & Spielort-Typ
     is_home_jena = "Jena" in h_name or "VIMODROM" in h_name
     is_guest_jena = "Jena" in g_name or "VIMODROM" in g_name
+    
     opponent = g_name if is_home_jena else (h_name if is_guest_jena else f"{h_name} vs {g_name}")
     location = "Heimspiel" if is_home_jena else ("Auswärtsspiel" if is_guest_jena else "Neutral")
     
@@ -458,7 +500,6 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
             wins = rank_info['totalVictories']
             losses = rank_info['totalLosses']
             
-            # Last 10 String bauen
             l10_wins = rank_info.get('last10Victories', 0)
             l10_losses = rank_info.get('last10Losses', 0)
             last10_str = f"{l10_wins}-{l10_losses}" if (l10_wins + l10_losses) > 0 else "-"
