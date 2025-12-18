@@ -269,17 +269,26 @@ def render_team_view():
     tid = st.session_state.selected_team_id
     if not tid: nav_to("team_stats_hub"); return
     
+    # 1. Team Name & Logo
     if tid in TEAMS_DB:
         info = TEAMS_DB[tid]
+        team_name = info['name']
     else:
-        info = {"name": f"Team {tid}"} 
+        # Fallback für 1. Liga (wenn nicht in TEAMS_DB)
+        info = {}
+        team_name = f"Team {tid}"
+        # Versuch Name über Basic Info zu holen
+        basic = fetch_team_info_basic(tid)
+        # Hier könnte man den Namen aktualisieren, aber API liefert oft nur ID zurück an dieser Stelle
     
-    render_header(f"Team Stats (ID: {tid})")
+    # Header ohne ID (wie gewünscht)
+    render_header(team_name)
     
     logo = get_best_team_logo(tid)
     c_head, c_stats = st.columns([1, 3])
     with c_head:
         if logo: st.image(logo, width=150)
+        else: st.markdown(f"<div style='font-size:50px;'>{BASKETBALL_ICON}</div>", unsafe_allow_html=True)
     
     with st.spinner("Lade Team Daten..."):
         df_roster, t_stats = fetch_team_data(tid, CURRENT_SEASON_ID)
@@ -300,17 +309,22 @@ def render_team_view():
     c_games, c_roster = st.columns([1, 2])
     
     with c_games:
-        st.subheader("Letzte Spiele")
+        st.subheader("Alle Spiele")
         if schedule:
-            for g in schedule[:8]: 
-                with st.container(border=True):
-                    c_date, c_res = st.columns([2, 1])
-                    with c_date:
-                        st.markdown(f"**{g['date_display']}**")
-                        st.caption(f"{g['home']} vs {g['guest']}")
-                    with c_res:
-                         st.markdown(f"### {g['score']}")
-        else: st.info("Keine Spiele.")
+            # Filter auf Spiele mit Ergebnis
+            played_games = [g for g in schedule if g.get('has_result')]
+            if played_games:
+                for g in played_games: 
+                    with st.container(border=True):
+                        c_date, c_res = st.columns([2, 1])
+                        with c_date:
+                            st.markdown(f"**{g['date_display']}**")
+                            st.caption(f"{g['home']} vs {g['guest']}")
+                        with c_res:
+                             st.markdown(f"### {g['score']}")
+            else:
+                st.info("Noch keine Spiele absolviert.")
+        else: st.info("Keine Spiele gefunden.")
 
     with c_roster:
         st.subheader("Kader (Profil öffnen)")
@@ -319,11 +333,21 @@ def render_team_view():
             
             for _, p in df_roster.iterrows():
                 with st.container(border=True):
-                    c1, c2, c3, c4 = st.columns([0.5, 2, 1.5, 1])
-                    with c1: st.markdown(f"**#{p['NR']}**")
-                    with c2: st.markdown(f"**{p['NAME_FULL']}**")
-                    with c3: st.caption(f"{p['PPG']} PPG | {p['TOT']} REB")
-                    with c4: 
+                    # Metadaten laden für Bild
+                    meta = get_player_metadata_cached(p['PLAYER_ID'])
+                    img_url = meta.get('img')
+                    
+                    # Layout mit Bild-Spalte
+                    c_img, c_nr, c_name, c_stats, c_btn = st.columns([1, 0.5, 2.5, 2, 1])
+                    
+                    with c_img:
+                        if img_url: st.image(img_url, use_container_width=True)
+                        else: st.markdown("👤")
+                        
+                    with c_nr: st.markdown(f"**#{p['NR']}**")
+                    with c_name: st.markdown(f"**{p['NAME_FULL']}**")
+                    with c_stats: st.caption(f"{p['PPG']} PPG | {p['TOT']} REB")
+                    with c_btn: 
                         if st.button("Profil", key=f"prof_{p['PLAYER_ID']}"):
                             st.session_state.selected_player_id = p['PLAYER_ID']
                             nav_to("player_profile")
@@ -385,7 +409,6 @@ def render_player_profile():
     schedule = fetch_schedule(tid, CURRENT_SEASON_ID)
     if schedule:
         played_games = [g for g in schedule if g.get('has_result')]
-        # Nur die letzten 5
         played_games = played_games[:5]
         
         game_log_data = []
@@ -396,7 +419,6 @@ def render_player_profile():
                 box = fetch_game_boxscore(gid)
                 if not box: continue
                 
-                # Spieler suchen in Home oder Guest
                 found_p = None
                 for team_key in ['homeTeam', 'guestTeam']:
                     for player in box.get(team_key, {}).get('playerStats', []):
