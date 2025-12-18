@@ -379,11 +379,55 @@ def render_player_profile():
         s4.metric("Effizienz", p.get('EFF', '-'))
 
     st.divider()
-    st.markdown("### Letzte Spiele des Teams")
+    st.markdown("### Letzte 5 Spiele (Persönliche Stats)")
+    
+    # --- GAME LOG LOGIC ---
     schedule = fetch_schedule(tid, CURRENT_SEASON_ID)
     if schedule:
-        df_sched = pd.DataFrame(schedule[:8])
-        st.dataframe(df_sched[["date_display", "home", "guest", "score"]], hide_index=True, use_container_width=True)
+        played_games = [g for g in schedule if g.get('has_result')]
+        # Nur die letzten 5
+        played_games = played_games[:5]
+        
+        game_log_data = []
+        
+        with st.spinner("Lade Game-Log Details..."):
+            for g in played_games:
+                gid = g['id']
+                box = fetch_game_boxscore(gid)
+                if not box: continue
+                
+                # Spieler suchen in Home oder Guest
+                found_p = None
+                for team_key in ['homeTeam', 'guestTeam']:
+                    for player in box.get(team_key, {}).get('playerStats', []):
+                        if str(player.get('seasonPlayer', {}).get('id', '')) == str(pid):
+                            found_p = player
+                            break
+                    if found_p: break
+                
+                if found_p:
+                    sec = found_p.get('secondsPlayed', 0) or 0
+                    m = sec // 60; s = sec % 60
+                    min_str = f"{int(m):02d}:{int(s):02d}"
+                    
+                    game_log_data.append({
+                        "Datum": g['date_display'],
+                        "Gegner": g['guest'] if g['homeTeamId'] == str(tid) else g['home'],
+                        "Ergebnis": g['score'],
+                        "MIN": min_str,
+                        "PTS": found_p.get('points', 0),
+                        "REB": found_p.get('totalRebounds', 0),
+                        "AST": found_p.get('assists', 0),
+                        "STL": found_p.get('steals', 0),
+                        "BLK": found_p.get('blocks', 0)
+                    })
+        
+        if game_log_data:
+            st.dataframe(pd.DataFrame(game_log_data), hide_index=True, use_container_width=True)
+        else:
+            st.info("Keine Daten in den letzten Spielen gefunden (DNP?).")
+    else:
+        st.info("Keine Spiele gefunden.")
 
 def render_comparison():
     render_header("🤼 Spieler Vergleich")
