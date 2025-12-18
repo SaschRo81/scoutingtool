@@ -54,7 +54,6 @@ for k, v in DEFAULTS.items():
     if k not in st.session_state: st.session_state[k] = v
 
 # --- NAVIGATION HELPER ---
-# WICHTIG: Kein st.rerun() im Callback! State setzen reicht.
 def nav_to(page): 
     st.session_state.current_page = page
 
@@ -99,7 +98,6 @@ def inject_custom_css():
 @st.cache_data(ttl=3600)
 def get_best_team_logo(team_id):
     if not team_id: return None
-    # Prüfe alle URLs
     candidates = [
         f"{URL_1_DBBL}/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
         f"{URL_2_NORD}/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
@@ -215,7 +213,6 @@ def render_stats_hub():
         with st.container(border=True):
             st.markdown("### 1. DBBL")
             st.caption("1. Bundesliga")
-            # Callback statt direktem State-Setzen
             st.button("Zur Liga", key="btn_1dbbl", on_click=nav_to_league, args=("1. DBBL",))
             
     with col2:
@@ -236,7 +233,6 @@ def render_league_view():
     
     render_header(f"{league} Übersicht")
     
-    # Laden der Daten
     if league == "1. DBBL":
         with st.spinner("Lade 1. DBBL Teams..."):
             teams = fetch_1dbbl_teams(CURRENT_SEASON_ID)
@@ -254,13 +250,11 @@ def render_league_view():
             st.info("Keine Teams gefunden.")
         else:
             cols = st.columns(4)
-            # Iteration über Teams (sortiert nach Namen)
             sorted_teams = sorted(teams.items(), key=lambda x: x[1].get("name", ""))
             
             for idx, (tid, info) in enumerate(sorted_teams):
                 with cols[idx % 4]:
                     with st.container(border=True):
-                        # Logo Logik
                         if "logo_url" in info:
                             st.image(info["logo_url"], use_container_width=True)
                         else:
@@ -268,7 +262,6 @@ def render_league_view():
                             if logo: st.image(logo, use_container_width=True)
                             else: st.markdown(f"<div style='text-align:center; font-size:40px;'>{BASKETBALL_ICON}</div>", unsafe_allow_html=True)
                         
-                        # Button mit Callback -> Fix für Double-Click Issue
                         st.button(info['name'], key=f"t_{tid}", on_click=nav_to_team, args=(tid,))
 
     with c_table:
@@ -285,14 +278,10 @@ def render_team_view():
     tid = st.session_state.selected_team_id
     if not tid: nav_to("team_stats_hub"); return
     
-    # Versuch Team Name zu finden
     team_name = f"Team {tid}"
-    
-    # 1. Config Check
     if tid in TEAMS_DB:
         team_name = TEAMS_DB[tid]['name']
     else:
-        # 2. Versuch 1. DBBL
         dbbl1 = fetch_1dbbl_teams(CURRENT_SEASON_ID)
         if tid in dbbl1:
             team_name = dbbl1[tid]['name']
