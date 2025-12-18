@@ -100,10 +100,7 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
     stats = {"h_lead": 0, "g_lead": 0, "h_run": 0, "g_run": 0, "h_paint": 0, "g_paint": 0, "h_2nd": 0, "g_2nd": 0, "h_fb": 0, "g_fb": 0}
     if not actions: return stats
     cur_h = 0; cur_g = 0; run_team = None; run_score = 0; hid_str = str(home_id)
-    
-    sorted_actions = sorted(actions, key=lambda x: x.get('actionNumber', 0))
-
-    for act in sorted_actions:
+    for act in actions:
          new_h = safe_int(act.get("homeTeamPoints")); new_g = safe_int(act.get("guestTeamPoints"))
          if new_h == 0 and new_g == 0 and act.get("homeTeamPoints") is None: new_h = cur_h; new_g = cur_g
          pts_h = new_h - cur_h; pts_g = new_g - cur_g
@@ -137,28 +134,13 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
 
 def analyze_game_flow(actions, home_name, guest_name):
     if not actions: return "Keine Play-by-Play Daten verfügbar."
-    
-    sorted_actions = sorted(actions, key=lambda x: x.get('actionNumber', 0))
     lead_changes = 0; ties = 0; last_leader = None; crunch_log = []
-    
-    cur_h = 0; cur_g = 0
-    enriched_actions = []
-    
-    for act in sorted_actions:
-        h = act.get("homeTeamPoints")
-        g = act.get("guestTeamPoints")
-        if h is not None: cur_h = int(h)
-        if g is not None: cur_g = int(g)
-        
-        act_enriched = act.copy()
-        act_enriched['_running_h'] = cur_h
-        act_enriched['_running_g'] = cur_g
-        enriched_actions.append(act_enriched)
-        
-        if cur_h > cur_g: current_leader = 'home'
-        elif cur_g > cur_h: current_leader = 'guest'
+    for act in actions:
+        h_score = safe_int(act.get("homeTeamPoints")); g_score = safe_int(act.get("guestTeamPoints"))
+        if h_score == 0 and g_score == 0: continue
+        if h_score > g_score: current_leader = 'home'
+        elif g_score > h_score: current_leader = 'guest'
         else: current_leader = 'tie'
-        
         if last_leader is not None:
             if current_leader != last_leader:
                 if current_leader == 'tie': ties += 1
@@ -166,25 +148,15 @@ def analyze_game_flow(actions, home_name, guest_name):
                 elif last_leader == 'tie': lead_changes += 1
         last_leader = current_leader
 
-    # Relevante Typen erweitert
-    relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT", "SUBSTITUTION"]
-    filtered_actions = [a for a in enriched_actions if a.get("type") in relevant_types]
+    relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
+    filtered_actions = [a for a in actions if a.get("type") in relevant_types]
+    last_events = filtered_actions[-15:]  # Etwas mehr PBP Daten für den neuen Prompt
     
-    # Letzte 20 Events, damit mehr Kontext da ist
-    last_events = filtered_actions[-20:] 
-    
-    crunch_log.append("\n**⏱️ Die Schlussphase (Chronologie der letzten Ereignisse):**")
+    crunch_log.append("\n**Chronologie der letzten wichtigen Aktionen:**")
     for ev in last_events:
-        h_pts = ev.get('_running_h', 0)
-        g_pts = ev.get('_running_g', 0)
-        score_str = f"{h_pts}:{g_pts}"
-        
+        h_pts = ev.get('homeTeamPoints'); g_pts = ev.get('guestTeamPoints'); score_str = f"{h_pts}:{g_pts}"
         action_desc = translate_text(ev.get("type", ""))
-        
-        # Details hinzufügen wenn vorhanden (z.B. Spielername für KI Kontext)
-        # Wir haben hier keine Namen, aber die KI versteht den Flow
         if ev.get("points"): action_desc += f" (+{ev.get('points')})"
-        
         crunch_log.append(f"- {score_str}: {action_desc}")
 
     summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
@@ -198,59 +170,48 @@ def render_full_play_by_play(box, height=600):
     if not actions:
         st.info("Keine Play-by-Play Daten verfügbar.")
         return
-    
-    actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
     player_map = get_player_lookup(box)
     player_team_map = get_player_team_lookup(box)
     home_name = get_team_name(box.get("homeTeam", {}), "Heim")
     guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
     home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
     guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
-    
     data = []
     running_h = 0; running_g = 0
-    
-    for act in actions_sorted:
-        h_pts = act.get("homeTeamPoints")
-        g_pts = act.get("guestTeamPoints")
+    for act in actions:
+        h_pts = act.get("homeTeamPoints"); g_pts = act.get("guestTeamPoints")
         if h_pts is not None: running_h = safe_int(h_pts)
         if g_pts is not None: running_g = safe_int(g_pts)
-        
         score_str = f"{running_h} : {running_g}"
         period = act.get("period", ""); game_time = act.get("gameTime", ""); time_in_game = act.get("timeInGame", "")
-        
         if game_time: display_time = convert_elapsed_to_remaining(game_time, period)
         else:
             display_time = "-"
             if time_in_game and "M" in time_in_game:
-                try: t = time_in_game.replace("PT", "").replace("S", ""); m, s = t.split("M"); display_time = f"{m}:{s.zfill(2)}"
+                try:
+                    t = time_in_game.replace("PT", "").replace("S", "")
+                    m, s = t.split("M")
+                    display_time = f"{m}:{s.zfill(2)}"
                 except: pass
-                
         time_label = f"Q{period} {display_time}" if period else "-"
         pid = str(act.get("seasonPlayerId")); actor = player_map.get(pid, "")
         tid = str(act.get("seasonTeamId"))
-        
         if tid == home_id: team_display = home_name
         elif tid == guest_id: team_display = guest_name
         elif pid in player_team_map: team_display = player_team_map[pid]
         else: team_display = "-"
-        
         raw_type = act.get("type", ""); action_german = translate_text(raw_type)
         is_successful = act.get("isSuccessful")
-        
         if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
              if "Treffer" not in action_german and "Fehlwurf" not in action_german:
                  if is_successful is True: action_german += " (Treffer)"
                  elif is_successful is False: action_german += " (Fehlwurf)"
-                 
         qualifiers = act.get("qualifiers", [])
         if qualifiers:
             qual_german = [translate_text(q) for q in qualifiers]
             action_german += f" ({', '.join(qual_german)})"
         if act.get("points"): action_german += f" (+{act.get('points')})"
-        
         data.append({"Zeit": time_label, "Score": score_str, "Team": team_display, "Spieler": actor, "Aktion": action_german})
-    
     df = pd.DataFrame(data)
     if not df.empty: df = df.iloc[::-1]
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
@@ -379,78 +340,47 @@ def generate_complex_ai_prompt(box):
         s = team_data.get("gameStat", {}); p_list = team_data.get("playerStats", []); top_p = sorted([p for p in p_list if p.get("points", 0) is not None], key=lambda x: x.get("points", 0), reverse=True)[:3]; top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')})" for p in top_p])
         return f"FG: {safe_int(s.get('fieldGoalsSuccessPercent'))}%, Reb: {safe_int(s.get('totalRebounds'))}, TO: {safe_int(s.get('turnovers'))}. Top: {top_str}"
 
-    prompt = f"""Du agierst als erfahrener Sportjournalist und SEO-Experte für den Basketballverein VIMODROM Baskets Jena (2. DBBL). Deine Aufgabe ist es, hochwertige, emotionale und suchmaschinenoptimierte Texte zu erstellen.
+    prompt = f"""
+Rolle:
+Du bist ein professioneller Basketball-Analyst und Sportjournalist. Deine Aufgabe ist es, basierend auf den untenstehenden Informationen einen tiefgehenden Spielbericht zu verfassen, der über eine reine Nacherzählung hinausgeht und die Ursachen für Sieg oder Niederlage statistisch fundiert erklärt.
 
-Bitte verarbeite die untenstehenden [SPIELDATEN] und erstelle darauf basierend die folgenden Inhalte. Halte dich strikt an die Stilvorgaben.
+Eingabedaten (Platzhalter):
+- Wettbewerb: 2. DBBL (Damen Basketball Bundesliga)
+- Begegnung: {h_name} (Heim) vs {g_name} (Gast)
+- Ergebnis: {res.get('homeTeamFinalScore')} : {res.get('guestTeamFinalScore')} (Halbzeit: {res.get('homeTeamQ1Score',0)+res.get('homeTeamQ2Score',0)}:{res.get('guestTeamQ1Score',0)+res.get('guestTeamQ2Score',0)})
+- Viertel: Q1 {res.get('homeTeamQ1Score')}:{res.get('guestTeamQ1Score')}, Q2 {res.get('homeTeamQ2Score')}:{res.get('guestTeamQ2Score')}, Q3 {res.get('homeTeamQ3Score')}:{res.get('guestTeamQ3Score')}, Q4 {res.get('homeTeamQ4Score')}:{res.get('guestTeamQ4Score')}
+- Ort/Halle: {box.get('venue', {}).get('name', 'Halle')}
+- Zuschauer: {res.get('spectators', 'k.A.')}
 
-### ALLGEMEINE STILVORGABEN & TONALITÄT
-1. **Sprache:** Deutsch.
-2. **Formatierung:** Keine Zwischenüberschriften in den Fließtexten. Absätze müssen kurz und prägnant sein (max. 3 Sätze pro Absatz).
-3. **Wortwahl:** Vermeide das Wort "beeindruckend". Nutze präzisere, neutralere oder bildhaftere Formulierungen.
-4. **Emotionen:** Flechte folgende Emotionen subtil ein: Spannung (Ungewissheit), Begeisterung (Spektakel), Teamgeist, Stolz (Heimat), Adrenalin (Tempo), Hoffnung, Identifikation und Neugierde.
-5. **Struktur:** Beginne Berichte mit Einordnung in den Saisonkontext, Analyse des Gegners/Spielverlaufs, Zitaten und Statistiken.
+Statistiken & Fakten:
+- {h_name}: {get_stats_str(h_data)}
+- {g_name}: {get_stats_str(g_data)}
 
----
-
-### AUFGABE 1: DREI DYNAMISCHE SPIELBERICHTE
-Erstelle drei separate Artikel (jeweils mind. 3000 Zeichen für Artikel A und B).
-
-**Artikel A: Für die VIMODROM-Website**
-*   **Perspektive:** Subjektiv, parteiisch ("Wir"-Gefühl), aus Sicht der VIMODROM Baskets Jena.
-*   **Ziel:** Fans emotional binden, Stolz und Teamgeist vermitteln.
-
-**Artikel B: Für die 2. DBBL-Website**
-*   **Perspektive:** Streng neutral, journalistisch ausgewogen.
-*   **Ziel:** Sachliche Berichterstattung über den Spielverlauf für ligaweite Interessierte.
-
-**Artikel C: Für das Spieltagsmagazin (Heutige Perspektive)**
-*   **Perspektive:** Rückblickend-analytisch, als Feature-Story für das Magazin.
-*   **Stil:** Lebhafte Beschreibungen, Fokus auf Atmosphäre und Dramatik.
-
-**Output-Format für jeden der drei Artikel:**
-1. Der Text (ohne Zwischenüberschriften).
-2. 3 aussagekräftige Headlines zur Auswahl.
-3. 10 Keywords (kommagetrennt).
-4. Eine klickstarke Meta-Beschreibung.
-
----
-
-### AUFGABE 2: SEO-OPTIMIERTER ALLGEMEINER VEREINSTEXT
-Erstelle einen zeitlosen Text (600–1.000 Wörter) zum Thema "Basketball, VIMODROM Baskets Jena".
-*   **Zielgruppe:** Sportinteressierte aller Altersklassen.
-*   **Keywords integrieren:** VIMODROM Baskets Jena, Basketball in Jena, Basketball Training Jena, Basketballspiele Thüringen.
-*   **Inhalt:** Vorstellung des Teams, Trainingstipps, Möglichkeiten für neue Spieler (Tryouts/Beitritt), Verweise auf Ticketkauf (fiktiver Link) und Community.
-*   **Multimedia-Platzhalter:** Füge an passenden Stellen Platzhalter für Bilder/Videos ein, inklusive SEO-optimierter Alt-Tags (z.B. [BILD: Spielszene Dunking - Alt-Tag: Dynamisches Basketballspiel in Jena]).
-*   **Struktur:** Fließtext ohne Zwischenüberschriften, kurze Absätze.
-*   **Meta:** Max 150 Zeichen, spannend.
-
----
-
-### AUFGABE 3: KREATIVER MATCH-REPORT (STORYTELLING)
-Schreibe einen zusätzlichen Bericht über das Spiel gegen {opponent} mit Fokus auf Storytelling.
-*   **Einstieg:** Überraschender Moment oder besonderes Zitat.
-*   **Inhalt:** Unerwartete Wendungen, taktische Feinheiten, "Hidden Heroes" (weniger beachtete Spielerinnen), Geschichten hinter den Zahlen.
-*   **Stil:** Variiere den Satzbau, vermeide Redundanzen, nutze frische Metaphern.
-
----
-
-### ABSCHLUSS
-Erstelle ganz am Ende eine Zusammenfassung aller Inhalte mit 10 Meta-Tags (kommagetrennt) und einer globalen Meta-Beschreibung.
-
----
-
-### [SPIELDATEN]
-**Gegner:** {opponent}
-**Ergebnis:** {h_name} {res.get('homeTeamFinalScore')} : {res.get('guestTeamFinalScore')} {g_name} (Halbzeit: {res.get('homeTeamQ1Score',0)+res.get('homeTeamQ2Score',0)}:{res.get('guestTeamQ1Score',0)+res.get('guestTeamQ2Score',0)})
-**Spielort:** {location} in {box.get('venue', {}).get('name', 'Halle')}
-**Viertelergebnisse:** Q1 {res.get('homeTeamQ1Score')}:{res.get('guestTeamQ1Score')}, Q2 {res.get('homeTeamQ2Score')}:{res.get('guestTeamQ2Score')}, Q3 {res.get('homeTeamQ3Score')}:{res.get('guestTeamQ3Score')}, Q4 {res.get('homeTeamQ4Score')}:{res.get('guestTeamQ4Score')}
-**Stats {h_name}:** {get_stats_str(h_data)}
-**Stats {g_name}:** {get_stats_str(g_data)}
-**Besondere Vorkommnisse (PBP-Analyse):**
+Spielverlauf (Play-by-Play Analyse):
 {pbp_summary}
 
-**Zitate (Trainer/Spieler):** [Hier bitte manuell Zitate einfügen]
-**Tabellensituation:** [Hier bitte aktuelle Platzierung ergänzen]
+Aufgabenstellung:
+Erstelle einen strukturierten Analyse-Bericht unter Berücksichtigung der folgenden zwei Hauptkategorien:
+
+1. Beschreibender Kontext (Der Rahmen)
+Beantworte die W-Fragen, um die Atmosphäre und den Verlauf greifbar zu machen:
+Beteiligte: Wer spielte? (Heim vs. Gast, Starting Five, wichtige Bankspieler, Trainerentscheidungen).
+Rahmenbedingungen: Wettbewerb (2. DBBL), Datum, Ort und Bedeutung des Spiels.
+Spielnarrativ: Beschreibe den chronologischen Verlauf. Gab es „Runs“ (Punkteserien)? Wann fiel die Vorentscheidung? Gab es Buzzer-Beater oder strittige Szenen?
+Stimmen zum Spiel: Integriere (fiktive oder vorhandene) Zitate der Coaches oder Top-Scorer zur Erklärung der Leistung.
+
+2. Spezifische Leistungsanalyse (Die Daten)
+Nutze quantitative Daten, um das „Warum“ zu erklären. Übersetze die allgemeinen Sport-Metriken in spezifische Basketball-Termini:
+Team- & Taktikanalyse:
+Scoring & Effizienz: Analysiere nicht nur den Endstand, sondern die Wurfquoten (FG%, 3P%, FT%).
+Ballbesitz (Possession): Bewerte das Tempo (Pace) und die Ballkontrolle (Turnovers).
+Defensive & Rebounding: Wer gewann das Rebound-Duell? Bewerte die defensive Intensität (Steals, Blocks).
+Spielerleistungsanalyse:
+KPIs: Hebe herausragende Einzelspieler hervor (Punkte, Rebounds, Assists).
+Physische/Belastungskomponente: Gehe auf die Rotation ein.
+
+Ziel des Berichts:
+Kombiniere die narrative Ebene mit den harten Fakten. Der Leser soll am Ende verstehen, warum ein Team gewonnen hat (z.B. Rebound-Dominanz trotz schlechterer Wurfquote).
 """
     return prompt
 
