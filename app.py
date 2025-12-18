@@ -19,7 +19,8 @@ from src.utils import get_logo_url
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
-    fetch_season_games, fetch_standings_complete, fetch_1dbbl_teams
+    fetch_season_games, fetch_standings_complete, fetch_1dbbl_teams,
+    URL_1_DBBL, URL_2_NORD, URL_2_SUED
 )
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
@@ -53,8 +54,21 @@ for k, v in DEFAULTS.items():
     if k not in st.session_state: st.session_state[k] = v
 
 # --- NAVIGATION HELPER ---
+# WICHTIG: Kein st.rerun() im Callback! State setzen reicht.
 def nav_to(page): 
     st.session_state.current_page = page
+
+def nav_to_league(league_name):
+    st.session_state.selected_league = league_name
+    st.session_state.current_page = "league_view"
+
+def nav_to_team(team_id):
+    st.session_state.selected_team_id = team_id
+    st.session_state.current_page = "team_view"
+
+def nav_to_player(player_id):
+    st.session_state.selected_player_id = player_id
+    st.session_state.current_page = "player_profile"
 
 def go_home(): 
     st.session_state.selected_league = None
@@ -85,10 +99,11 @@ def inject_custom_css():
 @st.cache_data(ttl=3600)
 def get_best_team_logo(team_id):
     if not team_id: return None
+    # Prüfe alle URLs
     candidates = [
-        f"https://api-1.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
-        f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
-        f"https://api-n.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}"
+        f"{URL_1_DBBL}/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
+        f"{URL_2_NORD}/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
+        f"{URL_2_SUED}/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}"
     ]
     for url in candidates:
         try:
@@ -139,9 +154,8 @@ def render_home():
                     sel = st.selectbox("Ergebnisse:", list(opts.keys()))
                     if st.button("Zum Profil", type="primary"):
                         choice = opts[sel]
+                        nav_to_player(choice['id'])
                         st.session_state.selected_team_id = choice['tid']
-                        st.session_state.selected_player_id = choice['id']
-                        st.session_state.current_page = "player_profile"
                         st.rerun()
                 else: st.warning("Keine Spieler gefunden.")
     
@@ -201,25 +215,20 @@ def render_stats_hub():
         with st.container(border=True):
             st.markdown("### 1. DBBL")
             st.caption("1. Bundesliga")
-            if st.button("Zur Liga", key="btn_1dbbl"): 
-                st.session_state.selected_league = "1. DBBL"
-                nav_to("league_view")
+            # Callback statt direktem State-Setzen
+            st.button("Zur Liga", key="btn_1dbbl", on_click=nav_to_league, args=("1. DBBL",))
             
     with col2:
         with st.container(border=True):
             st.markdown("### 2. DBBL Nord")
             st.caption("2. Bundesliga Nord")
-            if st.button("Zur Liga", key="btn_nord"): 
-                st.session_state.selected_league = "Nord"
-                nav_to("league_view")
+            st.button("Zur Liga", key="btn_nord", on_click=nav_to_league, args=("Nord",))
                 
     with col3:
         with st.container(border=True):
             st.markdown("### 2. DBBL Süd")
             st.caption("2. Bundesliga Süd")
-            if st.button("Zur Liga", key="btn_sued"): 
-                st.session_state.selected_league = "Süd"
-                nav_to("league_view")
+            st.button("Zur Liga", key="btn_sued", on_click=nav_to_league, args=("Süd",))
 
 def render_league_view():
     league = st.session_state.selected_league
@@ -227,6 +236,7 @@ def render_league_view():
     
     render_header(f"{league} Übersicht")
     
+    # Laden der Daten
     if league == "1. DBBL":
         with st.spinner("Lade 1. DBBL Teams..."):
             teams = fetch_1dbbl_teams(CURRENT_SEASON_ID)
@@ -240,20 +250,26 @@ def render_league_view():
     
     with c_teams:
         st.subheader("Teams")
-        cols = st.columns(4)
-        for idx, (tid, info) in enumerate(teams.items()):
-            with cols[idx % 4]:
-                with st.container(border=True):
-                    if "logo_url" in info:
-                        st.image(info["logo_url"], use_container_width=True)
-                    else:
-                        logo = get_best_team_logo(tid)
-                        if logo: st.image(logo, use_container_width=True)
-                        else: st.markdown(f"<div style='text-align:center; font-size:40px;'>{BASKETBALL_ICON}</div>", unsafe_allow_html=True)
-                    
-                    if st.button(info['name'], key=f"t_{tid}"):
-                        st.session_state.selected_team_id = tid
-                        nav_to("team_view")
+        if not teams:
+            st.info("Keine Teams gefunden.")
+        else:
+            cols = st.columns(4)
+            # Iteration über Teams (sortiert nach Namen)
+            sorted_teams = sorted(teams.items(), key=lambda x: x[1].get("name", ""))
+            
+            for idx, (tid, info) in enumerate(sorted_teams):
+                with cols[idx % 4]:
+                    with st.container(border=True):
+                        # Logo Logik
+                        if "logo_url" in info:
+                            st.image(info["logo_url"], use_container_width=True)
+                        else:
+                            logo = get_best_team_logo(tid)
+                            if logo: st.image(logo, use_container_width=True)
+                            else: st.markdown(f"<div style='text-align:center; font-size:40px;'>{BASKETBALL_ICON}</div>", unsafe_allow_html=True)
+                        
+                        # Button mit Callback -> Fix für Double-Click Issue
+                        st.button(info['name'], key=f"t_{tid}", on_click=nav_to_team, args=(tid,))
 
     with c_table:
         st.subheader("Tabelle")
@@ -269,19 +285,18 @@ def render_team_view():
     tid = st.session_state.selected_team_id
     if not tid: nav_to("team_stats_hub"); return
     
-    # 1. Team Name & Logo
-    if tid in TEAMS_DB:
-        info = TEAMS_DB[tid]
-        team_name = info['name']
-    else:
-        # Fallback für 1. Liga (wenn nicht in TEAMS_DB)
-        info = {}
-        team_name = f"Team {tid}"
-        # Versuch Name über Basic Info zu holen
-        basic = fetch_team_info_basic(tid)
-        # Hier könnte man den Namen aktualisieren, aber API liefert oft nur ID zurück an dieser Stelle
+    # Versuch Team Name zu finden
+    team_name = f"Team {tid}"
     
-    # Header ohne ID (wie gewünscht)
+    # 1. Config Check
+    if tid in TEAMS_DB:
+        team_name = TEAMS_DB[tid]['name']
+    else:
+        # 2. Versuch 1. DBBL
+        dbbl1 = fetch_1dbbl_teams(CURRENT_SEASON_ID)
+        if tid in dbbl1:
+            team_name = dbbl1[tid]['name']
+    
     render_header(team_name)
     
     logo = get_best_team_logo(tid)
@@ -311,7 +326,6 @@ def render_team_view():
     with c_games:
         st.subheader("Alle Spiele")
         if schedule:
-            # Filter auf Spiele mit Ergebnis
             played_games = [g for g in schedule if g.get('has_result')]
             if played_games:
                 for g in played_games: 
@@ -322,8 +336,7 @@ def render_team_view():
                             st.caption(f"{g['home']} vs {g['guest']}")
                         with c_res:
                              st.markdown(f"### {g['score']}")
-            else:
-                st.info("Noch keine Spiele absolviert.")
+            else: st.info("Noch keine Spiele absolviert.")
         else: st.info("Keine Spiele gefunden.")
 
     with c_roster:
@@ -333,11 +346,9 @@ def render_team_view():
             
             for _, p in df_roster.iterrows():
                 with st.container(border=True):
-                    # Metadaten laden für Bild
                     meta = get_player_metadata_cached(p['PLAYER_ID'])
                     img_url = meta.get('img')
                     
-                    # Layout mit Bild-Spalte
                     c_img, c_nr, c_name, c_stats, c_btn = st.columns([1, 0.5, 2.5, 2, 1])
                     
                     with c_img:
@@ -348,9 +359,7 @@ def render_team_view():
                     with c_name: st.markdown(f"**{p['NAME_FULL']}**")
                     with c_stats: st.caption(f"{p['PPG']} PPG | {p['TOT']} REB")
                     with c_btn: 
-                        if st.button("Profil", key=f"prof_{p['PLAYER_ID']}"):
-                            st.session_state.selected_player_id = p['PLAYER_ID']
-                            nav_to("player_profile")
+                        st.button("Profil", key=f"prof_{p['PLAYER_ID']}", on_click=nav_to_player, args=(p['PLAYER_ID'],))
 
 def render_player_profile():
     pid = st.session_state.selected_player_id
@@ -405,7 +414,6 @@ def render_player_profile():
     st.divider()
     st.markdown("### Letzte 5 Spiele (Persönliche Stats)")
     
-    # --- GAME LOG LOGIC ---
     schedule = fetch_schedule(tid, CURRENT_SEASON_ID)
     if schedule:
         played_games = [g for g in schedule if g.get('has_result')]
