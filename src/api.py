@@ -7,39 +7,53 @@ import pytz
 from src.config import API_HEADERS, TEAMS_DB
 
 # --- HILFSFUNKTIONEN ---
+
 def get_base_url(team_id=None):
     if team_id:
         try:
             tid = int(team_id)
             if tid in TEAMS_DB:
-                if TEAMS_DB[tid]["staffel"] == "Nord":
+                staffel = TEAMS_DB[tid].get("staffel")
+                if staffel == "Nord":
                     return "https://api-n.dbbl.scb.world"
-                elif TEAMS_DB[tid]["staffel"] == "Süd":
+                elif staffel == "Süd":
                     return "https://api-s.dbbl.scb.world"
-    except: pass
+        except Exception:
+            pass
     return "https://api-s.dbbl.scb.world"
 
 def format_minutes(seconds):
-    if seconds is None: return "00:00"
-    try: sec = int(seconds); m = sec // 60; s = sec % 60; return f"{m:02d}:{s:02d}"
-    except: return "00:00"
+    if seconds is None:
+        return "00:00"
+    try:
+        sec = int(seconds)
+        m = sec // 60
+        s = sec % 60
+        return f"{m:02d}:{s:02d}"
+    except:
+        return "00:00"
 
 def calculate_age(birthdate_str):
-    if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", "", "-", "null"]: return "-"
+    if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", "", "-", "null"]:
+        return "-"
     try:
         clean_date = str(birthdate_str).split("T")[0]
         bd = datetime.strptime(clean_date, "%Y-%m-%d")
         today = datetime.now()
         age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
         return str(age)
-    except: return "-"
+    except:
+        return "-"
 
 def extract_nationality(data_obj):
-    if not data_obj: return "-"
+    if not data_obj:
+        return "-"
     if "nationalities" in data_obj and isinstance(data_obj["nationalities"], list) and data_obj["nationalities"]:
         first = data_obj["nationalities"][0]
-        if isinstance(first, str): return "/".join(data_obj["nationalities"])
-        elif isinstance(first, dict): return "/".join([n.get("name", "") for n in data_obj["nationalities"]])
+        if isinstance(first, str):
+            return "/".join(data_obj["nationalities"])
+        elif isinstance(first, dict):
+            return "/".join([n.get("name", "") for n in data_obj["nationalities"]])
     if "nationality" in data_obj and isinstance(data_obj["nationality"], dict):
         return data_obj["nationality"].get("name", "-")
     return "-"
@@ -58,7 +72,8 @@ def fetch_1dbbl_teams(season_id):
             items = data if isinstance(data, list) else data.get("items", [])
             for item in items:
                 team_obj = item.get('seasonTeam', item) 
-                if not team_obj: continue
+                if not team_obj:
+                    continue
                 
                 tid = team_obj.get('teamId')
                 if tid:
@@ -82,13 +97,28 @@ def get_player_metadata_cached(player_id):
                 data = resp.json()
                 person = data.get("person", {})
                 img = data.get("imageUrl", "")
-                bdate = data.get("birthDate") or person.get("birthDate") or person.get("birthdate")
+                
+                bdate = data.get("birthDate")
+                if not bdate:
+                    bdate = person.get("birthDate") or person.get("birthdate")
+                
                 age = calculate_age(bdate)
+                
                 nat = extract_nationality(data)
-                if nat == "-": nat = extract_nationality(person)
+                if nat == "-":
+                    nat = extract_nationality(person)
+                
                 height = data.get("height") or person.get("height", "-")
-                return {"img": img, "height": height, "pos": data.get("position", "-"), "age": age, "nationality": nat}
-        except: pass
+                
+                return {
+                    "img": img,
+                    "height": height,
+                    "pos": data.get("position", "-"),
+                    "age": age,
+                    "nationality": nat
+                }
+        except:
+            pass
     return {"img": "", "height": "-", "pos": "-", "age": "-", "nationality": "-"}
 
 @st.cache_data(ttl=600)
@@ -115,7 +145,6 @@ def fetch_standings_complete(season_id, group_name):
                     "wins": entry.get("totalVictories"),
                     "losses": entry.get("totalLosses"),
                     "points": entry.get("points"),
-                    # Zusätzliche Felder für fetch_team_rank Kompatibilität
                     "totalVictories": entry.get("totalVictories"),
                     "totalLosses": entry.get("totalLosses"),
                     "totalGames": entry.get("totalGames"),
@@ -127,37 +156,27 @@ def fetch_standings_complete(season_id, group_name):
         print(f"Standings Error: {e}")
     return []
 
-# --- KOMPATIBILITÄTS-FUNKTION (RESTORED) ---
 @st.cache_data(ttl=1800)
 def fetch_team_rank(team_id, season_id):
-    """
-    Sucht den Tabellenplatz eines Teams basierend auf der ID.
-    Nutzt intern fetch_standings_complete, um Redundanz zu vermeiden.
-    """
     try:
         tid = int(team_id)
         group = None
         
-        # 1. Staffel ermitteln
         if tid in TEAMS_DB:
             staffel = TEAMS_DB[tid]["staffel"]
             if staffel == "Nord": group = "NORTH"
             elif staffel == "Süd": group = "SOUTH"
         
-        # Wenn nicht in DB, könnte es 1. Liga sein
         if not group:
-            # Check 1. Liga
             dbbl1 = fetch_1dbbl_teams(season_id)
             if tid in dbbl1:
                 group = "1. DBBL"
         
-        # Fallback: Suche überall
         groups_to_check = [group] if group else ["NORTH", "SOUTH", "1. DBBL"]
         
         for g in groups_to_check:
             standings = fetch_standings_complete(season_id, g)
             for entry in standings:
-                # Vergleiche IDs (String vs Int sicherstellen)
                 if str(entry.get("teamId")) == str(tid):
                     return {
                         "rank": entry.get("rank", 0),
@@ -168,9 +187,9 @@ def fetch_team_rank(team_id, season_id):
                         "last10Losses": entry.get("last10Losses", 0),
                         "points": entry.get("points", 0)
                     }
-    except: pass
+    except:
+        pass
     return None
-
 
 def fetch_team_data(team_id, season_id):
     base_urls = []
