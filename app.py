@@ -498,4 +498,20 @@ def render_scouting_page():
                                     "margin-left": "5mm",
                                     "encoding": "UTF-8",
                                     "zoom": "0.65",
-                                    "no
+                                    "no-outline": None,
+                                    "disable-smart-shrinking": None,
+                                    "quiet": ""
+                                }
+                                st.session_state.pdf_bytes = pdfkit.from_string(f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", False, options=opts); st.session_state.print_mode = True; st.rerun()
+                            except Exception as e: st.error(f"PDF Error: {e}"); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
+                        else: st.warning("PDFKit fehlt."); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
+
+if st.session_state.current_page == "home": render_home()
+elif st.session_state.current_page == "scouting": render_scouting_page()
+elif st.session_state.current_page == "comparison": render_comparison_page()
+elif st.session_state.current_page == "analysis": render_analysis_page()
+elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
+elif st.session_state.current_page == "game_venue": render_game_venue_page()
+elif st.session_state.current_page == "prep": render_prep_page()
+elif st.session_state.current_page == "live": render_live_page()
+elif st.session_state.current_page == "team_stats": render_team_stats_page()
