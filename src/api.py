@@ -319,7 +319,8 @@ def fetch_team_info_basic(team_id):
 def fetch_season_games(season_id):
     all_games = []
     for subdomain in ["api-s", "api-n"]:
-        url = f"https://{subdomain}.dbbl.scb.world/games?seasonId={season_id}&pageSize=3000"
+        # FIX: gameType=all hinzugefügt, um alle Spiele zu bekommen
+        url = f"https://{subdomain}.dbbl.scb.world/games?seasonId={season_id}&pageSize=3000&gameType=all"
         try:
             resp = requests.get(url, headers=API_HEADERS, timeout=4)
             if resp.status_code == 200:
@@ -330,6 +331,7 @@ def fetch_season_games(season_id):
                     dt_obj = None; d_disp = "-"; date_only = "-"
                     if raw_d:
                         try:
+                            # Sicheres Parsen mit Timezone
                             dt_obj = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
                             d_disp = dt_obj.strftime("%d.%m.%Y %H:%M"); date_only = dt_obj.strftime("%d.%m.%Y")
                         except: pass
@@ -347,10 +349,8 @@ def fetch_season_games(season_id):
 
 @st.cache_data(ttl=1800)
 def fetch_team_rank(team_id, season_id):
-    # 1. Staffel ermitteln (Nord/Süd)
     staffel = ""
     team_name_db = ""
-    
     try:
         tid_int = int(team_id)
         if tid_int in TEAMS_DB:
@@ -358,7 +358,6 @@ def fetch_team_rank(team_id, season_id):
             team_name_db = TEAMS_DB[tid_int].get("name", "")
     except: pass
 
-    # 2. URLs aufbauen (mit Priorität für die korrekte Gruppe)
     urls = []
     if staffel == "Süd":
         urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
@@ -380,7 +379,6 @@ def fetch_team_rank(team_id, season_id):
                 items = data if isinstance(data, list) else data.get("items", [])
 
                 for idx, entry in enumerate(items):
-                    # NEUE LOGIK BASIEREND AUF POWERSHELL OUTPUT
                     st_obj = entry.get("seasonTeam", {})
                     
                     tid_found = str(st_obj.get("id", ""))
@@ -395,7 +393,6 @@ def fetch_team_rank(team_id, season_id):
                             match_by_name = True
 
                     if match_by_id or match_by_name:
-                        # HIER GREIFEN WIR JETZT DIE KORREKTEN FELDER AB
                         return {
                             "rank": entry.get("rank", 0),
                             "totalGames": entry.get("totalGames", 0),
@@ -403,7 +400,6 @@ def fetch_team_rank(team_id, season_id):
                             "totalLosses": entry.get("totalLosses", 0),
                             "last10Victories": entry.get("last10Victories", 0),
                             "last10Losses": entry.get("last10Losses", 0),
-                            # Nutze "totalPointsMade" als Punkte, da die API das so liefert
                             "points": entry.get("totalPointsMade", 0) 
                         }
         except:
