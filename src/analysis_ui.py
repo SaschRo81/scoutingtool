@@ -544,34 +544,51 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
 
 def render_live_view(box):
     if not box: return
-    h_name = get_team_name(box.get("homeTeam", {}), "Heim"); g_name = get_team_name(box.get("guestTeam", {}), "Gast"); res = box.get("result", {})
-    s_h = res.get("homeTeamFinalScore", 0); s_g = res.get("guestTeamFinalScore", 0); actions = box.get("actions", [])
-    period = res.get("period") or box.get("period", 1)
-    last_h_live = 0; last_g_live = 0; found_score = False
-    if actions:
-        for act in reversed(actions):
-            if act.get("homeTeamPoints") is not None and act.get("guestTeamPoints") is not None:
-                last_h_live = safe_int(act.get("homeTeamPoints")); last_g_live = safe_int(act.get("guestTeamPoints")); 
-                if not period: period = act.get("period")
-                found_score = True; break
-    if found_score: s_h = last_h_live; s_g = last_g_live
+    h_name = get_team_name(box.get("homeTeam", {}), "Heim")
+    g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    res = box.get("result", {})
+    
+    # Check for empty result during live game
+    s_h = res.get('homeTeamFinalScore', 0)
+    s_g = res.get('guestTeamFinalScore', 0)
+    period = res.get('period') or box.get('period')
+    
+    # Try getting score from last action if main result is 0-0
+    actions = box.get("actions", [])
+    if s_h == 0 and s_g == 0 and actions:
+        last = actions[-1]
+        if last.get('homeTeamPoints') is not None: s_h = last.get('homeTeamPoints')
+        if last.get('guestTeamPoints') is not None: s_g = last.get('guestTeamPoints')
+        if last.get('period'): period = last.get('period')
+
+    # Mapping für Perioden-Anzeige
     p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
     if safe_int(period) > 4: p_str = f"OT{safe_int(period)-4}"
     else: p_str = p_map.get(safe_int(period), f"Q{period}") if period else "-"
-    time_str = convert_elapsed_to_remaining(box.get('gameTime', ''), period)
-    st.markdown(f"""<div style='text-align: center; background-color: #222; color: #fff; padding: 10px; border-radius: 10px; margin-bottom: 20px;'><div style='font-size: 1.2em;'>{h_name} vs {g_name}</div><div style='font-size: 3em; font-weight: bold;'>{s_h} : {s_g}</div><div style='font-size: 0.9em; color: #ccc;'>{p_str} | {time_str}</div></div>""", unsafe_allow_html=True)
+
+    # Zeit
+    gt = box.get('gameTime')
+    if not gt and actions: gt = actions[-1].get('gameTime')
+    
+    time_disp = convert_elapsed_to_remaining(gt, period) if gt else "-"
+
+    st.markdown(f"""<div style='text-align:center;background:#222;color:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'>
+    <div>{h_name} vs {g_name}</div><div style='font-size:2.5em;font-weight:bold;'>{s_h} : {s_g}</div>
+    <div style='color:#ccc;'>{p_str} | {time_disp}</div></div>""", unsafe_allow_html=True)
+
     c1, c2 = st.columns([1, 1])
     with c1:
-        st.subheader("📊 Live Stats")
-        def create_live_player_table(team_data):
-            players = team_data.get("playerStats", []); data = []
-            for p in players:
-                sec = safe_int(p.get("secondsPlayed")); min_s = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "00:00"
-                if sec > 0 or safe_int(p.get("points")) > 0:
-                    data.append({"Nr": p.get('seasonPlayer', {}).get('shirtNumber', '-'), "Name": p.get('seasonPlayer', {}).get('lastName', 'Unk'), "Min": min_s, "PTS": safe_int(p.get("points")), "PF": safe_int(p.get("foulsCommitted"))})
-            df = pd.DataFrame(data)
-            if not df.empty: df = df.sort_values(by="PTS", ascending=False)
-            return df
-        st.markdown(f"**{h_name}**"); st.dataframe(create_live_player_table(box.get("homeTeam", {})), hide_index=True, use_container_width=True)
-        st.write(""); st.markdown(f"**{g_name}**"); st.dataframe(create_live_player_table(box.get("guestTeam", {})), hide_index=True, use_container_width=True)
-    with c2: st.subheader("📜 Live Ticker"); render_full_play_by_play(box, height=800)
+        st.subheader("📊 Live Top Scorer")
+        def get_top(t): return sorted([p for p in t.get("playerStats", []) if safe_int(p.get("points")) > 0], key=lambda x: safe_int(x.get("points")), reverse=True)[:5]
+        
+        c_h, c_g = st.columns(2)
+        with c_h: 
+            st.caption("Heim")
+            for p in get_top(box.get("homeTeam", {})): st.write(f"{p.get('seasonPlayer', {}).get('lastName')}: **{p.get('points')}**")
+        with c_g: 
+            st.caption("Gast")
+            for p in get_top(box.get("guestTeam", {})): st.write(f"{p.get('seasonPlayer', {}).get('lastName')}: **{p.get('points')}**")
+            
+    with c2:
+        st.subheader("📜 Live Ticker")
+        render_full_play_by_play(box, height=400)
