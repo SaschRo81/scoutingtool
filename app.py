@@ -8,7 +8,6 @@ from datetime import datetime, date, time
 import time as time_module 
 from urllib.parse import quote_plus 
 import base64 
-import pytz # WICHTIG: pytz importieren
 
 try:
     import pdfkit
@@ -58,15 +57,6 @@ def inject_custom_css():
         box-shadow: 0px 4px 6px rgba(0,0,0,0.1); text-align: center; 
         margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto; 
         border: 1px solid #f0f0f0; opacity: 1 !important;
-    }
-    [data-testid="stForm"] [data-testid="stHorizontalBlock"] [data-testid="column"]:nth-of-type(2) [data-testid="stTextInput"] input {
-        color: #d9534f !important;
-        -webkit-text-fill-color: #d9534f !important; 
-        font-weight: bold !important;
-    }
-    [data-testid="stForm"] [data-testid="stHorizontalBlock"] [data-testid="column"]:nth-of-type(1) [data-testid="stTextInput"] input {
-        color: #333333 !important;
-        -webkit-text-fill-color: #333333 !important;
     }
     </style>
     """
@@ -323,11 +313,7 @@ def render_live_page():
     else:
         st.markdown("### Spiele von heute")
         with st.spinner("Lade aktuellen Spielplan..."): all_games = fetch_season_games(CURRENT_SEASON_ID)
-        
-        # FIX: Zeitzone berücksichtigen (Berlin)
-        now_berlin = datetime.now(pytz.timezone("Europe/Berlin"))
-        today_str = now_berlin.strftime("%d.%m.%Y")
-        
+        today_str = datetime.now().strftime("%d.%m.%Y")
         todays_games = [g for g in all_games if g['date_only'] == today_str] if all_games else []
         if not todays_games: st.info(f"Keine Spiele für heute ({today_str}) gefunden.")
         else:
