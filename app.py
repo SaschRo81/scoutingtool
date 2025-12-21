@@ -167,7 +167,7 @@ def render_live_page():
                             st.rerun()
 
 def render_comparison_page():
-    render_page_header("📊 Head-to-Head Team-Vergleich") 
+    render_page_header("📊 Team-Vergleich") 
     c1, c2, c3 = st.columns([1, 2, 2])
     with c1: 
         staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="comp_staffel")
@@ -192,14 +192,14 @@ def render_comparison_page():
             else: st.error("Daten nicht verfügbar.")
 
 def render_player_comparison_page():
-    render_page_header("🤼 Head-to-Head Spielervergleich") 
+    render_page_header("🤼 Spielervergleich") 
     c1, c2, c3 = st.columns([1, 0.1, 1])
     with c1:
         st.subheader("Spieler A")
         s1 = st.radio("Staffel A", ["Süd", "Nord"], horizontal=True, key="pc_s_a")
-        t1 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s1}
-        tn1 = st.selectbox("Team A", list({v["name"]: k for k, v in t1.items()}.keys()), key="pc_t_a")
-        tid1 = {v["name"]: k for k, v in t1.items()}[tn1]
+        t1_teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s1}
+        tn1 = st.selectbox("Team A", list({v["name"]: k for k, v in t1_teams.items()}.keys()), key="pc_t_a")
+        tid1 = {v["name"]: k for k, v in t1_teams.items()}[tn1]
         df1, _ = fetch_team_data(tid1, CURRENT_SEASON_ID)
         if df1 is not None and not df1.empty: 
             p1 = st.selectbox("Spieler A", df1["NAME_FULL"].tolist(), key="pc_p_a")
@@ -209,9 +209,9 @@ def render_player_comparison_page():
     with c3:
         st.subheader("Spieler B")
         s2 = st.radio("Staffel B", ["Süd", "Nord"], horizontal=True, key="pc_s_b")
-        t2 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s2}
-        tn2 = st.selectbox("Team B", list({v["name"]: k for k, v in t2.items()}.keys()), key="pc_t_b")
-        tid2 = {v["name"]: k for k, v in t2.items()}[tn2]
+        t2_teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s2}
+        tn2 = st.selectbox("Team B", list({v["name"]: k for k, v in t2_teams.items()}.keys()), key="pc_t_b")
+        tid2 = {v["name"]: k for k, v in t2_teams.items()}[tn2]
         df2, _ = fetch_team_data(tid2, CURRENT_SEASON_ID)
         if df2 is not None and not df2.empty: 
             p2 = st.selectbox("Spieler B", df2["NAME_FULL"].tolist(), key="pc_p_b")
@@ -220,7 +220,7 @@ def render_player_comparison_page():
             if m2["img"]: st.image(m2["img"], width=150)
     st.divider()
     if df1 is not None and df2 is not None:
-        metrics = [("PPG", "PPG"), ("GP", "GP"), ("FG%", "FG%"), ("3P%", "3PCT"), ("FT%", "FTPCT"), ("REB", "TOT"), ("AST", "AS"), ("STL", "ST"), ("TO", "TO"), ("PF", "PF")]
+        metrics = [("PPG", "PPG"), ("REB", "TOT"), ("AST", "AS"), ("STL", "ST"), ("TO", "TO"), ("PF", "PF"), ("FG%", "FG%"), ("3P%", "3PCT")]
         for label, col in metrics:
             cl1, cl2, cl3 = st.columns([1, 1, 1])
             cl1.markdown(f"<div style='text-align:right;'>{row1[col]}</div>", unsafe_allow_html=True)
@@ -279,10 +279,8 @@ def render_scouting_page():
         s = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="scout_s")
         t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
         to = {v["name"]: k for k, v in t.items()}
-    with c2:
-        hn = st.selectbox("Heim:", list(to.keys()), key="scout_h")
-    with c3:
-        gn = st.selectbox("Gast:", list(to.keys()), key="scout_g")
+    with c2: hn = st.selectbox("Heim:", list(to.keys()), key="scout_h")
+    with c3: gn = st.selectbox("Gast:", list(to.keys()), key="scout_g")
     
     if st.button("Kader für Scouting laden"):
         tid = to[gn]
