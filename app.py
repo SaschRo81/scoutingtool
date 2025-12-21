@@ -40,6 +40,36 @@ BASKETBALL_ICON = "🏀"
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon=BASKETBALL_ICON)
 
+# --- UI HELPERS ---
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_best_team_logo(team_id):
+    if not team_id: return None
+    candidates = [
+        f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
+        f"https://api-n.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}",
+        f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
+    ]
+    headers = { "User-Agent": "Mozilla/5.0", "Accept": "image/*", "Referer": "https://dbbl.de/" }
+    for url in candidates:
+        try:
+            r = requests.get(url, headers=headers, timeout=1.0)
+            if r.status_code == 200 and len(r.content) > 500: 
+                b64 = base64.b64encode(r.content).decode()
+                mime = "image/jpeg" if "jpg" in url or "jpeg" in url else "image/png"
+                return f"data:{mime};base64,{b64}"
+        except: continue
+    return None
+
+def inject_custom_css():
+    st.markdown("""
+    <style>
+    div.stButton > button { width: 100%; height: 3em; font-size: 16px; font-weight: bold; border-radius: 8px; }
+    .title-container { background-color: #ffffff; padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 40px; border: 1px solid #f0f0f0; }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- SESSION STATE ---
 for key, default in [
     ("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None), 
@@ -57,12 +87,11 @@ def go_scouting(): st.session_state.current_page = "scouting"
 def go_comparison(): st.session_state.current_page = "comparison"
 def go_analysis(): st.session_state.current_page = "analysis"
 def go_player_comparison(): st.session_state.current_page = "player_comparison"
-def go_game_venue(): st.session_state.current_page = "game_venue" 
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
-def go_team_stats(): st.session_state.current_page = "team_stats"
 
 def render_page_header(page_title):
+    inject_custom_css()
     header_col1, header_col2 = st.columns([1, 4])
     with header_col1:
         st.button("🏠 Home", on_click=go_home, key=f"home_btn_{st.session_state.current_page}")
@@ -74,9 +103,8 @@ def render_page_header(page_title):
 # --- SEITEN-LOGIK ---
 
 def render_home():
-    st.markdown(f"""<div style="background-color:#ffffff; padding:20px; border-radius:15px; box-shadow:0px 4px 6px rgba(0,0,0,0.1); text-align:center; margin-bottom:40px; border:1px solid #f0f0f0;">
-    <h1 style='margin:0; color: #333;'>{BASKETBALL_ICON} DBBL Scouting Suite</h1>
-    <p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
+    inject_custom_css()
+    st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>{BASKETBALL_ICON} DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
     _, col_center, _ = st.columns([1, 2, 1])
     with col_center:
         r1c1, r1c2 = st.columns(2)
@@ -192,13 +220,12 @@ def render_player_comparison_page():
             if m2["img"]: st.image(m2["img"], width=150)
     st.divider()
     if df1 is not None and df2 is not None:
-        metrics = [("GP", "GP"), ("PPG", "PPG"), ("FG%", "FG%"), ("3P%", "3PCT"), ("FT%", "FTPCT"), ("REB", "TOT"), ("AST", "AS"), ("STL", "ST"), ("TO", "TO"), ("PF", "PF")]
+        metrics = [("PPG", "PPG"), ("GP", "GP"), ("FG%", "FG%"), ("3P%", "3PCT"), ("FT%", "FTPCT"), ("REB", "TOT"), ("AST", "AS"), ("STL", "ST"), ("TO", "TO"), ("PF", "PF")]
         for label, col in metrics:
-            v1 = row1[col]; v2 = row2[col]
             cl1, cl2, cl3 = st.columns([1, 1, 1])
-            cl1.markdown(f"<div style='text-align:right;'>{v1}</div>", unsafe_allow_html=True)
+            cl1.markdown(f"<div style='text-align:right;'>{row1[col]}</div>", unsafe_allow_html=True)
             cl2.markdown(f"<div style='text-align:center; font-weight:bold;'>{label}</div>", unsafe_allow_html=True)
-            cl3.markdown(f"<div style='text-align:left;'>{v2}</div>", unsafe_allow_html=True)
+            cl3.markdown(f"<div style='text-align:left;'>{row2[col]}</div>", unsafe_allow_html=True)
 
 def render_prep_page():
     render_page_header("🔮 Spielvorbereitung")
@@ -230,26 +257,26 @@ def render_analysis_page():
         if games:
             played = [g for g in games if g.get("has_result")]
             opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in played}
-            sel = st.selectbox("Wähle ein Spiel:", list(opts.keys()), key="ana_game_select")
-            gid = opts[sel]
-            if st.button("Analyse laden", type="primary"):
-                st.session_state.selected_game_id = gid
-            if st.session_state.selected_game_id == gid:
-                st.divider()
-                box = fetch_game_boxscore(gid); det = fetch_game_details(gid)
-                if box and det: 
-                    box["venue"] = det.get("venue"); box["result"] = det.get("result")
-                    render_game_header(box)
-                    st.markdown(generate_game_summary(box))
-                    render_boxscore_table_pro(box.get("homeTeam",{}).get("playerStats",[]), box.get("homeTeam",{}).get("gameStat",{}), "Heim")
-                    render_boxscore_table_pro(box.get("guestTeam",{}).get("playerStats",[]), box.get("guestTeam",{}).get("gameStat",{}), "Gast")
+            if opts:
+                sel = st.selectbox("Wähle ein Spiel:", list(opts.keys()), key="ana_game_select")
+                gid = opts[sel]
+                if st.button("Analyse laden", type="primary"):
+                    st.session_state.selected_game_id = gid
+                if st.session_state.selected_game_id == gid:
+                    st.divider()
+                    box = fetch_game_boxscore(gid); det = fetch_game_details(gid)
+                    if box and det: 
+                        box["venue"] = det.get("venue"); box["result"] = det.get("result")
+                        render_game_header(box)
+                        st.markdown(generate_game_summary(box))
+                        render_boxscore_table_pro(box.get("homeTeam",{}).get("playerStats",[]), box.get("homeTeam",{}).get("gameStat",{}), "Heim")
+                        render_boxscore_table_pro(box.get("guestTeam",{}).get("playerStats",[]), box.get("guestTeam",{}).get("gameStat",{}), "Gast")
 
 def render_scouting_page():
-    render_page_header("📝 PreGame Scouting Report") 
-    st.info("Kader laden und Notizen hinzufügen.")
+    render_page_header("📝 PreGame Report") 
     c1, c2, c3 = st.columns([1, 2, 2])
     with c1: 
-        s = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True)
+        s = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="scout_s")
         t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
         to = {v["name"]: k for k, v in t.items()}
     with c2:
@@ -258,13 +285,13 @@ def render_scouting_page():
         gn = st.selectbox("Gast:", list(to.keys()), key="scout_g")
     
     if st.button("Kader für Scouting laden"):
-        tid = to[gn] # Beispiel: Scouting für den Gast
+        tid = to[gn]
         df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
         st.session_state.roster_df = df
         st.session_state.team_stats = ts
     
     if st.session_state.roster_df is not None:
-        st.dataframe(st.session_state.roster_df[["NR", "NAME_FULL", "PPG", "FG%"]], use_container_width=True)
+        st.dataframe(st.session_state.roster_df[["NR", "NAME_FULL", "PPG", "FG%"]], use_container_width=True, hide_index=True)
 
 # --- MAIN LOOP ---
 if st.session_state.current_page == "home": render_home()
