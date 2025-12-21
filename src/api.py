@@ -315,30 +315,33 @@ def fetch_team_info_basic(team_id):
     except: pass
     return {"id": team_id, "venue": None}
 
-@st.cache_data(ttl=60) # Live-Daten nur 1 Minute cachen
+# --- IN src/api.py ---
+
+@st.cache_data(ttl=60)
 def fetch_season_games(season_id):
     all_games = []
-    # Wir fragen Nord- und Süd-Server ab, um alle Ligen (1. & 2. DBBL) zu erfassen
-    for subdomain in ["api-s", "api-n"]:
-        # pageSize=1000 um sicher alle Spiele der Saison zu bekommen
+    # Teste alle drei bekannten Subdomains
+    for subdomain in ["api-1", "api-s", "api-n"]:
         url = f"https://{subdomain}.dbbl.scb.world/games?seasonId={season_id}&pageSize=1000"
         try:
             resp = requests.get(url, headers=API_HEADERS, timeout=5)
             if resp.status_code == 200:
                 data = resp.json()
-                items = data.get("items", [])
+                # Die API liefert entweder direkt eine Liste oder ein Dict mit "items"
+                items = data.get("items", []) if isinstance(data, dict) else data
+                
+                if not isinstance(items, list): continue
+                
                 for g in items:
-                    # Verhindere Duplikate durch ID-Check
-                    if any(x['id'] == g.get("id") for x in all_games):
-                        continue
+                    if not isinstance(g, dict): continue
+                    if any(x['id'] == g.get("id") for x in all_games): continue
                         
                     raw_d = g.get("scheduledTime", "")
-                    d_disp = "-"
-                    date_only = "-"
+                    d_disp, date_only = "-", "-"
                     
                     if raw_d:
                         try:
-                            # EXTREM WICHTIG: Umwandlung von UTC auf Berlin Zeit
+                            # Umwandlung von UTC auf Berlin Zeit
                             dt_utc = datetime.fromisoformat(raw_d.replace("Z", "+00:00"))
                             dt_berlin = dt_utc.astimezone(pytz.timezone("Europe/Berlin"))
                             d_disp = dt_berlin.strftime("%d.%m.%Y %H:%M")
@@ -347,17 +350,15 @@ def fetch_season_games(season_id):
                     
                     res = g.get("result") or {}
                     all_games.append({
-                        "id": g.get("id"),
+                        "id": str(g.get("id")), # ID als String für Konsistenz
                         "date": d_disp,
                         "date_only": date_only,
-                        "home": g.get("homeTeam", {}).get("name", "?"),
-                        "guest": g.get("guestTeam", {}).get("name", "?"),
-                        # Score nur anzeigen wenn vorhanden, sonst -:-
+                        "home": g.get("homeTeam", {}).get("name", "Heim"),
+                        "guest": g.get("guestTeam", {}).get("name", "Gast"),
                         "score": f"{res.get('homeTeamFinalScore',0)}:{res.get('guestTeamFinalScore',0)}" if g.get("status") == "ENDED" else "-:-",
                         "status": g.get("status")
                     })
-        except:
-            continue
+        except: continue
     return all_games
 
 @st.cache_data(ttl=1800)
