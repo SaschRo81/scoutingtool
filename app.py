@@ -343,24 +343,25 @@ def render_live_page():
         with st.spinner("Lade aktuellen Spielplan für 2025..."): 
             all_games = fetch_season_games(CURRENT_SEASON_ID)
         
+        # Heute ermitteln (Berlin Zeit)
         berlin_tz = pytz.timezone("Europe/Berlin")
-        today_str = datetime.now(berlin_tz).strftime("%d.%m.%Y")
+        now = datetime.now(berlin_tz)
+        today_str = now.strftime("%d.%m.%Y")
         
+        # Filterung
         todays_games = [g for g in all_games if g['date_only'] == today_str]
         
         if not todays_games:
-            st.info(f"Keine Spiele für heute ({today_str}) in der Liste gefunden.")
-            if len(all_games) > 0:
-                st.write(f"ℹ️ Es wurden {len(all_games)} Spiele für die Saison 2025 geladen, aber keines für das heutige Datum.")
-        else:
-            todays_games.sort(key=lambda x: x['date'])
-            cols = st.columns(3) 
-            for i, game in enumerate(todays_games):
-                col = cols[i % 3]
-                with col:
-                    with st.container(border=True):
-                        status_color = "#d9534f" if game['status'] == "RUNNING" else "#555"
-                        label = "🔴 LIVE" if game['status'] == "RUNNING" else game['date'].split(' ')[1] + " Uhr"
+            st.info(f"Keine Spiele für heute ({today_str}) gefunden.")
+            
+            # Zeige die nächsten anstehenden Spiele als Vorschau
+            upcoming = [g for g in all_games if g['status'] not in ["ENDED", "CLOSED"]]
+            if upcoming:
+                with st.expander("Vorschau: Nächste anstehende Spiele"):
+                    # Sortieren nach Datum
+                    upcoming.sort(key=lambda x: x['date'])
+                    for ug in upcoming[:5]: # Die nächsten 5
+                        st.write(f"📅 {ug['date']} | {ug['home']} vs {ug['guest']} (ID: {ug['id']})")
                         
                         st.markdown(f"""
                             <div style="text-align:center;">
