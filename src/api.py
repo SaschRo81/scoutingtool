@@ -315,34 +315,47 @@ def fetch_team_info_basic(team_id):
     except: pass
     return {"id": team_id, "venue": None}
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60) # Live-Daten nur 1 Minute cachen
 def fetch_season_games(season_id):
     all_games = []
+    # Wir fragen Nord- und Süd-Server ab, um alle Ligen abzudecken
     for subdomain in ["api-s", "api-n"]:
-        url = f"https://{subdomain}.dbbl.scb.world/games?seasonId={season_id}&pageSize=3000"
+        url = f"https://{subdomain}.dbbl.scb.world/games?seasonId={season_id}&pageSize=500"
         try:
-            resp = requests.get(url, headers=API_HEADERS, timeout=4)
+            resp = requests.get(url, headers=API_HEADERS, timeout=5)
             if resp.status_code == 200:
                 data = resp.json()
                 items = data.get("items", [])
                 for g in items:
+                    # Verhindere Duplikate
+                    if any(x['id'] == g.get("id") for x in all_games):
+                        continue
+                        
                     raw_d = g.get("scheduledTime", "")
-                    dt_obj = None; d_disp = "-"; date_only = "-"
+                    dt_obj = None
+                    d_disp = "-"
+                    date_only = "-"
+                    
                     if raw_d:
                         try:
+                            # Umwandlung in Berlin Zeit für den korrekten Tages-Vergleich
                             dt_obj = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
-                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M"); date_only = dt_obj.strftime("%d.%m.%Y")
+                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
+                            date_only = dt_obj.strftime("%d.%m.%Y")
                         except: pass
+                    
                     res = g.get("result") or {}
-                    if not any(x['id'] == g.get("id") for x in all_games):
-                        all_games.append({
-                            "id": g.get("id"), "date": d_disp, "date_only": date_only,
-                            "home": g.get("homeTeam", {}).get("name", "?"),
-                            "guest": g.get("guestTeam", {}).get("name", "?"),
-                            "score": f"{res.get('homeTeamFinalScore',0)}:{res.get('guestTeamFinalScore',0)}" if g.get("status") == "ENDED" else "-:-",
-                            "status": g.get("status")
-                        })
-        except: pass
+                    all_games.append({
+                        "id": g.get("id"),
+                        "date": d_disp,
+                        "date_only": date_only,
+                        "home": g.get("homeTeam", {}).get("name", "?"),
+                        "guest": g.get("guestTeam", {}).get("name", "?"),
+                        "score": f"{res.get('homeTeamFinalScore',0)}:{res.get('guestTeamFinalScore',0)}" if g.get("status") == "ENDED" else "-:-",
+                        "status": g.get("status")
+                    })
+        except Exception as e:
+            print(f"Fehler bei Abfrage {subdomain}: {e}")
     return all_games
 
 @st.cache_data(ttl=1800)
