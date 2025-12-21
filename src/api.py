@@ -159,14 +159,20 @@ def fetch_schedule(team_id, season_id):
                     raw_d = g.get("scheduledTime", "")
                     d_disp, date_only = "-", "-"
                     if raw_d:
-                        try:
-                            dt = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
-                            d_disp = dt.strftime("%d.%m.%Y %H:%M"); date_only = dt.strftime("%d.%m.%Y")
-                        except: pass
+                        dt = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
+                        d_disp = dt.strftime("%d.%m.%Y %H:%M"); date_only = dt.strftime("%d.%m.%Y")
                     res = g.get("result") or {}
                     h_s = res.get("homeTeamFinalScore")
                     g_s = res.get("guestTeamFinalScore")
-                    clean.append({"id": g.get("id"), "date": d_disp, "date_only": date_only, "home": g.get("homeTeam",{}).get("name"), "guest": g.get("guestTeam",{}).get("name"), "score": f"{h_s if h_s is not None else '-'}:{g_s if g_s is not None else '-'}", "has_result": h_s is not None, "homeTeamId": str(g.get("homeTeam", {}).get("teamId")), "guestTeamId": str(g.get("guestTeam", {}).get("teamId")), "home_score": h_s, "guest_score": g_s})
+                    clean.append({
+                        "id": g.get("id"), "date": d_disp, "date_only": date_only, 
+                        "home": g.get("homeTeam",{}).get("name"), "guest": g.get("guestTeam",{}).get("name"), 
+                        "score": f"{h_s if h_s is not None else '-'}:{g_s if g_s is not None else '-'}", 
+                        "has_result": h_s is not None, 
+                        "homeTeamId": str(g.get("homeTeam", {}).get("teamId")), 
+                        "guestTeamId": str(g.get("guestTeam", {}).get("teamId")),
+                        "home_score": h_s, "guest_score": g_s
+                    })
                 return clean
         except: pass
     return []
