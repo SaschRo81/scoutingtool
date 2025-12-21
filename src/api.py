@@ -85,6 +85,7 @@ def fetch_team_data(team_id, season_id):
     api_stats_players = f"{base_url}/teams/{team_id}/{season_id}/player-stats"
     api_team_direct = f"{base_url}/teams/{team_id}/{season_id}/statistics/season"
     ts = {}; df = pd.DataFrame()
+    
     try:
         r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
         if r_team.status_code == 200:
@@ -92,33 +93,18 @@ def fetch_team_data(team_id, season_id):
             td = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else None)
             if isinstance(td, dict) and td.get("gamesPlayed"):
                 gp = td.get("gamesPlayed") or 1
-                fgm = td.get("fieldGoalsMade") or 0; fga = td.get("fieldGoalsAttempted") or 0
-                m3 = td.get("threePointShotsMade") or 0; a3 = td.get("threePointShotsAttempted") or 0
-                ftm = td.get("freeThrowsMade") or 0; fta = td.get("freeThrowsAttempted") or 0
-                m2 = fgm - m3; a2 = fga - a3
                 ts = {
                     "ppg": (td.get("points") or 0) / gp, "tot": (td.get("totalRebounds") or 0) / gp,
                     "as": (td.get("assists") or 0) / gp, "to": (td.get("turnovers") or 0) / gp,
                     "st": (td.get("steals") or 0) / gp, "bs": (td.get("blocks") or 0) / gp,
-                    "pf": (td.get("foulsCommitted") or 0) / gp, "or": (td.get("offensiveRebounds") or 0) / gp,
-                    "dr": (td.get("defensiveRebounds") or 0) / gp,
-                    "2m": m2 / gp, "2a": a2 / gp, "3m": m3 / gp, "3a": a3 / gp, "ftm": ftm / gp, "fta": fta / gp,
-                    "fgpct": (fgm / fga * 100) if fga > 0 else 0,
-                    "2pct": (m2 / a2 * 100) if a2 > 0 else 0,
-                    "3pct": (m3 / a3 * 100) if a3 > 0 else 0,
-                    "ftpct": (ftm / fta * 100) if fta > 0 else 0,
+                    "pf": (td.get("foulsCommitted") or 0) / gp,
+                    "2pct": (td.get("twoPointShotsMade",0) / td.get("twoPointShotsAttempted",1) * 100),
+                    "3pct": (td.get("threePointShotsMade",0) / td.get("threePointShotsAttempted",1) * 100),
+                    "ftpct": (td.get("freeThrowsMade",0) / td.get("freeThrowsAttempted",1) * 100)
                 }
     except: pass
+
     try:
-        roster_lookup = {}
-        raw_details = fetch_team_details_raw(team_id, season_id)
-        if raw_details:
-            squad = raw_details.get("squad", [])
-            for entry in squad:
-                p = entry.get("person", {}); raw_id = p.get("id") or entry.get("id")
-                if raw_id:
-                    pid = str(raw_id).replace(".0", "")
-                    roster_lookup[pid] = {"birthdate": p.get("birthDate"), "nationality": extract_nationality(p), "height": p.get("height")}
         r_stats = requests.get(api_stats_players, headers=API_HEADERS, timeout=4)
         if r_stats.status_code == 200:
             p_list = r_stats.json()
@@ -126,22 +112,35 @@ def fetch_team_data(team_id, season_id):
             if p_list:
                 df = pd.json_normalize(p_list)
                 df.columns = [str(c).lower() for c in df.columns]
-                col_id = next((c for c in df.columns if "id" in c), "id")
-                df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0", "", regex=False)
-                df["NAME_FULL"] = df["firstname"].astype(str) + " " + df["lastname"].astype(str)
-                df["NR"] = df["shirtnumber"].astype(str).str.replace(".0", "", regex=False)
-                df["GP"] = pd.to_numeric(df["gamesplayed"], errors="coerce").fillna(1)
-                df["PPG"] = (pd.to_numeric(df["points"], errors="coerce") / df["GP"].replace(0,1)).round(1)
-                df["FG%"] = (pd.to_numeric(df["fieldgoalssuccesspercent"], errors="coerce") * 100).round(1)
-                df["3PCT"] = (pd.to_numeric(df["threepointshotsuccesspercent"], errors="coerce") * 100).round(1)
-                df["FTPCT"] = (pd.to_numeric(df["freethrowssuccesspercent"], errors="coerce") * 100).round(1)
-                df["TOT"] = (pd.to_numeric(df["totalrebounds"], errors="coerce") / df["GP"].replace(0,1)).round(1)
-                df["AS"] = (pd.to_numeric(df["assists"], errors="coerce") / df["GP"].replace(0,1)).round(1)
-                df["ST"] = (pd.to_numeric(df["steals"], errors="coerce") / df["GP"].replace(0,1)).round(1)
-                df["TO"] = (pd.to_numeric(df["turnovers"], errors="coerce") / df["GP"].replace(0,1)).round(1)
-                df["PF"] = (pd.to_numeric(df["foulscommitted"], errors="coerce") / df["GP"].replace(0,1)).round(1)
-                df["BS"] = (pd.to_numeric(df["blocks"], errors="coerce") / df["GP"].replace(0,1)).round(1)
-                df["MIN_DISPLAY"] = (pd.to_numeric(df["secondsplayed"], errors="coerce") / df["GP"].replace(0,1) / 60).apply(lambda x: f"{int(x)}:00")
+                
+                # Robust Spalten finden
+                def find_c(sub):
+                    matches = [c for c in df.columns if sub in c]
+                    return sorted(matches, key=len)[0] if matches else None
+
+                c_fn = find_c("firstname")
+                c_ln = find_c("lastname")
+                c_id = find_c("player.id") or find_c("personid") or find_c("id")
+                c_nr = find_c("shirtnumber") or find_c("jerseynumber")
+
+                df["NAME_FULL"] = (df[c_fn].astype(str) + " " + df[c_ln].astype(str)).str.strip() if c_fn and c_ln else "Unknown Player"
+                df["PLAYER_ID"] = df[c_id].astype(str).str.replace(".0", "", regex=False) if c_id else "0"
+                df["NR"] = df[c_nr].astype(str).str.replace(".0", "", regex=False) if c_nr else "-"
+                
+                df["GP"] = pd.to_numeric(df[find_c("gamesplayed") or "gamesplayed"], errors="coerce").fillna(1)
+                df["PPG"] = (pd.to_numeric(df[find_c("points") or "points"], errors="coerce") / df["GP"].replace(0,1)).round(1)
+                
+                # Fehlende Stats für Vergleich auffüllen
+                for col in ["TOT", "AS", "ST", "TO", "PF", "BS"]:
+                    api_col = find_c(col.lower()) or col.lower()
+                    if api_col in df.columns:
+                        df[col] = (pd.to_numeric(df[api_col], errors="coerce") / df["GP"].replace(0,1)).round(1)
+                    else: df[col] = 0.0
+
+                df["FG%"] = (pd.to_numeric(df[find_c("fieldgoalssuccesspercent") or "fieldgoalssuccesspercent"], errors="coerce") * 100).round(1).fillna(0)
+                df["3PCT"] = (pd.to_numeric(df[find_c("threepointshotsuccesspercent") or "threepointshotsuccesspercent"], errors="coerce") * 100).round(1).fillna(0)
+                df["FTPCT"] = (pd.to_numeric(df[find_c("freethrowssuccesspercent") or "freethrowssuccesspercent"], errors="coerce") * 100).round(1).fillna(0)
+                df["MIN_DISPLAY"] = "0:00" # Placeholder
                 df["select"] = False
     except: pass
     return df, ts
@@ -168,8 +167,7 @@ def fetch_schedule(team_id, season_id):
                         "id": g.get("id"), "date": d_disp, "date_only": date_only, 
                         "home": g.get("homeTeam",{}).get("name"), "guest": g.get("guestTeam",{}).get("name"), 
                         "score": f"{h_s if h_s is not None else '-'}:{g_s if g_s is not None else '-'}", 
-                        "has_result": h_s is not None, 
-                        "homeTeamId": str(g.get("homeTeam", {}).get("teamId")), 
+                        "has_result": h_s is not None, "homeTeamId": str(g.get("homeTeam", {}).get("teamId")), 
                         "guestTeamId": str(g.get("guestTeam", {}).get("teamId")),
                         "home_score": h_s, "guest_score": g_s
                     })
@@ -234,18 +232,3 @@ def fetch_recent_games_combined():
                             all_games.append({"id": game_id, "date": d_disp, "date_only": date_only, "home": g.get("homeTeam", {}).get("name", "Heim"), "guest": g.get("guestTeam", {}).get("name", "Gast"), "score": score, "status": g.get("status")})
         except: continue
     return all_games
-
-@st.cache_data(ttl=1800)
-def fetch_team_rank(team_id, season_id):
-    for sub in ["api-s", "api-n"]:
-        url = f"https://{sub}.dbbl.scb.world/standings?seasonId={season_id}"
-        try:
-            r = requests.get(url, headers=API_HEADERS, timeout=3)
-            if r.status_code == 200:
-                items = r.json() if isinstance(r.json(), list) else r.json().get("items", [])
-                for entry in items:
-                    st_obj = entry.get("seasonTeam", {})
-                    if str(st_obj.get("id")) == str(team_id) or str(st_obj.get("teamId")) == str(team_id):
-                        return {"rank": entry.get("rank"), "totalGames": entry.get("totalGames"), "totalVictories": entry.get("totalVictories"), "totalLosses": entry.get("totalLosses"), "points": entry.get("totalPointsMade")}
-        except: continue
-    return None
