@@ -44,7 +44,10 @@ st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", pag
 for key, default in [
     ("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None), 
     ("roster_df", None), ("team_stats", None), ("game_meta", {}), ("report_filename", "scouting_report.pdf"), 
-    ("saved_notes", {}), ("saved_colors", {}), ("selected_game_id", None), ("live_game_id", None), ("stats_team_id", None)
+    ("saved_notes", {}), ("saved_colors", {}), ("selected_game_id", None), ("live_game_id", None), ("stats_team_id", None),
+    ("facts_offense", pd.DataFrame([{"Fokus": "Run", "Beschreibung": "fastbreaks"}])),
+    ("facts_defense", pd.DataFrame([{"Fokus": "Rebound", "Beschreibung": "box out!"}])),
+    ("facts_about", pd.DataFrame([{"Fokus": "Together", "Beschreibung": "Fight!"}]))
 ]:
     if key not in st.session_state: st.session_state[key] = default
 
@@ -135,18 +138,137 @@ def render_live_page():
                             st.session_state.live_game_id = game['id']
                             st.rerun()
 
-# --- WEITERE SEITEN-RENDERER (GEKÜRZT FÜR ÜBERSICHT) ---
-def render_team_stats_page(): render_page_header("📈 Team Stats"); st.info("Wähle ein Team in der Nachbereitung für Details.")
-def render_comparison_page(): render_page_header("📊 Team Vergleich")
-def render_player_comparison_page(): render_page_header("🤼 Spieler Vergleich")
-def render_prep_page(): render_page_header("🔮 Vorbereitung")
-def render_analysis_page(): render_page_header("🎥 Nachbereitung")
-def render_scouting_page(): render_page_header("📝 PreGame Report")
+def render_comparison_page():
+    render_page_header("📊 Head-to-Head Team-Vergleich") 
+    c1, c2, c3 = st.columns([1, 2, 2])
+    with c1: 
+        staffel = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True, key="comp_staffel")
+        teams_f = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel}
+        team_opts = {v["name"]: k for k, v in teams_f.items()}
+    with c2:
+        h_name = st.selectbox("Heim:", list(team_opts.keys()), 0, key="comp_home")
+        h_id = team_opts[h_name]
+        l_b64 = get_best_team_logo(h_id)
+        if l_b64: st.image(l_b64, width=80)
+    with c3:
+        g_name = st.selectbox("Gast:", list(team_opts.keys()), 1, key="comp_guest")
+        g_id = team_opts[g_name]
+        l_b64 = get_best_team_logo(g_id)
+        if l_b64: st.image(l_b64, width=80)
+    st.divider()
+    if st.button("Vergleich starten", type="primary"):
+        with st.spinner("Lade Daten..."):
+            _, ts_h = fetch_team_data(h_id, CURRENT_SEASON_ID)
+            _, ts_g = fetch_team_data(g_id, CURRENT_SEASON_ID)
+            if ts_h and ts_g: st.markdown(generate_comparison_html(ts_h, ts_g, h_name, g_name), unsafe_allow_html=True)
+            else: st.error("Daten nicht verfügbar.")
+
+def render_player_comparison_page():
+    render_page_header("🤼 Head-to-Head Spielervergleich") 
+    c1, c2, c3 = st.columns([1, 0.1, 1])
+    with c1:
+        st.subheader("Spieler A")
+        s1 = st.radio("Staffel A", ["Süd", "Nord"], horizontal=True, key="pc_s_a")
+        t1 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s1}
+        tn1 = st.selectbox("Team A", list({v["name"]: k for k, v in t1.items()}.keys()), key="pc_t_a")
+        tid1 = {v["name"]: k for k, v in t1.items()}[tn1]
+        df1, _ = fetch_team_data(tid1, CURRENT_SEASON_ID)
+        if df1 is not None and not df1.empty: 
+            p1 = st.selectbox("Spieler A", df1["NAME_FULL"].tolist(), key="pc_p_a")
+            row1 = df1[df1["NAME_FULL"] == p1].iloc[0]
+            m1 = get_player_metadata_cached(row1["PLAYER_ID"])
+            if m1["img"]: st.image(m1["img"], width=150)
+    with c3:
+        st.subheader("Spieler B")
+        s2 = st.radio("Staffel B", ["Süd", "Nord"], horizontal=True, key="pc_s_b")
+        t2 = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s2}
+        tn2 = st.selectbox("Team B", list({v["name"]: k for k, v in t2.items()}.keys()), key="pc_t_b")
+        tid2 = {v["name"]: k for k, v in t2.items()}[tn2]
+        df2, _ = fetch_team_data(tid2, CURRENT_SEASON_ID)
+        if df2 is not None and not df2.empty: 
+            p2 = st.selectbox("Spieler B", df2["NAME_FULL"].tolist(), key="pc_p_b")
+            row2 = df2[df2["NAME_FULL"] == p2].iloc[0]
+            m2 = get_player_metadata_cached(row2["PLAYER_ID"])
+            if m2["img"]: st.image(m2["img"], width=150)
+    st.divider()
+    if df1 is not None and df2 is not None:
+        metrics = [("GP", "GP"), ("PPG", "PPG"), ("FG%", "FG%"), ("3P%", "3PCT"), ("FT%", "FTPCT"), ("REB", "TOT"), ("AST", "AS"), ("STL", "ST"), ("TO", "TO"), ("PF", "PF")]
+        for label, col in metrics:
+            v1 = row1[col]; v2 = row2[col]
+            cl1, cl2, cl3 = st.columns([1, 1, 1])
+            cl1.markdown(f"<div style='text-align:right;'>{v1}</div>", unsafe_allow_html=True)
+            cl2.markdown(f"<div style='text-align:center; font-weight:bold;'>{label}</div>", unsafe_allow_html=True)
+            cl3.markdown(f"<div style='text-align:left;'>{v2}</div>", unsafe_allow_html=True)
+
+def render_prep_page():
+    render_page_header("🔮 Spielvorbereitung")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="prep_staffel")
+        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
+    with c2:
+        opp_name = st.selectbox("Gegner-Team:", list({v["name"]: k for k, v in t.items()}.keys()), key="prep_team")
+        opp_id = {v["name"]: k for k, v in t.items()}[opp_name]
+    if st.button("Vorbereitung starten", type="primary"):
+        with st.spinner("Lade Daten..."):
+            df, _ = fetch_team_data(opp_id, CURRENT_SEASON_ID)
+            sched = fetch_schedule(opp_id, CURRENT_SEASON_ID)
+            if df is not None: render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
+
+def render_analysis_page():
+    render_page_header("🎥 Spielnachbereitung") 
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="ana_staffel")
+        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
+        to = {v["name"]: k for k, v in t.items()}
+    with c2:
+        tn = st.selectbox("Dein Team:", list(to.keys()), key="ana_team")
+        tid = to[tn]
+    if tid:
+        games = fetch_schedule(tid, CURRENT_SEASON_ID)
+        if games:
+            played = [g for g in games if g.get("has_result")]
+            opts = {f"{g['date']} | {g['home']} vs {g['guest']} ({g['score']})": g['id'] for g in played}
+            sel = st.selectbox("Wähle ein Spiel:", list(opts.keys()), key="ana_game_select")
+            gid = opts[sel]
+            if st.button("Analyse laden", type="primary"):
+                st.session_state.selected_game_id = gid
+            if st.session_state.selected_game_id == gid:
+                st.divider()
+                box = fetch_game_boxscore(gid); det = fetch_game_details(gid)
+                if box and det: 
+                    box["venue"] = det.get("venue"); box["result"] = det.get("result")
+                    render_game_header(box)
+                    st.markdown(generate_game_summary(box))
+                    render_boxscore_table_pro(box.get("homeTeam",{}).get("playerStats",[]), box.get("homeTeam",{}).get("gameStat",{}), "Heim")
+                    render_boxscore_table_pro(box.get("guestTeam",{}).get("playerStats",[]), box.get("guestTeam",{}).get("gameStat",{}), "Gast")
+
+def render_scouting_page():
+    render_page_header("📝 PreGame Scouting Report") 
+    st.info("Kader laden und Notizen hinzufügen.")
+    c1, c2, c3 = st.columns([1, 2, 2])
+    with c1: 
+        s = st.radio("Staffel:", ["Süd", "Nord"], horizontal=True)
+        t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}
+        to = {v["name"]: k for k, v in t.items()}
+    with c2:
+        hn = st.selectbox("Heim:", list(to.keys()), key="scout_h")
+    with c3:
+        gn = st.selectbox("Gast:", list(to.keys()), key="scout_g")
+    
+    if st.button("Kader für Scouting laden"):
+        tid = to[gn] # Beispiel: Scouting für den Gast
+        df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
+        st.session_state.roster_df = df
+        st.session_state.team_stats = ts
+    
+    if st.session_state.roster_df is not None:
+        st.dataframe(st.session_state.roster_df[["NR", "NAME_FULL", "PPG", "FG%"]], use_container_width=True)
 
 # --- MAIN LOOP ---
 if st.session_state.current_page == "home": render_home()
 elif st.session_state.current_page == "live": render_live_page()
-elif st.session_state.current_page == "team_stats": render_team_stats_page()
 elif st.session_state.current_page == "comparison": render_comparison_page()
 elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
 elif st.session_state.current_page == "prep": render_prep_page()
