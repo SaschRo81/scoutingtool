@@ -296,8 +296,10 @@ def render_prep_page():
             if df is not None: render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
             else: st.error("Fehler beim Laden der Spielerdaten.")
 
+# --- IN app.py ---
+
 def render_live_page():
-    # 1. Prüfen, ob bereits ein Spiel ausgewählt wurde
+    # 1. Live-Detailansicht (wenn ein Spiel ausgewählt wurde)
     if st.session_state.live_game_id:
         c_back, c_title = st.columns([1, 5])
         with c_back:
@@ -309,7 +311,6 @@ def render_live_page():
         auto = st.checkbox("🔄 Auto-Refresh (15s)", value=True)
         st.divider()
         
-        # Daten abrufen (nutzt deine URLs im Hintergrund)
         box = fetch_game_boxscore(gid)
         det = fetch_game_details(gid)
         
@@ -323,19 +324,59 @@ def render_live_page():
                 time_module.sleep(15)
                 st.rerun()
         else:
-            st.error(f"Keine Live-Daten für Spiel-ID {gid} gefunden. Prüfe, ob die ID korrekt ist.")
+            st.error("Keine Live-Daten verfügbar.")
 
+    # 2. Heutige Spiele Übersicht
     else:
         render_page_header("🔴 Live Game Center")
         
-        # --- NEU: MANUELLE EINGABE ALS FALLBACK ---
-        with st.expander("➕ Spiel manuell über ID hinzufügen"):
-            c_id, c_btn = st.columns([3, 1])
-            manual_id = c_id.text_input("Spiel-ID (z.B. 123456)", placeholder="ID aus der DBBL URL")
-            if c_btn.button("Spiel laden", use_container_width=True):
-                if manual_id:
-                    st.session_state.live_game_id = manual_id
-                    st.rerun()
+        # Aktuelles Datum (Berlin)
+        berlin_tz = pytz.timezone("Europe/Berlin")
+        today_str = datetime.now(berlin_tz).strftime("%d.%m.%Y")
+        
+        st.markdown(f"### Spiele von heute ({today_str})")
+        
+        with st.spinner("Lade Live-Pool..."): 
+            all_games = fetch_recent_games_combined()
+        
+        # Strenge Filterung auf HEUTE
+        todays_games = [g for g in all_games if g['date_only'] == today_str]
+        
+        if not todays_games:
+            st.info(f"Für heute ({today_str}) sind aktuell keine Spiele im System hinterlegt.")
+            
+            # Optionaler Hinweis, falls generell Spiele geladen wurden
+            if all_games:
+                with st.expander("System-Status"):
+                    st.write(f"Pool-Größe: {len(all_games)} Spiele (Past/Present/Future)")
+                    st.write("Keines davon entspricht dem heutigen Datum.")
+        else:
+            # Sortieren nach Uhrzeit
+            todays_games.sort(key=lambda x: x['date'])
+            
+            cols = st.columns(3) 
+            for i, game in enumerate(todays_games):
+                col = cols[i % 3]
+                with col:
+                    with st.container(border=True):
+                        # Status-Design
+                        is_live = game['status'] in ["RUNNING", "LIVE"]
+                        status_color = "#d9534f" if is_live else "#555"
+                        status_text = "🔴 LIVE" if is_live else game['date'].split(' ')[1] + " Uhr"
+                        
+                        st.markdown(f"""
+                            <div style="text-align:center;">
+                                <div style="font-weight:bold; color:{status_color};">{status_text}</div>
+                                <div style="margin:10px 0; font-size:1.1em;">
+                                    <b>{game['home']}</b><br>vs<br><b>{game['guest']}</b>
+                                </div>
+                                <div style="font-size:1.5em; font-weight:bold;">{game['score']}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        if st.button("Live-Scouting", key=f"btn_live_{game['id']}", use_container_width=True):
+                            st.session_state.live_game_id = game['id']
+                            st.rerun()
 
         st.markdown("---")
         st.markdown("### Spiele von heute (Automatische Suche)")
