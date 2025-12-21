@@ -129,7 +129,19 @@ def fetch_team_data(team_id, season_id):
                 col_id = next((c for c in df.columns if "id" in c), "id")
                 df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0", "", regex=False)
                 df["NAME_FULL"] = df["firstname"].astype(str) + " " + df["lastname"].astype(str)
-                df["PPG"] = (pd.to_numeric(df["points"], errors="coerce") / pd.to_numeric(df["gamesplayed"], errors="coerce").replace(0,1)).round(1)
+                df["NR"] = df["shirtnumber"].astype(str).str.replace(".0", "", regex=False)
+                df["GP"] = pd.to_numeric(df["gamesplayed"], errors="coerce").fillna(1)
+                df["PPG"] = (pd.to_numeric(df["points"], errors="coerce") / df["GP"].replace(0,1)).round(1)
+                df["FG%"] = (pd.to_numeric(df["fieldgoalssuccesspercent"], errors="coerce") * 100).round(1)
+                df["3PCT"] = (pd.to_numeric(df["threepointshotsuccesspercent"], errors="coerce") * 100).round(1)
+                df["FTPCT"] = (pd.to_numeric(df["freethrowssuccesspercent"], errors="coerce") * 100).round(1)
+                df["TOT"] = (pd.to_numeric(df["totalrebounds"], errors="coerce") / df["GP"].replace(0,1)).round(1)
+                df["AS"] = (pd.to_numeric(df["assists"], errors="coerce") / df["GP"].replace(0,1)).round(1)
+                df["ST"] = (pd.to_numeric(df["steals"], errors="coerce") / df["GP"].replace(0,1)).round(1)
+                df["TO"] = (pd.to_numeric(df["turnovers"], errors="coerce") / df["GP"].replace(0,1)).round(1)
+                df["PF"] = (pd.to_numeric(df["foulscommitted"], errors="coerce") / df["GP"].replace(0,1)).round(1)
+                df["BS"] = (pd.to_numeric(df["blocks"], errors="coerce") / df["GP"].replace(0,1)).round(1)
+                df["MIN_DISPLAY"] = (pd.to_numeric(df["secondsplayed"], errors="coerce") / df["GP"].replace(0,1) / 60).apply(lambda x: f"{int(x)}:00")
                 df["select"] = False
     except: pass
     return df, ts
@@ -147,10 +159,14 @@ def fetch_schedule(team_id, season_id):
                     raw_d = g.get("scheduledTime", "")
                     d_disp, date_only = "-", "-"
                     if raw_d:
-                        dt = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
-                        d_disp = dt.strftime("%d.%m.%Y %H:%M"); date_only = dt.strftime("%d.%m.%Y")
+                        try:
+                            dt = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
+                            d_disp = dt.strftime("%d.%m.%Y %H:%M"); date_only = dt.strftime("%d.%m.%Y")
+                        except: pass
                     res = g.get("result") or {}
-                    clean.append({"id": g.get("id"), "date": d_disp, "date_only": date_only, "home": g.get("homeTeam",{}).get("name"), "guest": g.get("guestTeam",{}).get("name"), "score": f"{res.get('homeScore','-')}:{res.get('guestScore','-')}", "has_result": res.get("homeScore") is not None})
+                    h_s = res.get("homeTeamFinalScore")
+                    g_s = res.get("guestTeamFinalScore")
+                    clean.append({"id": g.get("id"), "date": d_disp, "date_only": date_only, "home": g.get("homeTeam",{}).get("name"), "guest": g.get("guestTeam",{}).get("name"), "score": f"{h_s if h_s is not None else '-'}:{g_s if g_s is not None else '-'}", "has_result": h_s is not None, "homeTeamId": str(g.get("homeTeam", {}).get("teamId")), "guestTeamId": str(g.get("guestTeam", {}).get("teamId")), "home_score": h_s, "guest_score": g_s})
                 return clean
         except: pass
     return []
@@ -186,7 +202,6 @@ def fetch_team_info_basic(team_id):
 
 @st.cache_data(ttl=60)
 def fetch_recent_games_combined():
-    """Nutzt den /recent Endpunkt beider Server."""
     all_games = []
     for subdomain in ["api-s", "api-n"]:
         url = f"https://{subdomain}.dbbl.scb.world/games/recent?slotSize=200"
