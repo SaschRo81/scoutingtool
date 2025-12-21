@@ -320,46 +320,58 @@ def fetch_team_info_basic(team_id):
 @st.cache_data(ttl=60)
 def fetch_season_games(season_id):
     all_games = []
-    # Teste alle drei bekannten Subdomains
+    # 1. Versuch: Globale Liste (Schnell)
     for subdomain in ["api-1", "api-s", "api-n"]:
         url = f"https://{subdomain}.dbbl.scb.world/games?seasonId={season_id}&pageSize=1000"
         try:
             resp = requests.get(url, headers=API_HEADERS, timeout=5)
             if resp.status_code == 200:
-                data = resp.json()
-                # Die API liefert entweder direkt eine Liste oder ein Dict mit "items"
-                items = data.get("items", []) if isinstance(data, dict) else data
-                
-                if not isinstance(items, list): continue
-                
-                for g in items:
-                    if not isinstance(g, dict): continue
-                    if any(x['id'] == g.get("id") for x in all_games): continue
-                        
-                    raw_d = g.get("scheduledTime", "")
-                    d_disp, date_only = "-", "-"
-                    
-                    if raw_d:
-                        try:
-                            # Umwandlung von UTC auf Berlin Zeit
-                            dt_utc = datetime.fromisoformat(raw_d.replace("Z", "+00:00"))
-                            dt_berlin = dt_utc.astimezone(pytz.timezone("Europe/Berlin"))
-                            d_disp = dt_berlin.strftime("%d.%m.%Y %H:%M")
-                            date_only = dt_berlin.strftime("%d.%m.%Y")
-                        except: pass
-                    
-                    res = g.get("result") or {}
-                    all_games.append({
-                        "id": str(g.get("id")), # ID als String für Konsistenz
-                        "date": d_disp,
-                        "date_only": date_only,
-                        "home": g.get("homeTeam", {}).get("name", "Heim"),
-                        "guest": g.get("guestTeam", {}).get("name", "Gast"),
-                        "score": f"{res.get('homeTeamFinalScore',0)}:{res.get('guestTeamFinalScore',0)}" if g.get("status") == "ENDED" else "-:-",
-                        "status": g.get("status")
-                    })
+                items = resp.json().get("items", []) if isinstance(resp.json(), dict) else resp.json()
+                if items:
+                    for g in items:
+                        if not any(x['id'] == str(g.get("id")) for x in all_games):
+                            all_games.append(process_game_item(g))
         except: continue
+
+    # 2. Versuch: Falls global nichts kommt -> Team-Spielpläne abgrasen (Zuverlässig)
+    # Wir nehmen die Teams aus deiner TEAMS_DB (config.py)
+    if not all_games:
+        from src.config import TEAMS_DB
+        # Wir fragen nur die ersten paar Teams ab oder alle Jena-relevanten, um Zeit zu sparen
+        for tid in TEAMS_DB.keys():
+            url = f"https://api-s.dbbl.scb.world/games?seasonTeamId={tid}&seasonId={season_id}&pageSize=100"
+            try:
+                resp = requests.get(url, headers=API_HEADERS, timeout=3)
+                if resp.status_code == 200:
+                    items = resp.json().get("items", [])
+                    for g in items:
+                        if not any(x['id'] == str(g.get("id")) for x in all_games):
+                            all_games.append(process_game_item(g))
+            except: continue
+            
     return all_games
+
+def process_game_item(g):
+    """Hilfsfunktion zum Vereinheitlichen der Spieldaten"""
+    raw_d = g.get("scheduledTime", "")
+    d_disp, date_only = "-", "-"
+    if raw_d:
+        try:
+            dt_berlin = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
+            d_disp = dt_berlin.strftime("%d.%m.%Y %H:%M")
+            date_only = dt_berlin.strftime("%d.%m.%Y")
+        except: pass
+    
+    res = g.get("result") or {}
+    return {
+        "id": str(g.get("id")),
+        "date": d_disp,
+        "date_only": date_only,
+        "home": g.get("homeTeam", {}).get("name", "Heim"),
+        "guest": g.get("guestTeam", {}).get("name", "Gast"),
+        "score": f"{res.get('homeTeamFinalScore',0)}:{res.get('guestTeamFinalScore',0)}" if g.get("status") == "ENDED" else "-:-",
+        "status": g.get("status")
+    }
 
 @st.cache_data(ttl=1800)
 def fetch_team_rank(team_id, season_id):
