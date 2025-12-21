@@ -297,64 +297,82 @@ def render_prep_page():
             else: st.error("Fehler beim Laden der Spielerdaten.")
 
 def render_live_page():
-    # ... (vorheriger Code für Live-Detailansicht bleibt gleich) ...
-    
+    # 1. Prüfen, ob bereits ein Spiel ausgewählt wurde
     if st.session_state.live_game_id:
-        # (Detailansicht Code...)
-        pass 
+        c_back, c_title = st.columns([1, 5])
+        with c_back:
+            if st.button("⬅️ Zurück zur Liste", key="live_back_btn"): 
+                st.session_state.live_game_id = None
+                st.rerun()
+        
+        gid = st.session_state.live_game_id
+        auto = st.checkbox("🔄 Auto-Refresh (15s)", value=True)
+        st.divider()
+        
+        # Daten abrufen (nutzt deine URLs im Hintergrund)
+        box = fetch_game_boxscore(gid)
+        det = fetch_game_details(gid)
+        
+        if box:
+            if det:
+                box["gameTime"] = det.get("gameTime")
+                box["period"] = det.get("period")
+                box["result"] = det.get("result")
+            render_live_view(box)
+            if auto:
+                time_module.sleep(15)
+                st.rerun()
+        else:
+            st.error(f"Keine Live-Daten für Spiel-ID {gid} gefunden. Prüfe, ob die ID korrekt ist.")
+
     else:
-        render_page_header("🔴 Live Games Übersicht")
+        render_page_header("🔴 Live Game Center")
         
-        # Sicherstellen, dass CURRENT_SEASON_ID auf "2025" steht
-        CURRENT_SEASON_ID = "2025" 
+        # --- NEU: MANUELLE EINGABE ALS FALLBACK ---
+        with st.expander("➕ Spiel manuell über ID hinzufügen"):
+            c_id, c_btn = st.columns([3, 1])
+            manual_id = c_id.text_input("Spiel-ID (z.B. 123456)", placeholder="ID aus der DBBL URL")
+            if c_btn.button("Spiel laden", use_container_width=True):
+                if manual_id:
+                    st.session_state.live_game_id = manual_id
+                    st.rerun()
+
+        st.markdown("---")
+        st.markdown("### Spiele von heute (Automatische Suche)")
         
-        st.markdown("### Spiele von heute")
-        with st.spinner("Lade aktuellen Spielplan..."): 
+        with st.spinner("Lade aktuellen Spielplan für 2025..."): 
             all_games = fetch_season_games(CURRENT_SEASON_ID)
         
-        # Zeitzone für den Vergleich heute festlegen
         berlin_tz = pytz.timezone("Europe/Berlin")
         today_str = datetime.now(berlin_tz).strftime("%d.%m.%Y")
         
-        # Filter: Alle Spiele deren Datum HEUTE ist
         todays_games = [g for g in all_games if g['date_only'] == today_str]
         
         if not todays_games:
-            st.info(f"Keine Spiele für heute ({today_str}) gefunden.")
-            # Kleiner Debug-Hinweis für dich:
-            with st.expander("System-Check"):
-                st.write(f"Saison ID: {CURRENT_SEASON_ID}")
-                st.write(f"Spiele in Datenbank geladen: {len(all_games)}")
+            st.info(f"Keine Spiele für heute ({today_str}) in der Liste gefunden.")
+            if len(all_games) > 0:
+                st.write(f"ℹ️ Es wurden {len(all_games)} Spiele für die Saison 2025 geladen, aber keines für das heutige Datum.")
         else:
-            # Nach Uhrzeit sortieren
             todays_games.sort(key=lambda x: x['date'])
-            
             cols = st.columns(3) 
             for i, game in enumerate(todays_games):
                 col = cols[i % 3]
                 with col:
                     with st.container(border=True):
-                        # Status-Anzeige (Live, Beendet oder Uhrzeit)
-                        status_color = "#555"
-                        status_text = game['date'].split(' ')[1] + " Uhr"
+                        status_color = "#d9534f" if game['status'] == "RUNNING" else "#555"
+                        label = "🔴 LIVE" if game['status'] == "RUNNING" else game['date'].split(' ')[1] + " Uhr"
                         
-                        if game['status'] == "RUNNING":
-                            status_color = "#d9534f"
-                            status_text = "🔴 LIVE"
-                        elif game['status'] == "ENDED":
-                            status_text = "Beendet"
-
                         st.markdown(f"""
                             <div style="text-align:center;">
-                                <div style="font-weight:bold; color:{status_color};">{status_text}</div>
-                                <div style="font-size:1.1em; margin:10px 0;">
+                                <div style="font-weight:bold; color:{status_color};">{label}</div>
+                                <div style="margin:10px 0; font-size:1.1em;">
                                     <b>{game['home']}</b><br>vs<br><b>{game['guest']}</b>
                                 </div>
-                                <div style="font-size:1.5em; font-weight:bold; color:#d9534f;">{game['score']}</div>
+                                <div style="font-size:1.5em; font-weight:bold;">{game['score']}</div>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        if st.button(f"Live-Scouting öffnen", key=f"btn_live_{game['id']}", use_container_width=True):
+                        if st.button("Scouten", key=f"btn_live_{game['id']}", use_container_width=True):
                             st.session_state.live_game_id = game['id']
                             st.rerun()
 
