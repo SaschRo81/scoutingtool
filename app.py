@@ -69,7 +69,7 @@ def render_home():
         if c4.button("🎥 Nachbereitung", use_container_width=True): go_analysis(); st.rerun()
         if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
 
-ddef render_live_page():
+def render_live_page():
     # 1. Detailansicht: Wenn ein Spiel ausgewählt wurde
     if st.session_state.live_game_id:
         c_back, c_title = st.columns([1, 5])
