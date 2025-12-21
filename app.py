@@ -1,230 +1,154 @@
+# -*- coding: utf-8 -*-
 import streamlit as st
-import requests
 import pandas as pd
-from datetime import datetime
+import requests  
 import pytz
-from src.config import API_HEADERS, SEASON_ID, TEAMS_DB
+from datetime import datetime, date, time 
+import time as time_module 
+from urllib.parse import quote_plus 
+import base64 
 
-# --- HILFSFUNKTIONEN ---
+try:
+    import pdfkit
+    HAS_PDFKIT = True
+except ImportError:
+    HAS_PDFKIT = False
 
-def get_base_url(team_id):
-    """Ermittelt Server (Nord/Süd) anhand der Team-ID."""
-    try:
-        tid = int(team_id)
-        team_info = TEAMS_DB.get(tid)
-        if team_info and team_info.get("staffel") == "Nord":
-            return "https://api-n.dbbl.scb.world"
-    except: pass
-    return "https://api-s.dbbl.scb.world"
+from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
+from src.utils import get_logo_url 
+from src.api import (
+    fetch_team_data, get_player_metadata_cached, fetch_schedule, 
+    fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
+    fetch_recent_games_combined 
+)
+from src.html_gen import (
+    generate_header_html, generate_top3_html, generate_card_html, 
+    generate_team_stats_html, generate_custom_sections_html,
+    generate_comparison_html
+)
+from src.state_manager import export_session_state, load_session_state
+from src.analysis_ui import (
+    render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
+    get_team_name, render_game_top_performers, generate_game_summary,
+    generate_complex_ai_prompt, render_full_play_by_play, run_openai_generation,
+    render_prep_dashboard, render_live_view 
+)
 
-def format_minutes(seconds):
-    if seconds is None: return "00:00"
-    try:
-        sec = int(seconds); m = sec // 60; s = sec % 60; return f"{m:02d}:{s:02d}"
-    except: return "00:00"
+# --- KONFIGURATION ---
+CURRENT_SEASON_ID = "2025" 
+BASKETBALL_ICON = "🏀"
 
-def calculate_age(birthdate_str):
-    if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", "", "-", "null"]: return "-"
-    try:
-        clean_date = str(birthdate_str).split("T")[0]
-        bd = datetime.strptime(clean_date, "%Y-%m-%d")
-        today = datetime.now()
-        age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
-        return str(age)
-    except: return "-"
+st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon=BASKETBALL_ICON)
 
-def extract_nationality(data_obj):
-    if not data_obj: return "-"
-    if "nationalities" in data_obj and isinstance(data_obj["nationalities"], list) and data_obj["nationalities"]:
-        first = data_obj["nationalities"][0]
-        if isinstance(first, str): return "/".join(data_obj["nationalities"])
-        elif isinstance(first, dict): return "/".join([n.get("name", "") for n in data_obj["nationalities"]])
-    if "nationality" in data_obj and isinstance(data_obj["nationality"], dict):
-        return data_obj["nationality"].get("name", "-")
-    return "-"
+# --- SESSION STATE ---
+for key, default in [
+    ("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None), 
+    ("roster_df", None), ("team_stats", None), ("game_meta", {}), ("report_filename", "scouting_report.pdf"), 
+    ("saved_notes", {}), ("saved_colors", {}), ("selected_game_id", None), ("live_game_id", None), ("stats_team_id", None)
+]:
+    if key not in st.session_state: st.session_state[key] = default
 
-# --- CACHED API CALLS ---
+# --- NAVIGATIONS-HELFER ---
+def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
+def go_scouting(): st.session_state.current_page = "scouting"
+def go_comparison(): st.session_state.current_page = "comparison"
+def go_analysis(): st.session_state.current_page = "analysis"
+def go_player_comparison(): st.session_state.current_page = "player_comparison"
+def go_game_venue(): st.session_state.current_page = "game_venue" 
+def go_prep(): st.session_state.current_page = "prep"
+def go_live(): st.session_state.current_page = "live"
+def go_team_stats(): st.session_state.current_page = "team_stats"
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_player_metadata_cached(player_id):
-    clean_id = str(player_id).replace(".0", "")
-    for subdomain in ["api-s", "api-n"]:
-        url = f"https://{subdomain}.dbbl.scb.world/season-players/{clean_id}"
-        try:
-            resp = requests.get(url, headers=API_HEADERS, timeout=1.5)
-            if resp.status_code == 200:
-                data = resp.json()
-                person = data.get("person", {})
-                img = data.get("imageUrl", "")
-                bdate = data.get("birthDate") or person.get("birthDate") or person.get("birthdate")
-                age = calculate_age(bdate)
-                nat = extract_nationality(data)
-                if nat == "-": nat = extract_nationality(person)
-                height = data.get("height") or person.get("height", "-")
-                return {"img": img, "height": height, "pos": data.get("position", "-"), "age": age, "nationality": nat}
-        except: pass
-    return {"img": "", "height": "-", "pos": "-", "age": "-", "nationality": "-"}
+def render_page_header(page_title):
+    header_col1, header_col2 = st.columns([1, 4])
+    with header_col1:
+        st.button("🏠 Home", on_click=go_home, key=f"home_btn_{st.session_state.current_page}")
+    with header_col2:
+        st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro by Sascha Rosanke</h3>", unsafe_allow_html=True)
+    st.title(page_title) 
+    st.divider()
 
-@st.cache_data(ttl=600)
-def fetch_team_details_raw(team_id, season_id):
-    urls = [
-        f"https://api-1.dbbl.scb.world/teams/{team_id}/{season_id}",
-        f"{get_base_url(team_id)}/teams/{team_id}/{season_id}",
-        f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}",
-        f"https://api-n.dbbl.scb.world/teams/{team_id}/{season_id}"
-    ]
-    for url in urls:
-        try:
-            resp = requests.get(url, headers=API_HEADERS, timeout=2)
-            if resp.status_code == 200: return resp.json()
-        except: pass
-    return None
+# --- SEITEN-LOGIK ---
 
-def fetch_team_data(team_id, season_id):
-    base_url = get_base_url(team_id)
-    api_stats_players = f"{base_url}/teams/{team_id}/{season_id}/player-stats"
-    api_team_direct = f"{base_url}/teams/{team_id}/{season_id}/statistics/season"
-    ts = {}; df = pd.DataFrame()
-    try:
-        r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
-        if r_team.status_code == 200:
-            data = r_team.json()
-            td = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else None)
-            if isinstance(td, dict) and td.get("gamesPlayed"):
-                gp = td.get("gamesPlayed") or 1
-                fgm = td.get("fieldGoalsMade") or 0; fga = td.get("fieldGoalsAttempted") or 0
-                m3 = td.get("threePointShotsMade") or 0; a3 = td.get("threePointShotsAttempted") or 0
-                ftm = td.get("freeThrowsMade") or 0; fta = td.get("freeThrowsAttempted") or 0
-                m2 = fgm - m3; a2 = fga - a3
-                ts = {
-                    "ppg": (td.get("points") or 0) / gp, "tot": (td.get("totalRebounds") or 0) / gp,
-                    "as": (td.get("assists") or 0) / gp, "to": (td.get("turnovers") or 0) / gp,
-                    "st": (td.get("steals") or 0) / gp, "bs": (td.get("blocks") or 0) / gp,
-                    "pf": (td.get("foulsCommitted") or 0) / gp, "or": (td.get("offensiveRebounds") or 0) / gp,
-                    "dr": (td.get("defensiveRebounds") or 0) / gp,
-                    "2m": m2 / gp, "2a": a2 / gp, "3m": m3 / gp, "3a": a3 / gp, "ftm": ftm / gp, "fta": fta / gp,
-                    "fgpct": (fgm / fga * 100) if fga > 0 else 0,
-                    "2pct": (m2 / a2 * 100) if a2 > 0 else 0,
-                    "3pct": (m3 / a3 * 100) if a3 > 0 else 0,
-                    "ftpct": (ftm / fta * 100) if fta > 0 else 0,
-                }
-    except: pass
-    try:
-        roster_lookup = {}
-        raw_details = fetch_team_details_raw(team_id, season_id)
-        if raw_details:
-            squad = raw_details.get("squad", [])
-            for entry in squad:
-                p = entry.get("person", {}); raw_id = p.get("id") or entry.get("id")
-                if raw_id:
-                    pid = str(raw_id).replace(".0", "")
-                    roster_lookup[pid] = {"birthdate": p.get("birthDate"), "nationality": extract_nationality(p), "height": p.get("height")}
-        r_stats = requests.get(api_stats_players, headers=API_HEADERS, timeout=4)
-        if r_stats.status_code == 200:
-            p_list = r_stats.json()
-            if isinstance(p_list, dict): p_list = p_list.get("data", [])
-            if p_list:
-                df = pd.json_normalize(p_list)
-                df.columns = [str(c).lower() for c in df.columns]
-                col_id = next((c for c in df.columns if "id" in c), "id")
-                df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0", "", regex=False)
-                df["NAME_FULL"] = df["firstname"].astype(str) + " " + df["lastname"].astype(str)
-                df["PPG"] = (pd.to_numeric(df["points"], errors="coerce") / pd.to_numeric(df["gamesplayed"], errors="coerce").replace(0,1)).round(1)
-                df["select"] = False
-    except: pass
-    return df, ts
+def render_home():
+    st.markdown(f"""<div style="background-color:#ffffff; padding:20px; border-radius:15px; box-shadow:0px 4px 6px rgba(0,0,0,0.1); text-align:center; margin-bottom:40px; border:1px solid #f0f0f0;">
+    <h1 style='margin:0; color: #333;'>{BASKETBALL_ICON} DBBL Scouting Suite</h1>
+    <p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
+    _, col_center, _ = st.columns([1, 2, 1])
+    with col_center:
+        r1c1, r1c2 = st.columns(2)
+        if r1c1.button("📊 Teamvergleich", use_container_width=True): go_comparison(); st.rerun()
+        if r1c2.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
+        st.write("")
+        r2c1, r2c2 = st.columns(2)
+        if r2c1.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
+        if r2c2.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
+        st.write("")
+        r3c1, r3c2 = st.columns(2)
+        if r3c1.button("📝 PreGame Report", use_container_width=True): go_scouting(); st.rerun()
+        if r3c2.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
 
-@st.cache_data(ttl=300)
-def fetch_schedule(team_id, season_id):
-    urls = [f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=100&seasonId={season_id}"]
-    for url in urls:
-        try:
-            resp = requests.get(url, headers=API_HEADERS, timeout=3)
-            if resp.status_code == 200:
-                items = resp.json().get("items", [])
-                clean = []
-                for g in items:
-                    raw_d = g.get("scheduledTime", "")
-                    d_disp, date_only = "-", "-"
-                    if raw_d:
-                        dt = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
-                        d_disp = dt.strftime("%d.%m.%Y %H:%M"); date_only = dt.strftime("%d.%m.%Y")
-                    res = g.get("result") or {}
-                    clean.append({"id": g.get("id"), "date": d_disp, "date_only": date_only, "home": g.get("homeTeam",{}).get("name"), "guest": g.get("guestTeam",{}).get("name"), "score": f"{res.get('homeScore','-')}:{res.get('guestScore','-')}", "has_result": res.get("homeScore") is not None})
-                return clean
-        except: pass
-    return []
+def render_live_page():
+    if st.session_state.live_game_id:
+        c_back, c_title = st.columns([1, 5])
+        with c_back:
+            if st.button("⬅️ Zurück", key="live_back_btn"): 
+                st.session_state.live_game_id = None
+                st.rerun()
+        st.title("🔴 Live View")
+        gid = st.session_state.live_game_id
+        auto = st.checkbox("🔄 Auto-Refresh (15s)", value=True)
+        st.divider()
+        box = fetch_game_boxscore(gid)
+        det = fetch_game_details(gid)
+        if box:
+            if det:
+                box["gameTime"] = det.get("gameTime")
+                box["period"] = det.get("period")
+                box["result"] = det.get("result")
+            render_live_view(box)
+            if auto: time_module.sleep(15); st.rerun()
+        else: st.error("Keine Live-Daten verfügbar.")
+    else:
+        render_page_header("🔴 Live Game Center")
+        berlin_tz = pytz.timezone("Europe/Berlin")
+        today_str = datetime.now(berlin_tz).strftime("%d.%m.%Y")
+        st.markdown(f"### Spiele von heute ({today_str})")
+        with st.spinner("Lade aktuellen Spielplan..."):
+            all_games = fetch_recent_games_combined()
+        todays_games = [g for g in all_games if g['date_only'] == today_str]
+        if not todays_games:
+            st.info(f"Keine Spiele für heute ({today_str}) gefunden.")
+        else:
+            todays_games.sort(key=lambda x: x['date'])
+            cols = st.columns(3) 
+            for i, game in enumerate(todays_games):
+                col = cols[i % 3]
+                with col:
+                    with st.container(border=True):
+                        is_live = game['status'] in ["RUNNING", "LIVE"]
+                        st.markdown(f"""<div style="text-align:center;">
+                            <div style="font-weight:bold; color:{'#d9534f' if is_live else '#555'};">{'🔴 LIVE' if is_live else game['date'].split(' ')[1] + ' Uhr'}</div>
+                            <div style="margin:10px 0; font-size:1.1em;"><b>{game['home']}</b><br>vs<br><b>{game['guest']}</b></div>
+                            <div style="font-size:1.5em; font-weight:bold;">{game['score']}</div></div>""", unsafe_allow_html=True)
+                        if st.button("Scouten", key=f"btn_live_{game['id']}", use_container_width=True):
+                            st.session_state.live_game_id = game['id']
+                            st.rerun()
 
-@st.cache_data(ttl=10)
-def fetch_game_boxscore(game_id):
-    for sub in ["api-s", "api-n"]:
-        try:
-            r = requests.get(f"https://{sub}.dbbl.scb.world/games/{game_id}/stats", headers=API_HEADERS, timeout=2)
-            if r.status_code == 200: return r.json()
-        except: pass
-    return None
+# --- WEITERE SEITEN-RENDERER (GEKÜRZT FÜR ÜBERSICHT) ---
+def render_team_stats_page(): render_page_header("📈 Team Stats"); st.info("Wähle ein Team in der Nachbereitung für Details.")
+def render_comparison_page(): render_page_header("📊 Team Vergleich")
+def render_player_comparison_page(): render_page_header("🤼 Spieler Vergleich")
+def render_prep_page(): render_page_header("🔮 Vorbereitung")
+def render_analysis_page(): render_page_header("🎥 Nachbereitung")
+def render_scouting_page(): render_page_header("📝 PreGame Report")
 
-@st.cache_data(ttl=10)
-def fetch_game_details(game_id):
-    for sub in ["api-s", "api-n"]:
-        try:
-            r = requests.get(f"https://{sub}.dbbl.scb.world/games/{game_id}", headers=API_HEADERS, timeout=2)
-            if r.status_code == 200: return r.json()
-        except: pass
-    return None
-
-@st.cache_data(ttl=3600)
-def fetch_team_info_basic(team_id):
-    base = get_base_url(team_id)
-    try:
-        resp = requests.get(f"{base}/teams/{team_id}", headers=API_HEADERS, timeout=3)
-        if resp.status_code == 200:
-            v = resp.json().get("venues", [])
-            return {"id": team_id, "venue": v[0] if v else None}
-    except: pass
-    return {"id": team_id, "venue": None}
-
-@st.cache_data(ttl=60)
-def fetch_recent_games_combined():
-    """Nutzt den /recent Endpunkt beider Server."""
-    all_games = []
-    for subdomain in ["api-s", "api-n"]:
-        url = f"https://{subdomain}.dbbl.scb.world/games/recent?slotSize=200"
-        try:
-            resp = requests.get(url, headers=API_HEADERS, timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                for slot in ["past", "present", "future"]:
-                    if slot in data and isinstance(data[slot], list):
-                        for g in data[slot]:
-                            game_id = str(g.get("id"))
-                            if any(x['id'] == game_id for x in all_games): continue
-                            raw_d = g.get("scheduledTime", "")
-                            d_disp, date_only = "-", "-"
-                            if raw_d:
-                                try:
-                                    dt = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
-                                    d_disp = dt.strftime("%d.%m.%Y %H:%M"); date_only = dt.strftime("%d.%m.%Y")
-                                except: pass
-                            res = g.get("result") or {}
-                            h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
-                            g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
-                            score = f"{h_s}:{g_s}" if h_s is not None else "-:-"
-                            all_games.append({"id": game_id, "date": d_disp, "date_only": date_only, "home": g.get("homeTeam", {}).get("name", "Heim"), "guest": g.get("guestTeam", {}).get("name", "Gast"), "score": score, "status": g.get("status")})
-        except: continue
-    return all_games
-
-@st.cache_data(ttl=1800)
-def fetch_team_rank(team_id, season_id):
-    for sub in ["api-s", "api-n"]:
-        url = f"https://{sub}.dbbl.scb.world/standings?seasonId={season_id}"
-        try:
-            r = requests.get(url, headers=API_HEADERS, timeout=3)
-            if r.status_code == 200:
-                items = r.json() if isinstance(r.json(), list) else r.json().get("items", [])
-                for entry in items:
-                    st_obj = entry.get("seasonTeam", {})
-                    if str(st_obj.get("id")) == str(team_id) or str(st_obj.get("teamId")) == str(team_id):
-                        return {"rank": entry.get("rank"), "totalGames": entry.get("totalGames"), "totalVictories": entry.get("totalVictories"), "totalLosses": entry.get("totalLosses"), "points": entry.get("totalPointsMade")}
-        except: continue
-    return None
+# --- MAIN LOOP ---
+if st.session_state.current_page == "home": render_home()
+elif st.session_state.current_page == "live": render_live_page()
+elif st.session_state.current_page == "team_stats": render_team_stats_page()
+elif st.session_state.current_page == "comparison": render_comparison_page()
+elif st.session_state.current_page == "player_comparison": render_player_comparison_page()
+elif st.session_state.current_page == "prep": render_prep_page()
+elif st.session_state.current_page == "analysis": render_analysis_page()
+elif st.session_state.current_page == "scouting": render_scouting_page()
