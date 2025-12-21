@@ -7,6 +7,7 @@ import time as time_module
 from urllib.parse import quote_plus 
 import base64 
 import pytz
+import openai
 
 try:
     import pdfkit
