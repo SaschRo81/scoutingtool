@@ -406,13 +406,75 @@ def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_ca
             else: st.info("Keine gespielten Spiele.")
         else: st.info("Keine Spiele.")
 
+def create_live_boxscore_df(team_data):
+    """Erstellt einen detaillierten DataFrame für den Live-Boxscore."""
+    stats = []
+    players = team_data.get("playerStats", [])
+    
+    for p in players:
+        # Sekunden in mm:ss umwandeln
+        sec = safe_int(p.get("secondsPlayed"))
+        min_str = f"{sec // 60:02d}:{sec % 60:02d}"
+        
+        # Wurfquoten berechnen
+        fgm = safe_int(p.get("fieldGoalsMade"))
+        fga = safe_int(p.get("fieldGoalsAttempted"))
+        fg_str = f"{fgm}/{fga}"
+        fg_pct = (fgm / fga) if fga > 0 else 0.0
+
+        m3 = safe_int(p.get("threePointShotsMade"))
+        a3 = safe_int(p.get("threePointShotsAttempted"))
+        p3_str = f"{m3}/{a3}"
+        p3_pct = (m3 / a3) if a3 > 0 else 0.0
+        
+        ftm = safe_int(p.get("freeThrowsMade"))
+        fta = safe_int(p.get("freeThrowsAttempted"))
+        ft_str = f"{ftm}/{fta}"
+        ft_pct = (ftm / fta) if fta > 0 else 0.0
+
+        # On Court Logic (Versuche verschiedene Flags)
+        is_on_court = p.get("onCourt", False) or p.get("isOnCourt", False)
+        # Fallback auf Starter, falls onCourt nicht verfügbar (um wenigstens etwas zu markieren)
+        # Wenn API onCourt nicht liefert, bleibt is_on_court False, es sei denn wir wollen Starter markieren
+        is_starter = p.get("isStartingFive", False)
+
+        stats.append({
+            "#": p.get("seasonPlayer", {}).get("shirtNumber", "-"),
+            "Name": p.get("seasonPlayer", {}).get("lastName", "Unk"),
+            "Min": min_str,
+            "PTS": safe_int(p.get("points")),
+            "FG": fg_str,
+            "FG%": fg_pct,
+            "3P": p3_str,
+            "3P%": p3_pct,
+            "FT": ft_str,
+            "FT%": ft_pct,
+            "OR": safe_int(p.get("offensiveRebounds")),
+            "DR": safe_int(p.get("defensiveRebounds")),
+            "TR": safe_int(p.get("totalRebounds")),
+            "AS": safe_int(p.get("assists")),
+            "TO": safe_int(p.get("turnovers")),
+            "ST": safe_int(p.get("steals")),
+            "BS": safe_int(p.get("blocks")),
+            "PF": safe_int(p.get("foulsCommitted")),
+            "+/-": safe_int(p.get("plusMinus")),
+            "OnCourt": is_on_court,
+            "Starter": is_starter
+        })
+    
+    df = pd.DataFrame(stats)
+    if not df.empty:
+        # Sortieren: Wer auf dem Feld ist oben, dann nach Punkten (optional)
+        # Hier sortieren wir klassisch nach Punkten
+        df = df.sort_values(by=["PTS", "Min"], ascending=[False, False])
+    return df
+
 def render_live_view(box):
     if not box: return
     h_name = get_team_name(box.get("homeTeam", {}), "Heim")
     g_name = get_team_name(box.get("guestTeam", {}), "Gast")
     res = box.get("result", {})
     
-    # Check for empty result during live game
     s_h = res.get('homeTeamFinalScore', 0)
     s_g = res.get('guestTeamFinalScore', 0)
     period = res.get('period') or box.get('period')
@@ -428,31 +490,103 @@ def render_live_view(box):
     # Mapping für Perioden-Anzeige
     p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
     if safe_int(period) > 4: p_str = f"OT{safe_int(period)-4}"
-    else: p_str = p_map.get(safe_int(period), f"Q{period}") if period else "-"
+    else: p_str = p_map.get(safe_int(period), f"Q{safe_int(period)}") if period else "-"
 
     # Zeit
     gt = box.get('gameTime')
     if not gt and actions: gt = actions[-1].get('gameTime')
+    time_disp = convert_elapsed_to_remaining(gt, period) if gt else "10:00"
     
-    time_disp = convert_elapsed_to_remaining(gt, period) if gt else "-"
+    # Header Anzeige
+    st.markdown(f"""<div style='text-align:center;background:#222;color:#fff;padding:15px;border-radius:10px;margin-bottom:20px;box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+    <div style='font-size:1.2em; margin-bottom:5px;'>{h_name} vs {g_name}</div>
+    <div style='font-size:3em;font-weight:bold;line-height:1;'>{s_h} : {s_g}</div>
+    <div style='color:#ffcc00; font-weight:bold; font-size:1.1em; margin-top:5px;'>{p_str} | {time_disp}</div></div>""", unsafe_allow_html=True)
 
-    st.markdown(f"""<div style='text-align:center;background:#222;color:#fff;padding:10px;border-radius:10px;margin-bottom:15px;'>
-    <div>{h_name} vs {g_name}</div><div style='font-size:2.5em;font-weight:bold;'>{s_h} : {s_g}</div>
-    <div style='color:#ccc;'>{p_str} | {time_disp}</div></div>""", unsafe_allow_html=True)
+    # Tabs für Boxscore und Ticker
+    tab_stats, tab_pbp = st.tabs(["📊 Live Boxscore & Stats", "📜 Play-by-Play"])
 
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        st.subheader("📊 Live Top Scorer")
-        def get_top(t): return sorted([p for p in t.get("playerStats", []) if safe_int(p.get("points")) > 0], key=lambda x: safe_int(x.get("points")), reverse=True)[:5]
+    with tab_stats:
+        # DATA FRAMES ERSTELLEN
+        df_h = create_live_boxscore_df(box.get("homeTeam", {}))
+        df_g = create_live_boxscore_df(box.get("guestTeam", {}))
+
+        # Config für Spalten
+        col_cfg = {
+            "#": st.column_config.TextColumn("#", width="small"),
+            "Name": st.column_config.TextColumn("Name", width="medium"),
+            "Min": st.column_config.TextColumn("Min", width="small"),
+            "PTS": st.column_config.ProgressColumn("Pkt", min_value=0, max_value=40, format="%d"),
+            "FG": st.column_config.TextColumn("FG", width="small"),
+            "FG%": st.column_config.ProgressColumn("FG%", min_value=0, max_value=1, format="%.2f"),
+            "3P": st.column_config.TextColumn("3P", width="small"),
+            "3P%": st.column_config.ProgressColumn("3P%", min_value=0, max_value=1, format="%.2f"),
+            "FT": st.column_config.TextColumn("FW", width="small"),
+            "FT%": st.column_config.ProgressColumn("FW%", min_value=0, max_value=1, format="%.2f"),
+            "OnCourt": st.column_config.CheckboxColumn("Court", disabled=True),
+            "Starter": st.column_config.CheckboxColumn("Start", disabled=True),
+        }
         
-        c_h, c_g = st.columns(2)
-        with c_h: 
-            st.caption("Heim")
-            for p in get_top(box.get("homeTeam", {})): st.write(f"{p.get('seasonPlayer', {}).get('lastName')}: **{p.get('points')}**")
-        with c_g: 
-            st.caption("Gast")
-            for p in get_top(box.get("guestTeam", {})): st.write(f"{p.get('seasonPlayer', {}).get('lastName')}: **{p.get('points')}**")
+        # Helper zum Stylen (Highlight OnCourt oder Starter)
+        def highlight_active(row):
+            # Wenn OnCourt True ist, grün färben. Sonst wenn Starter, leicht grau.
+            if row.get("OnCourt"):
+                return ['background-color: #d4edda; color: #155724'] * len(row)
+            elif row.get("Starter"):
+                return ['background-color: #f8f9fa; font-weight: bold'] * len(row)
+            return [''] * len(row)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f"### {h_name}")
+            if not df_h.empty:
+                # Spalten filtern für Anzeige
+                cols_show = ["#", "Name", "Min", "PTS", "FG", "FG%", "3P", "3P%", "TR", "AS", "TO", "PF", "+/-"]
+                st.dataframe(df_h[cols_show].style.apply(highlight_active, axis=1), column_config=col_cfg, hide_index=True, use_container_width=True)
+            else: st.info("Keine Daten")
             
-    with c2:
+        with c2:
+            st.markdown(f"### {g_name}")
+            if not df_g.empty:
+                cols_show = ["#", "Name", "Min", "PTS", "FG", "FG%", "3P", "3P%", "TR", "AS", "TO", "PF", "+/-"]
+                st.dataframe(df_g[cols_show].style.apply(highlight_active, axis=1), column_config=col_cfg, hide_index=True, use_container_width=True)
+            else: st.info("Keine Daten")
+
+        st.divider()
+        st.subheader("📈 Team Vergleich")
+        
+        # Aggregierte Team Stats berechnen
+        def get_team_totals(df):
+            if df.empty: return {"PTS":0, "REB":0, "AST":0, "TO":0, "STL":0, "BLK":0, "PF":0}
+            return {
+                "PTS": df["PTS"].sum(), "REB": df["TR"].sum(), "AST": df["AS"].sum(),
+                "TO": df["TO"].sum(), "STL": df["ST"].sum(), "BLK": df["BS"].sum(),
+                "PF": df["PF"].sum()
+            }
+        
+        t_h = get_team_totals(df_h)
+        t_g = get_team_totals(df_g)
+        
+        # Daten für Chart aufbereiten
+        chart_data = []
+        metrics = ["PTS", "REB", "AST", "TO", "STL", "PF"]
+        for m in metrics:
+            chart_data.append({"Team": h_name, "Metric": m, "Value": t_h[m]})
+            chart_data.append({"Team": g_name, "Metric": m, "Value": t_g[m]})
+            
+        df_chart = pd.DataFrame(chart_data)
+        
+        # Altair Chart
+        chart = alt.Chart(df_chart).mark_bar().encode(
+            x=alt.X('Metric', title=None, sort=metrics),
+            y=alt.Y('Value', title=None),
+            color=alt.Color('Team', title="Team"),
+            xOffset='Team',
+            tooltip=['Team', 'Metric', 'Value']
+        ).properties(height=300)
+        
+        st.altair_chart(chart, use_container_width=True)
+
+    with tab_pbp:
         st.subheader("📜 Live Ticker")
-        render_full_play_by_play(box, height=400)
+        render_full_play_by_play(box, height=600)
