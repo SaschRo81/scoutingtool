@@ -454,3 +454,28 @@ def fetch_last_n_games_complete(team_id, season_id, n=3):
             box['meta_result'] = game['score']
             detailed_games.append(box)
     return detailed_games
+    
+@st.cache_data(ttl=1800)
+def fetch_team_rank(team_id, season_id):
+    """Holt die echte Bilanz (Siege/Niederlagen) aus der Tabelle."""
+    staffel = TEAMS_DB.get(int(team_id), {}).get("staffel", "")
+    group = "SOUTH" if staffel == "Süd" else "NORTH"
+    
+    for sub in ["api-s", "api-n"]:
+        try:
+            r = requests.get(f"https://{sub}.dbbl.scb.world/standings?seasonId={season_id}&group={group}", headers=API_HEADERS, timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                for entry in data:
+                    st_obj = entry.get("seasonTeam", {})
+                    # Abgleich über Team-ID oder SeasonTeam-ID
+                    if str(st_obj.get("teamId")) == str(team_id) or str(st_obj.get("id")) == str(team_id):
+                        return {
+                            "rank": entry.get("rank"),
+                            "totalGames": entry.get("totalGames"),
+                            "totalVictories": entry.get("totalVictories"), # Hier kommen die 7 Siege her
+                            "totalLosses": entry.get("totalLosses"),
+                            "points": entry.get("totalPointsMade")
+                        }
+        except: continue
+    return {"rank": "-", "totalGames": 0, "totalVictories": 0, "totalLosses": 0}
