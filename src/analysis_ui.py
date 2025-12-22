@@ -171,8 +171,53 @@ def render_team_analysis_dashboard(team_id, team_name):
             st.markdown(f"<div style='background:#f8f9fa;padding:10px;border-radius:10px;text-align:center;border:1px solid #ddd;'><div style='font-weight:bold;font-size:0.9em;'>{p['name']}</div><div style='font-size:1.4em;color:#28a745;font-weight:bold;'>{p['pm']:+.1f}</div></div>", unsafe_allow_html=True)
 
     st.write("")
+    # --- 3. AUFSTELLUNGEN (LINEUPS) - JETZT VOLLDYNAMISCH ---
     st.subheader("📋 Effektivste Aufstellungen (Lineups)")
-    st.markdown("""<style>.c-box { display:flex; flex-direction:column; align-items:center; width:50px; } .circle { background:#4a90e2; color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:13px; } .n-label { font-size:10px; color:#666; margin-top:4px; text-align:center; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }</style>""", unsafe_allow_html=True)
+    
+    if not real_lineups:
+        st.info("Keine stabilen 5er-Aufstellungen in den PBP-Daten gefunden (mind. 1 Min. Spielzeit nötig).")
+    else:
+        # CSS für die Kreise zentral definieren (einmalig)
+        st.markdown("""
+            <style>
+            .circle-box { display: flex; flex-direction: column; align-items: center; width: 50px; }
+            .circle { background: #4a90e2; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; }
+            .n-label { font-size: 10px; color: #666; margin-top: 4px; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            </style>
+        """, unsafe_allow_html=True)
+
+        h_cols = st.columns([4, 1, 1, 1, 1])
+        h_cols[0].write("**AUFSTELLUNG**")
+        h_cols[1].write("**MIN**")
+        h_cols[2].write("**PKT**")
+        h_cols[3].write("**OPP**")
+        h_cols[4].write("**+/-**")
+
+        # HIER NUTZEN WIR JETZT NUR NOCH real_lineups (DIESE KOMMEN AUS DER BERECHNUNG)
+        for lu in real_lineups:
+            row = st.columns([4, 1, 1, 1, 1])
+            
+            # HTML für die Aufstellung (Dynamisch aus den IDs der Berechnung)
+            lineup_html = "<div style='display:flex; gap:10px;'>"
+            for pid in lu['ids']:
+                # Wir holen Nummer und Name aus der jersey_map, die wir zuvor erstellt haben
+                p_info = scout["jersey_map"].get(pid, {"nr": "?", "name": "Unbekannt"})
+                lineup_html += f"""
+                    <div class='circle-box'>
+                        <div class='circle'>{p_info['nr']}</div>
+                        <div class='n-label'>{p_info['name']}</div>
+                    </div>
+                """
+            lineup_html += "</div>"
+            
+            with row[0]: st.markdown(lineup_html, unsafe_allow_html=True)
+            with row[1]: st.write(f"\n{lu['min']}")
+            with row[2]: st.write(f"\n{lu['pkt']}")
+            with row[3]: st.write(f"\n{lu['opp']}")
+            
+            # Plus/Minus Farbe dynamisch
+            color = "#28a745" if lu['pm'] > 0 else ("#d9534f" if lu['pm'] < 0 else "#666")
+            with row[4]: st.markdown(f"\n<b style='color:{color}; font-size:1.1em;'>{lu['pm']:+}</b>", unsafe_allow_html=True)
 
     h_cols = st.columns([4, 1, 1, 1, 1])
     h_cols[0].write("**AUFSTELLUNG**"); h_cols[1].write("**MIN**"); h_cols[2].write("**PKT**"); h_cols[3].write("**OPP**"); h_cols[4].write("**+/-**")
