@@ -105,10 +105,8 @@ def fetch_team_details_raw(team_id, season_id):
 
 def fetch_team_data(team_id, season_id):
     base_url = get_base_url(team_id)
-    
     api_stats_players = f"{base_url}/teams/{team_id}/{season_id}/player-stats"
     api_team_direct = f"{base_url}/teams/{team_id}/{season_id}/statistics/season"
-    
     ts = {}
     df = pd.DataFrame()
 
@@ -124,12 +122,9 @@ def fetch_team_data(team_id, season_id):
                     item_stid = str(item.get("seasonTeamId", ""))
                     item_obj_id = str(item.get("seasonTeam", {}).get("id", ""))
                     if search_id in [item_tid, item_stid, item_obj_id]:
-                        td = item
-                        break
-                if td is None and len(data) == 1:
-                    td = data[0]
-            elif isinstance(data, dict):
-                td = data
+                        td = item; break
+                if td is None and len(data) == 1: td = data[0]
+            elif isinstance(data, dict): td = data
 
             if isinstance(td, dict) and td.get("gamesPlayed"):
                 gp = td.get("gamesPlayed") or 1
@@ -137,7 +132,6 @@ def fetch_team_data(team_id, season_id):
                 m3 = td.get("threePointShotsMade") or 0; a3 = td.get("threePointShotsAttempted") or 0
                 ftm = td.get("freeThrowsMade") or 0; fta = td.get("freeThrowsAttempted") or 0
                 m2 = fgm - m3; a2 = fga - a3
-
                 ts = {
                     "ppg": (td.get("points") or 0) / gp, "tot": (td.get("totalRebounds") or 0) / gp,
                     "as": (td.get("assists") or 0) / gp, "to": (td.get("turnovers") or 0) / gp,
@@ -145,13 +139,10 @@ def fetch_team_data(team_id, season_id):
                     "pf": (td.get("foulsCommitted") or 0) / gp, "or": (td.get("offensiveRebounds") or 0) / gp,
                     "dr": (td.get("defensiveRebounds") or 0) / gp,
                     "2m": m2 / gp, "2a": a2 / gp, "3m": m3 / gp, "3a": a3 / gp, "ftm": ftm / gp, "fta": fta / gp,
-                    "fgpct": (fgm / fga * 100) if fga > 0 else 0,
-                    "2pct": (m2 / a2 * 100) if a2 > 0 else 0,
-                    "3pct": (m3 / a3 * 100) if a3 > 0 else 0,
-                    "ftpct": (ftm / fta * 100) if fta > 0 else 0,
+                    "fgpct": (fgm / fga * 100) if fga > 0 else 0, "2pct": (m2 / a2 * 100) if a2 > 0 else 0,
+                    "3pct": (m3 / a3 * 100) if a3 > 0 else 0, "ftpct": (ftm / fta * 100) if fta > 0 else 0,
                 }
-    except Exception as e:
-        print(f"Fehler Team Stats {team_id}: {e}")
+    except Exception as e: print(f"Fehler Team Stats {team_id}: {e}")
 
     try:
         roster_lookup = {}
@@ -177,12 +168,9 @@ def fetch_team_data(team_id, season_id):
             if p_list:
                 df = pd.json_normalize(p_list)
                 df.columns = [str(c).lower() for c in df.columns]
-                
                 def get_val(key, default=0.0):
                     matches = [c for c in df.columns if key == c or (key in c and 'pergame' not in c and 'percent' not in c)]
-                    if matches:
-                        c = sorted(matches, key=len)[0]
-                        return pd.to_numeric(df[c], errors="coerce").fillna(default)
+                    if matches: return pd.to_numeric(df[sorted(matches, key=len)[0]], errors="coerce").fillna(default)
                     return pd.Series([default]*len(df), index=df.index)
 
                 col_id_opts = ["seasonplayer.id", "seasonplayerid", "personid", "playerid", "id"]
@@ -214,7 +202,6 @@ def fetch_team_data(team_id, season_id):
                 df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda pid: get_meta_field(pid, "height"))
                 
                 df["GP"] = get_val("gamesplayed").replace(0, 1)
-                
                 df["TOTAL_MINUTES"] = get_val("secondsplayed") / 60
                 df["TOTAL_PTS"] = get_val("points"); df["TOTAL_REB"] = get_val("totalrebounds")
                 df["TOTAL_AST"] = get_val("assists"); df["TOTAL_STL"] = get_val("steals")
@@ -259,10 +246,8 @@ def fetch_team_data(team_id, season_id):
             "pf": df["TOTAL_PF"].sum()/tg, "or": df["TOTAL_OR"].sum()/tg,
             "dr": df["TOTAL_DR"].sum()/tg,
             "2m": t_2m/tg, "2a": t_2a/tg, "3m": t_3m/tg, "3a": t_3a/tg, "ftm": t_ftm/tg, "fta": t_fta/tg,
-            "fgpct": (t_fgm/t_fga*100) if t_fga>0 else 0,
-            "2pct": (t_2m/t_2a*100) if t_2a>0 else 0,
-            "3pct": (t_3m/t_3a*100) if t_3a>0 else 0,
-            "ftpct": (t_ftm/t_fta*100) if t_fta>0 else 0,
+            "fgpct": (t_fgm/t_fga*100) if t_fga>0 else 0, "2pct": (t_2m/t_2a*100) if t_2a>0 else 0,
+            "3pct": (t_3m/t_3a*100) if t_3a>0 else 0, "ftpct": (t_ftm/t_fta*100) if t_fta>0 else 0,
         }
     
     if df is not None and not df.empty:
@@ -408,22 +393,13 @@ def fetch_team_rank(team_id, season_id):
 
                     if match_by_id or match_by_name:
                         return {
-                            "rank": entry.get("rank", 0),
-                            "totalGames": entry.get("totalGames", 0),
-                            "totalVictories": entry.get("totalVictories", 0),
-                            "totalLosses": entry.get("totalLosses", 0),
-                            "last10Victories": entry.get("last10Victories", 0),
-                            "last10Losses": entry.get("last10Losses", 0),
-                            "points": entry.get("totalPointsMade", 0) 
+                            "rank": entry.get("rank", 0), "totalGames": entry.get("totalGames", 0), "totalVictories": entry.get("totalVictories", 0), "totalLosses": entry.get("totalLosses", 0), "last10Victories": entry.get("last10Victories", 0), "last10Losses": entry.get("last10Losses", 0), "points": entry.get("totalPointsMade", 0) 
                         }
         except: continue
     return None
 
 @st.cache_data(ttl=1800)
 def fetch_league_standings(season_id, league_selection):
-    """
-    Holt die Tabelle basierend auf der Liga-Auswahl.
-    """
     group_param = ""
     if league_selection == "Nord": group_param = "&group=NORTH"
     elif league_selection == "Süd": group_param = "&group=SOUTH"
@@ -438,9 +414,7 @@ def fetch_league_standings(season_id, league_selection):
                 table_data = []
                 for entry in items:
                     team_name = entry.get("seasonTeam", {}).get("name", "Unknown")
-                    rank = entry.get("rank", 0)
-                    wins = entry.get("totalVictories", 0)
-                    losses = entry.get("totalLosses", 0)
+                    rank = entry.get("rank", 0); wins = entry.get("totalVictories", 0); losses = entry.get("totalLosses", 0)
                     table_data.append({ "Platz": rank, "Team": team_name, "W": wins, "L": losses })
                 table_data.sort(key=lambda x: x["Platz"])
                 return pd.DataFrame(table_data)
@@ -450,6 +424,7 @@ def fetch_league_standings(season_id, league_selection):
 def fetch_last_n_games_complete(team_id, season_id, n=3):
     """
     Holt die letzten n absolvierten Spiele eines Teams INKLUSIVE Boxscore & PBP.
+    WICHTIG: Erzeugt Kopien der gecachten Boxscores, damit 'meta'-Felder nicht den Cache verschmutzen!
     """
     schedule = fetch_schedule(team_id, season_id)
     if not schedule: return []
@@ -465,9 +440,16 @@ def fetch_last_n_games_complete(team_id, season_id, n=3):
     detailed_games = []
     for game in selection:
         gid = game['id']
-        box = fetch_game_boxscore(gid) # Enthält 'actions' (PBP)
-        if box:
-            box['meta_opponent'] = game['home'] if str(game['homeTeamId']) != str(team_id) else game['guest']
+        cached_box = fetch_game_boxscore(gid) # Enthält 'actions' (PBP)
+        if cached_box:
+            # WICHTIG: Kopie erstellen, da wir unten META-Felder einfügen
+            box = cached_box.copy()
+            
+            # Heim/Gast Logik aus dem Spielplan nutzen (zuverlässiger als IDs im Boxscore)
+            is_home_game = (str(game.get('homeTeamId')) == str(team_id))
+            
+            box['meta_is_home'] = is_home_game
+            box['meta_opponent'] = game['guest'] if is_home_game else game['home']
             box['meta_date'] = game['date']
             box['meta_result'] = game['score']
             detailed_games.append(box)
