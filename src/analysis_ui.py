@@ -88,14 +88,11 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
     stats = {"h_lead": 0, "g_lead": 0, "h_run": 0, "g_run": 0, "h_paint": 0, "g_paint": 0, "h_2nd": 0, "g_2nd": 0, "h_fb": 0, "g_fb": 0}
     if not actions: return stats
     cur_h = 0; cur_g = 0; run_team = None; run_score = 0; hid_str = str(home_id)
-    
     sorted_actions = sorted(actions, key=lambda x: x.get('actionNumber', 0))
-
     for act in sorted_actions:
          new_h = safe_int(act.get("homeTeamPoints")); new_g = safe_int(act.get("guestTeamPoints"))
          if new_h == 0 and new_g == 0 and act.get("homeTeamPoints") is None: new_h = cur_h; new_g = cur_g
          pts_h = new_h - cur_h; pts_g = new_g - cur_g
-         
          if pts_h > 0:
              if run_team == "home": run_score += pts_h
              else: run_team = "home"; run_score = pts_h
@@ -104,7 +101,6 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
              if run_team == "guest": run_score += pts_g
              else: run_team = "guest"; run_score = pts_g
              if run_score > stats["g_run"]: stats["g_run"] = run_score
-         
          pts_total = pts_h + pts_g
          if pts_total > 0:
              act_tid = str(act.get("seasonTeamId", ""))
@@ -119,7 +115,6 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
              if "second" in q_str or "2nd" in q_str:
                  if is_home_action: stats["h_2nd"] += pts_total
                  else: stats["g_2nd"] += pts_total
-         
          diff = new_h - new_g
          if diff > 0 and diff > stats["h_lead"]: stats["h_lead"] = diff
          if diff < 0 and abs(diff) > stats["g_lead"]: stats["g_lead"] = abs(diff)
@@ -129,9 +124,7 @@ def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
 def analyze_game_flow(actions, home_name, guest_name):
     if not actions: return "Keine Play-by-Play Daten verfügbar."
     lead_changes = 0; ties = 0; last_leader = None; crunch_log = []
-    
     sorted_actions = sorted(actions, key=lambda x: x.get('actionNumber', 0))
-    
     for act in sorted_actions:
         h_score = safe_int(act.get("homeTeamPoints")); g_score = safe_int(act.get("guestTeamPoints"))
         if h_score == 0 and g_score == 0: continue
@@ -144,18 +137,15 @@ def analyze_game_flow(actions, home_name, guest_name):
                 elif last_leader != 'tie': lead_changes += 1
                 elif last_leader == 'tie': lead_changes += 1
         last_leader = current_leader
-
     relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
     filtered_actions = [a for a in sorted_actions if a.get("type") in relevant_types]
     last_events = filtered_actions[-10:] 
-    
     crunch_log.append("\n**Schlussphase:**")
     for ev in last_events:
         h_pts = ev.get('homeTeamPoints'); g_pts = ev.get('guestTeamPoints'); score_str = f"{h_pts}:{g_pts}"
         action_desc = translate_text(ev.get("type", ""))
         if ev.get("points"): action_desc += f" (+{ev.get('points')})"
         crunch_log.append(f"- {score_str}: {action_desc}")
-
     summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
     summary += "\n".join(crunch_log)
     return summary
@@ -164,20 +154,12 @@ def analyze_game_flow(actions, home_name, guest_name):
 
 def render_full_play_by_play(box, height=600):
     actions = box.get("actions", [])
-    if not actions:
-        st.info("Keine Play-by-Play Daten verfügbar.")
-        return
-    player_map = get_player_lookup(box)
-    player_team_map = get_player_team_lookup(box)
-    
-    home_name = get_team_name(box.get("homeTeam", {}), "Heim")
-    guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
-    home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
-    guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
+    if not actions: st.info("Keine Play-by-Play Daten verfügbar."); return
+    player_map = get_player_lookup(box); player_team_map = get_player_team_lookup(box)
+    home_name = get_team_name(box.get("homeTeam", {}), "Heim"); guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME")); guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
     data = []; running_h = 0; running_g = 0
-    
     actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
-
     for act in actions_sorted:
         h_pts = act.get("homeTeamPoints"); g_pts = act.get("guestTeamPoints")
         if h_pts is not None: running_h = safe_int(h_pts)
@@ -207,7 +189,6 @@ def render_full_play_by_play(box, height=600):
         if qualifiers: qual_german = [translate_text(q) for q in qualifiers]; action_german += f" ({', '.join(qual_german)})"
         if act.get("points"): action_german += f" (+{act.get('points')})"
         data.append({"Zeit": time_label, "Score": score_str, "Team": team_display, "Spieler": actor, "Aktion": action_german})
-    
     df = pd.DataFrame(data)
     if not df.empty: df = df.iloc[::-1]
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
@@ -332,7 +313,11 @@ def generate_complex_ai_prompt(box):
 
 def run_openai_generation(api_key, prompt):
     # Dies wird nur noch für die Einzelspiel-Analyse genutzt, nicht mehr für das Team-Scouting
-    pass
+    client = openai.OpenAI(api_key=api_key)
+    try:
+        response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": "Du bist ein Sportjournalist."}, {"role": "user", "content": prompt}], temperature=0.7)
+        return response.choices[0].message.content
+    except Exception as e: return f"Fehler: {str(e)}"
 
 # --- NEUE FUNKTIONEN FÜR PREP & LIVE ---
 
@@ -641,23 +626,9 @@ def analyze_scouting_data(team_id, detailed_games):
     tid_str = str(team_id)
     
     for box in detailed_games:
-        # Find Home/Guest IDs
-        hid = str(box.get("homeTeam", {}).get("seasonTeamId"))
-        htid = str(box.get("homeTeam", {}).get("teamId"))
-        
-        gid = str(box.get("guestTeam", {}).get("seasonTeamId"))
-        gtid = str(box.get("guestTeam", {}).get("teamId"))
-        
-        # Determine is_home safely
-        is_home = False
-        if tid_str == hid or tid_str == htid:
-            is_home = True
-        elif tid_str == gid or tid_str == gtid:
-            is_home = False
-        else:
-            # Fallback: Check inner IDs
-            h_inner = str(box.get("homeTeam", {}).get("seasonTeam", {}).get("id"))
-            if h_inner == tid_str: is_home = True
+        # Verwende die zuverlässige Meta-Info, die in fetch_last_n_games_complete gesetzt wurde
+        # Default auf False, falls sie fehlen sollte (sollte aber nicht passieren)
+        is_home = box.get('meta_is_home', False)
         
         # Result logic
         res = box.get("result", {})
@@ -707,9 +678,16 @@ def analyze_scouting_data(team_id, detailed_games):
         stats["start_stats"]["pts_diff_first_5min"] += diff
 
         # B) ATO (After Timeout)
-        # Timeout ID kann auch seasonId oder permanent ID sein, daher flexibler check
-        # Wir prüfen, ob die ID im Timeout Event zu unserem Team gehört
-        my_ids = [tid_str, hid if is_home else gid, htid if is_home else gtid]
+        # Um Timeouts zuverlässig zu erkennen, nutzen wir wieder das 'is_home' Flag
+        # Wir müssen herausfinden, welche ID unser Team in den PBP Daten hat
+        # Das steht in box['homeTeam']['seasonTeamId'] bzw. Guest
+        
+        my_season_id = str(box.get("homeTeam", {}).get("seasonTeamId")) if is_home else str(box.get("guestTeam", {}).get("seasonTeamId"))
+        
+        # IDs können manchmal None sein in PBP, daher prüfen wir auch auf teamId
+        my_team_id = str(box.get("homeTeam", {}).get("teamId")) if is_home else str(box.get("guestTeam", {}).get("teamId"))
+        
+        my_ids = [my_season_id, my_team_id, tid_str]
         
         for i, act in enumerate(actions):
             if "TIMEOUT" in str(act.get("type")).upper():
@@ -755,21 +733,12 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
     tid_str = str(team_id)
     
     for g in detailed_games:
-        # Identifikation IDs für dieses Spiel
-        hid = str(g.get("homeTeam", {}).get("seasonTeamId"))
-        htid = str(g.get("homeTeam", {}).get("teamId"))
-        gid = str(g.get("guestTeam", {}).get("seasonTeamId"))
-        gtid = str(g.get("guestTeam", {}).get("teamId"))
+        # Hier nutzen wir auch das zuverlässige Flag
+        is_home = g.get('meta_is_home', False)
         
-        # Bestimme Home/Guest Status
-        is_home = False
-        if tid_str in [hid, htid]: is_home = True
-        elif tid_str in [gid, gtid]: is_home = False
-        else:
-             # Fallback
-             if str(g.get("homeTeam", {}).get("seasonTeam", {}).get("id")) == tid_str: is_home = True
-
-        my_ids = [tid_str, hid if is_home else gid, htid if is_home else gtid]
+        my_season_id = str(g.get("homeTeam", {}).get("seasonTeamId")) if is_home else str(g.get("guestTeam", {}).get("seasonTeamId"))
+        my_team_id = str(g.get("homeTeam", {}).get("teamId")) if is_home else str(g.get("guestTeam", {}).get("teamId"))
+        my_ids = [my_season_id, my_team_id, tid_str]
 
         opp = g.get('meta_opponent', 'Gegner'); res = g.get('meta_result', 'N/A')
         date_game = g.get('meta_date', 'Datum?')
@@ -858,6 +827,7 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
     return context
 
 def render_team_analysis_dashboard(team_id, team_name):
+    # Import hier damit keine Zirkelbezüge entstehen
     from src.api import fetch_last_n_games_complete, get_best_team_logo
     
     logo = get_best_team_logo(team_id)
