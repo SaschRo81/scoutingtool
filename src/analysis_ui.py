@@ -303,4 +303,338 @@ def render_charts_and_stats(box):
     with c1: st.markdown("#### Wurfquoten"); st.altair_chart(chart, use_container_width=True)
     with c2: 
         st.markdown("#### Team Statistik"); html = f"<table style='width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px;'><tr style='background-color:#003366; color:white;'><th style='padding:8px; text-align:center; width:30%;'>{h_name}</th><th style='padding:8px; text-align:center; width:40%;'>Kategorie</th><th style='padding:8px; text-align:center; width:30%;'>{g_name}</th></tr>"
-        for label, vh, vg in metrics: html += f"<tr style='border-bottom:1px solid #eee;'><td style='padding:6px; text-align:center;'>{vh}</td><td style='padding:6
+        for label, vh, vg in metrics: html += f"<tr style='border-bottom:1px solid #eee;'><td style='padding:6px; text-align:center;'>{vh}</td><td style='padding:6px; text-align:center; font-weight:bold; color:#555;'>{label}</td><td style='padding:6px; text-align:center;'>{vg}</td></tr>"
+        st.markdown(html + "</table>", unsafe_allow_html=True)
+
+def generate_game_summary(box):
+    if not box: return "Keine Daten verfügbar."
+    h_data = box.get("homeTeam", {}); g_data = box.get("guestTeam", {}); h_name = get_team_name(h_data, "Heim"); g_name = get_team_name(g_data, "Gast"); res = box.get("result", {}); s_h = res.get("homeTeamFinalScore", 0); s_g = res.get("guestTeamFinalScore", 0); winner = h_name if s_h > s_g else g_name; diff = abs(s_h - s_g)
+    text = f"**Endergebnis:** {h_name} {s_h} : {s_g} {g_name}\n\n"; 
+    if diff < 6: text += f"In einem bis zur letzten Sekunde spannenden Krimi setzte sich {winner} knapp durch. "
+    elif diff > 20: text += f"{winner} dominierte das Spiel deutlich und gewann souverän mit {diff} Punkten Vorsprung. "
+    else: text += f"{winner} konnte das Spiel mit einem soliden {diff}-Punkte-Vorsprung für sich entscheiden. "
+    q_h = [res.get(f"homeTeamQ{i}Score", 0) for i in range(1, 5)]; q_g = [res.get(f"guestTeamQ{i}Score", 0) for i in range(1, 5)]; h_q_wins = sum(1 for i in range(4) if q_h[i] > q_g[i])
+    if h_q_wins == 4 and s_h > s_g: text += f"{h_name} gewann dabei jedes einzelne Viertel. "
+    elif h_q_wins == 0 and s_h < s_g: text += f"{g_name} ließ nichts anbrennen und entschied alle vier Viertel für sich. "
+    def get_best(p_list, key):
+        if not p_list: return None, 0
+        s = sorted(p_list, key=lambda x: safe_int(x.get(key)), reverse=True); p = s[0]; return p.get("seasonPlayer", {}).get("lastName", "Unknown"), safe_int(p.get(key))
+    h_p, h_v = get_best(h_data.get("playerStats", []), "points"); g_p, g_v = get_best(g_data.get("playerStats", []), "points")
+    text += f"\n\n**Top Performer:**\nAuf Seiten von {h_name} war **{h_p}** mit {h_v} Punkten am erfolgreichsten. Bei {g_name} hielt **{g_p}** mit {g_v} Zählern dagegen."
+    return text
+
+def generate_complex_ai_prompt(box):
+    if not box: return "Keine Daten."
+    h_data = box.get("homeTeam", {}); g_data = box.get("guestTeam", {}); h_name = get_team_name(h_data, "Heim"); g_name = get_team_name(g_data, "Gast"); res = box.get("result", {}); pbp_summary = analyze_game_flow(box.get("actions", []), h_name, g_name)
+    def get_stats_str(team_data):
+        s = team_data.get("gameStat", {}); p_list = team_data.get("playerStats", []); top_p = sorted([p for p in p_list if p.get("points", 0) is not None], key=lambda x: x.get("points", 0), reverse=True)[:2]; top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')} Pkt)" for p in top_p])
+        return f"FG: {safe_int(s.get('fieldGoalsSuccessPercent'))}%, Reb: {safe_int(s.get('totalRebounds'))}, TO: {safe_int(s.get('turnovers'))}, Top: {top_str}"
+    prompt = f"""Erstelle 3 journalistische Spielberichte (Heim-Sicht, Neutral, Gäste-Sicht) basierend auf diesen Daten:\nHeim: {h_name}, Gast: {g_name}, Ergebnis: {res.get('homeTeamFinalScore')} : {res.get('guestTeamFinalScore')}\nViertel: Q1 {res.get('homeTeamQ1Score')}:{res.get('guestTeamQ1Score')}, Q2 {res.get('homeTeamQ2Score')}:{res.get('guestTeamQ2Score')}, Q3 {res.get('homeTeamQ3Score')}:{res.get('guestTeamQ3Score')}, Q4 {res.get('homeTeamQ4Score')}:{res.get('guestTeamQ4Score')}\nStats Heim: {get_stats_str(h_data)}\nStats Gast: {get_stats_str(g_data)}\nZuschauer: {res.get('spectators', 'k.A.')}, Halle: {box.get('venue', {}).get('name', 'Halle')}\n\nSPIELVERLAUF (PBP):\n{pbp_summary}\n\nANWEISUNGEN:\nSchreibe lebendig, emotional und detailreich. Nutze die PBP-Daten für Crunchtime-Beschreibung."""
+    return prompt
+
+def run_openai_generation(api_key, prompt):
+    client = openai.OpenAI(api_key=api_key)
+    try:
+        response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": "Du bist ein erfahrener Basketball-Scout."}, {"role": "user", "content": prompt}], temperature=0.7)
+        return response.choices[0].message.content
+    except Exception as e: return f"Fehler bei der KI-Generierung: {str(e)}"
+
+# --- LIVE & PREP FUNKTIONEN ---
+
+def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
+    st.subheader(f"Analyse: {team_name}")
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.markdown("#### Top 4 Spieler (nach PPG)")
+        if df_roster is not None and not df_roster.empty:
+            top4 = df_roster.sort_values(by="PPG", ascending=False).head(4)
+            for _, row in top4.iterrows():
+                with st.container():
+                    col_img, col_stats = st.columns([1, 4])
+                    with col_img:
+                        if "img" in row.index and row["img"]: st.image(row["img"], width=100)
+                        elif metadata_callback:
+                            meta = metadata_callback(row["PLAYER_ID"])
+                            if meta["img"]: st.image(meta["img"], width=100)
+                            else: st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
+                        else: st.markdown(f"<div style='font-size:30px; text-align:center;'>👤</div>", unsafe_allow_html=True)
+                    with col_stats:
+                        st.markdown(f"**#{row['NR']} {row['NAME_FULL']}**")
+                        age = row.get('AGE', '-'); nat = row.get('NATIONALITY', '-'); height = row.get('HEIGHT', '-'); pos = row.get('POS', '-')
+                        if (age == '-' or nat == '-') and metadata_callback:
+                             meta = metadata_callback(row["PLAYER_ID"])
+                             if age == '-': age = meta.get('age', '-')
+                             if nat == '-': nat = meta.get('nationality', '-')
+                             if height == '-': height = meta.get('height', '-')
+                             if pos == '-': pos = meta.get('pos', '-')
+                        st.caption(f"Alter: {age} | Nat: {nat} | Größe: {height} | Pos: {pos}")
+                        st.markdown(f"**PPG: {row['PPG']}** | FG%: {row['FG%']} | 3P%: {row['3PCT']}% | REB: {row['TOT']} | AST: {row['AS']}")
+                    st.divider()
+        else: st.warning("Keine Kaderdaten.")
+    with c2:
+        st.markdown("#### Formkurve")
+        if last_games:
+            played_games = [g for g in last_games if g.get('has_result')]
+            def parse_date(d_str):
+                try: return datetime.strptime(d_str, "%d.%m.%Y %H:%M")
+                except: return datetime.min
+            games_sorted = sorted(played_games, key=lambda x: parse_date(x['date']), reverse=True)[:5]
+            if games_sorted:
+                st.write(""); cols_form = st.columns(len(games_sorted))
+                for idx, g in enumerate(games_sorted):
+                    h_score = g.get('home_score', 0); g_score = g.get('guest_score', 0); is_home = (g.get('homeTeamId') == str(team_id))
+                    win = (is_home and h_score > g_score) or (not is_home and g_score > h_score)
+                    color = "#28a745" if win else "#dc3545"; char = "W" if win else "L"
+                    with cols_form[idx]: st.markdown(f"<div style='background-color:{color};color:white;text-align:center;padding:10px;border-radius:5px;font-weight:bold;' title='{g['date']}\n{g['home']} vs {g['guest']}\n{g['score']}'>{char}</div>", unsafe_allow_html=True)
+            else: st.info("Keine gespielten Spiele.")
+        else: st.info("Keine Spiele.")
+
+def create_live_boxscore_df(team_data):
+    stats = []
+    players = team_data.get("playerStats", [])
+    for p in players:
+        sec = safe_int(p.get("secondsPlayed")); min_str = f"{sec // 60:02d}:{sec % 60:02d}"
+        fgm = safe_int(p.get("fieldGoalsMade")); fga = safe_int(p.get("fieldGoalsAttempted"))
+        m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted"))
+        ftm = safe_int(p.get("freeThrowsMade")); fta = safe_int(p.get("freeThrowsAttempted"))
+        is_on_court = p.get("onCourt", False) or p.get("isOnCourt", False); is_starter = p.get("isStartingFive", False)
+        stats.append({"#": p.get("seasonPlayer", {}).get("shirtNumber", "-"), "Name": p.get("seasonPlayer", {}).get("lastName", "Unk"), "Min": min_str, "PTS": safe_int(p.get("points")), "FG": f"{fgm}/{fga}", "FG%": (fgm/fga) if fga>0 else 0.0, "3P": f"{m3}/{a3}", "3P%": (m3/a3) if a3>0 else 0.0, "FT": f"{ftm}/{fta}", "FT%": (ftm/fta) if fta>0 else 0.0, "OR": safe_int(p.get("offensiveRebounds")), "DR": safe_int(p.get("defensiveRebounds")), "TR": safe_int(p.get("totalRebounds")), "AS": safe_int(p.get("assists")), "TO": safe_int(p.get("turnovers")), "ST": safe_int(p.get("steals")), "BS": safe_int(p.get("blocks")), "PF": safe_int(p.get("foulsCommitted")), "+/-": safe_int(p.get("plusMinus")), "OnCourt": is_on_court, "Starter": is_starter})
+    df = pd.DataFrame(stats)
+    if not df.empty: df = df.sort_values(by=["PTS", "Min"], ascending=[False, False])
+    return df
+
+def render_live_view(box):
+    if not box: return
+    h_name = get_team_name(box.get("homeTeam", {}), "Heim"); g_name = get_team_name(box.get("guestTeam", {}), "Gast"); res = box.get("result", {})
+    s_h = res.get('homeTeamFinalScore', 0); s_g = res.get('guestTeamFinalScore', 0); period = res.get('period') or box.get('period')
+    actions = box.get("actions", [])
+    if s_h == 0 and s_g == 0 and actions:
+        last = actions[-1]
+        if last.get('homeTeamPoints') is not None: s_h = last.get('homeTeamPoints')
+        if last.get('guestTeamPoints') is not None: s_g = last.get('guestTeamPoints')
+        if last.get('period'): period = last.get('period')
+    p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
+    if safe_int(period) > 4: p_str = f"OT{safe_int(period)-4}"
+    else: p_str = p_map.get(safe_int(period), f"Q{safe_int(period)}") if period else "-"
+    gt = box.get('gameTime'); 
+    if not gt and actions: gt = actions[-1].get('gameTime')
+    time_disp = convert_elapsed_to_remaining(gt, period) if gt else "10:00"
+    venue_name = box.get('venue', {}).get('name', '-'); venue_addr = box.get('venue', {}).get('address', '')
+    if venue_addr: venue_name += f" ({venue_addr.split(',')[-1].strip()})"
+    date_str = format_date_time(box.get('scheduledTime'))
+    refs = []; 
+    for i in range(1, 4): 
+        r = box.get(f"referee{i}")
+        if r and isinstance(r, dict): refs.append(f"{r.get('lastName')} {r.get('firstName')}")
+    ref_str = ", ".join(refs) if refs else "-"
+    h_coach = box.get("homeTeam", {}).get("headCoachName") or box.get("homeTeam", {}).get("headCoach", {}).get("lastName", "-")
+    g_coach = box.get("guestTeam", {}).get("headCoachName") or box.get("guestTeam", {}).get("headCoach", {}).get("lastName", "-")
+    st.markdown(f"""<div style='text-align:center;background:#222;color:#fff;padding:15px;border-radius:10px;margin-bottom:20px;box-shadow: 0 4px 6px rgba(0,0,0,0.1);'><div style='font-size:1em; color:#bbb; margin-bottom:5px;'>{date_str} @ {venue_name}</div><div style='font-size:1.4em; margin-bottom:5px; font-weight:bold;'>{h_name} <span style='font-size:0.6em; font-weight:normal; color:#aaa;'>(HC: {h_coach})</span></div><div style='font-size:3.5em;font-weight:bold;line-height:1;'>{s_h} : {s_g}</div><div style='font-size:1.4em; margin-top:5px; font-weight:bold;'>{g_name} <span style='font-size:0.6em; font-weight:normal; color:#aaa;'>(HC: {g_coach})</span></div><div style='color:#ffcc00; font-weight:bold; font-size:1.4em; margin-top:10px;'>{p_str} | {time_disp}</div><div style='font-size:0.8em; color:#666; margin-top:5px;'>Refs: {ref_str}</div></div>""", unsafe_allow_html=True)
+    tab_stats, tab_pbp = st.tabs(["📊 Live Boxscore & Stats", "📜 Play-by-Play"])
+    with tab_stats:
+        df_h = create_live_boxscore_df(box.get("homeTeam", {})); df_g = create_live_boxscore_df(box.get("guestTeam", {}))
+        col_cfg = { "#": st.column_config.TextColumn("#", width="small"), "Name": st.column_config.TextColumn("Name", width="medium"), "Min": st.column_config.TextColumn("Min", width="small"), "PTS": st.column_config.ProgressColumn("Pkt", min_value=0, max_value=40, format="%d"), "FG": st.column_config.TextColumn("FG", width="small"), "FG%": st.column_config.ProgressColumn("FG%", min_value=0, max_value=1, format="%.2f"), "3P": st.column_config.TextColumn("3P", width="small"), "3P%": st.column_config.ProgressColumn("3P%", min_value=0, max_value=1, format="%.2f"), "FT": st.column_config.TextColumn("FW", width="small"), "FT%": st.column_config.ProgressColumn("FW%", min_value=0, max_value=1, format="%.2f"), "OnCourt": st.column_config.CheckboxColumn("Court", disabled=True), "Starter": st.column_config.CheckboxColumn("Start", disabled=True) }
+        def highlight_active(row):
+            if row.get("OnCourt"): return ['background-color: #d4edda; color: #155724'] * len(row)
+            elif row.get("Starter"): return ['background-color: #f8f9fa; font-weight: bold'] * len(row)
+            return [''] * len(row)
+        c1, c2 = st.columns(2)
+        with c1: 
+            st.markdown(f"### {h_name}"); 
+            if not df_h.empty: st.dataframe(df_h[["#", "Name", "Min", "PTS", "FG", "FG%", "3P", "3P%", "TR", "AS", "TO", "PF", "+/-"]].style.apply(highlight_active, axis=1), column_config=col_cfg, hide_index=True, use_container_width=True, height=(len(df_h)+1)*35+3)
+            else: st.info("Keine Daten")
+        with c2: 
+            st.markdown(f"### {g_name}"); 
+            if not df_g.empty: st.dataframe(df_g[["#", "Name", "Min", "PTS", "FG", "FG%", "3P", "3P%", "TR", "AS", "TO", "PF", "+/-"]].style.apply(highlight_active, axis=1), column_config=col_cfg, hide_index=True, use_container_width=True, height=(len(df_g)+1)*35+3)
+            else: st.info("Keine Daten")
+        st.divider(); st.subheader("📈 Team Vergleich")
+        def get_team_totals(df):
+            if df.empty: return {"PTS":0, "REB":0, "AST":0, "TO":0, "STL":0, "BLK":0, "PF":0}
+            return { "PTS": df["PTS"].sum(), "REB": df["TR"].sum(), "AST": df["AS"].sum(), "TO": df["TO"].sum(), "STL": df["ST"].sum(), "BLK": df["BS"].sum(), "PF": df["PF"].sum() }
+        t_h = get_team_totals(df_h); t_g = get_team_totals(df_g); chart_data = []; metrics = ["PTS", "REB", "AST", "TO", "STL", "PF"]
+        for m in metrics: chart_data.append({"Team": h_name, "Metric": m, "Value": t_h[m]}); chart_data.append({"Team": g_name, "Metric": m, "Value": t_g[m]})
+        st.altair_chart(alt.Chart(pd.DataFrame(chart_data)).mark_bar().encode(x=alt.X('Metric', title=None, sort=metrics), y=alt.Y('Value', title=None), color=alt.Color('Team', title="Team"), xOffset='Team', tooltip=['Team', 'Metric', 'Value']).properties(height=300), use_container_width=True)
+    with tab_pbp: st.subheader("📜 Live Ticker"); render_full_play_by_play(box, height=600)
+
+# --- SCOUTING ANALYSE FUNKTIONEN (NEU) ---
+
+def analyze_scouting_data(team_id, detailed_games):
+    """Analysiert Spiele für das Scouting."""
+    stats = { "games_count": len(detailed_games), "wins": 0, "ato_stats": {"possessions": 0, "points": 0}, "start_stats": {"pts_diff_first_5min": 0}, "top_scorers": {}, "rotation_depth": 0 }
+    tid_str = str(team_id)
+    
+    for box in detailed_games:
+        h_id = str(box.get("homeTeam", {}).get("seasonTeamId"))
+        res = box.get("result", {})
+        s_h = safe_int(res.get("homeTeamFinalScore") or box.get("homeTeamPoints"))
+        s_g = safe_int(res.get("guestTeamFinalScore") or box.get("guestTeamPoints"))
+        is_home = (h_id == tid_str)
+        if (is_home and s_h > s_g) or (not is_home and s_g > s_h): stats["wins"] += 1
+        
+        team_obj = box.get("homeTeam") if is_home else box.get("guestTeam")
+        if team_obj:
+            active_players = 0
+            for p in team_obj.get("playerStats", []):
+                pid = p.get("seasonPlayer", {}).get("id"); pts = safe_int(p.get("points")); sec = safe_int(p.get("secondsPlayed"))
+                if sec > 300: active_players += 1
+                if pid not in stats["top_scorers"]: stats["top_scorers"][pid] = {"name": p.get("seasonPlayer", {}).get("lastName", "Unk"), "pts": 0, "games": 0}
+                stats["top_scorers"][pid]["pts"] += pts; stats["top_scorers"][pid]["games"] += 1
+            stats["rotation_depth"] += active_players
+
+        actions = sorted(box.get("actions", []), key=lambda x: x.get('actionNumber', 0))
+        # Start Q1
+        start_h=0; start_g=0
+        for act in actions:
+            if act.get("period") != 1: break
+            h_p = act.get("homeTeamPoints"); g_p = act.get("guestTeamPoints")
+            if h_p is not None: start_h = safe_int(h_p)
+            if g_p is not None: start_g = safe_int(g_p)
+            if safe_int(act.get("actionNumber")) > 25: break 
+        diff = start_h - start_g if is_home else start_g - start_h
+        stats["start_stats"]["pts_diff_first_5min"] += diff
+
+        # ATO
+        for i, act in enumerate(actions):
+            if "TIMEOUT" in str(act.get("type")).upper() and str(act.get("seasonTeamId")) == tid_str:
+                stats["ato_stats"]["possessions"] += 1
+                for j in range(1, 6):
+                    if i + j >= len(actions): break
+                    next_act = actions[i+j]; pts = safe_int(next_act.get("points")); act_tid = str(next_act.get("seasonTeamId"))
+                    if pts > 0 and act_tid == tid_str: stats["ato_stats"]["points"] += pts; break
+                    if (pts > 0 and act_tid != tid_str) or (next_act.get("type") == "TURNOVER" and act_tid == tid_str): break
+
+    cnt = stats["games_count"] if stats["games_count"] > 0 else 1
+    stats["rotation_depth"] = round(stats["rotation_depth"] / cnt, 1)
+    stats["start_stats"]["avg_diff"] = round(stats["start_stats"]["pts_diff_first_5min"] / cnt, 1)
+    scorer_list = []
+    for pid, data in stats["top_scorers"].items(): scorer_list.append({"name": data["name"], "ppg": round(data["pts"] / data["games"], 1)})
+    stats["top_scorers_list"] = sorted(scorer_list, key=lambda x: x["ppg"], reverse=True)[:5]
+    return stats
+
+def prepare_ai_scouting_context(team_name, detailed_games, team_id):
+    """Bereitet einen Text-String vor, der die Play-by-Play Logs für die KI zusammenfasst."""
+    context = f"Scouting-Daten für Team: {team_name}\n\n"
+    tid_str = str(team_id)
+    
+    for g in detailed_games:
+        opp = g.get('meta_opponent', 'Gegner'); res = g.get('meta_result', 'N/A')
+        context += f"--- Spiel vs {opp} ({res}) ---\n"
+        actions = sorted(g.get("actions", []), key=lambda x: x.get('actionNumber', 0))
+        
+        # 1. Viertelstart extrahieren
+        context += "Start Phase (Q1 erste 10 Aktionen):\n"
+        count = 0
+        for act in actions:
+            if act.get("period") == 1:
+                desc = translate_text(act.get("type", ""))
+                tid = str(act.get("seasonTeamId"))
+                actor = "WIR" if tid == tid_str else "GEGNER"
+                pts = act.get("points", 0)
+                if pts: desc += f" (+{pts} Pkt)"
+                context += f"- {actor}: {desc}\n"
+                count += 1
+                if count > 10: break
+        
+        # 2. Timeouts filtern
+        context += "\nReaktionen nach Auszeiten (ATO):\n"
+        for i, act in enumerate(actions):
+            if "TIMEOUT" in str(act.get("type")).upper() and str(act.get("seasonTeamId")) == tid_str:
+                context += "TIMEOUT genommen.\n"
+                # Die nächsten 3 Aktionen zeigen
+                for j in range(1, 4):
+                    if i+j < len(actions):
+                        na = actions[i+j]
+                        ntid = str(na.get("seasonTeamId"))
+                        who = "WIR" if ntid == tid_str else "GEGNER"
+                        ndesc = translate_text(na.get("type", ""))
+                        if na.get("points"): ndesc += f" (+{na.get('points')})"
+                        context += f"  -> {who}: {ndesc}\n"
+        
+        # 3. Runs (grobe Heuristik für KI Kontext)
+        # Wir geben der KI einfach den Raw-Flow, sie ist gut darin Muster zu erkennen
+        context += "\n"
+        
+    return context
+
+def render_team_analysis_dashboard(team_id, team_name):
+    from src.api import fetch_last_n_games_complete, get_best_team_logo
+    
+    logo = get_best_team_logo(team_id)
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        if logo: st.image(logo, width=100)
+    with c2:
+        st.title(f"Scouting Report: {team_name}")
+        st.caption("Basierend auf der Play-by-Play Analyse der letzten 3 Spiele")
+
+    # Daten laden
+    games_data = fetch_last_n_games_complete(team_id, "2025", n=3)
+    if not games_data: st.warning("Keine Daten."); return
+    
+    # Basis-Analyse
+    scout = analyze_scouting_data(team_id, games_data)
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Analysierte Spiele", scout["games_count"], f"{scout['wins']} Siege")
+    k2.metric("Start-Qualität (Q1)", f"{scout['start_stats']['avg_diff']:+.1f}")
+    k3.metric("Rotation", scout["rotation_depth"])
+    ato_ppp = round(scout["ato_stats"]["points"] / scout["ato_stats"]["possessions"], 2) if scout["ato_stats"]["possessions"] > 0 else 0.0
+    k4.metric("ATO Effizienz", f"{ato_ppp} PPP", f"{scout['ato_stats']['possessions']} TOs")
+
+    st.divider()
+    
+    col_left, col_right = st.columns([1, 1])
+    
+    with col_left:
+        st.subheader("🔑 Schlüsselspieler")
+        if scout["top_scorers_list"]:
+            # Einfache Tabelle ohne komplexe Widgets um Fehler zu vermeiden
+            st.dataframe(pd.DataFrame(scout["top_scorers_list"]), hide_index=True, use_container_width=True)
+        
+        st.markdown("---")
+        st.markdown("### ✨ KI-Analyse")
+        
+        # API Key Input (falls nicht in Secrets)
+        api_key = st.text_input("OpenAI API Key (optional, falls nicht konfiguriert)", type="password")
+        
+        if st.button("KI-Scouting Bericht generieren", type="primary"):
+            # Prüfen ob Key da ist
+            key_to_use = None
+            if api_key: key_to_use = api_key
+            elif "openai" in st.secrets: key_to_use = st.secrets["openai"]["api_key"]
+            # Fallback für Demo
+            # key_to_use = "sk-..." 
+            
+            if not key_to_use:
+                st.error("Bitte API Key eingeben.")
+            else:
+                with st.spinner("KI analysiert Spielzüge..."):
+                    context_text = prepare_ai_scouting_context(team_name, games_data, team_id)
+                    prompt = f"""
+                    Du bist ein professioneller Basketball-Scout. Analysiere die folgenden Rohdaten (Play-by-Play Auszüge) von {team_name}.
+                    Erstelle einen Bericht im folgenden Format (nutze Fettdruck für Überschriften):
+
+                    1. {team_name}-Scouting: Reaktionen nach Auszeiten
+                    (Beschreibe Muster: Punkten sie? Verlieren sie den Ball? Welche Spielzüge?)
+
+                    2. Viertelstarts und Anfangsstrategien
+                    (Wie kommen sie ins Spiel? Aggressiv oder langsam?)
+
+                    3. Typische Runs und Comebacks
+                    (Wann machen sie Punkte in Serie?)
+
+                    4. Taktische Schwächen ausnutzen
+                    (Empfehlung an den Gegner)
+
+                    Hier sind die Daten:
+                    {context_text}
+                    """
+                    report = run_openai_generation(key_to_use, prompt)
+                    st.markdown(report)
+
+    with col_right:
+        st.subheader("📅 Analysierte Spiele")
+        for g in games_data:
+            opp = g.get('meta_opponent', 'Gegner'); res = g.get('meta_result', '-:-')
+            with st.expander(f"{g.get('meta_date')} vs {opp} ({res})"):
+                st.caption(analyze_game_flow(g.get("actions", []), get_team_name(g.get("homeTeam",{})), get_team_name(g.get("guestTeam",{}))))
