@@ -409,3 +409,40 @@ def fetch_team_rank(team_id, season_id):
         except:
             continue
     return None
+# --- IN src/api.py AM ENDE EINFÜGEN ---
+
+def fetch_last_n_games_complete(team_id, season_id, n=3):
+    """
+    Holt die letzten n absolvierten Spiele eines Teams INKLUSIVE Boxscore & PBP.
+    Dient dem Scouting-Algorithmus.
+    """
+    # 1. Schedule holen
+    schedule = fetch_schedule(team_id, season_id)
+    if not schedule: return []
+    
+    # 2. Nur beendete Spiele mit Ergebnis filtern
+    # Sortieren: Neueste zuerst
+    def parse_dt(d):
+        try: return datetime.strptime(d['date'], "%d.%m.%Y %H:%M")
+        except: return datetime.min
+
+    played = [g for g in schedule if g.get('has_result')]
+    played.sort(key=lambda x: parse_dt(x), reverse=True)
+    
+    # Die letzten n nehmen
+    selection = played[:n]
+    
+    detailed_games = []
+    
+    # 3. Details für diese Spiele laden
+    for game in selection:
+        gid = game['id']
+        box = fetch_game_boxscore(gid) # Enthält 'actions' (PBP)
+        if box:
+            # Resultat und Gegner noch sauber reinmergen falls nötig
+            box['meta_opponent'] = game['home'] if str(game['homeTeamId']) != str(team_id) else game['guest']
+            box['meta_date'] = game['date']
+            box['meta_result'] = game['score']
+            detailed_games.append(box)
+            
+    return detailed_games
