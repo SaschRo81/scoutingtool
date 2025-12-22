@@ -36,31 +36,25 @@ def get_team_name(team_data, default_name="Team"):
     if name: return name
     return team_data.get("name", default_name)
 
-def format_date_time(iso_string):
-    if not iso_string: return "-"
-    try:
-        dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
-        berlin = pytz.timezone("Europe/Berlin")
-        return dt.astimezone(berlin).strftime("%d.%m.%Y | %H:%M Uhr")
-    except: return iso_string
-
-# --- SCOUTING ANALYSE LOGIK ---
+# --- SCOUTING ANALYSE FUNKTIONEN ---
 
 def analyze_scouting_data(team_id, detailed_games):
-    """Analysiert Spiele auf Siege, Rotation und Start-Qualität."""
+    """
+    Analysiert eine Liste von Spielen auf Scouting-Aspekte.
+    """
     stats = {
         "games_count": len(detailed_games),
         "wins": 0,
-        "ato_stats": {"possessions": 0, "points": 0, "score_pct": 0},
+        "ato_stats": {"possessions": 0, "points": 0},
         "start_stats": {"pts_diff_first_5min": 0},
-        "all_player_stats": {},
+        "all_players": {}, # Für PPG und Plus/Minus Aggregation
         "rotation_depth": 0
     }
     
     tid_str = str(team_id)
     
     for box in detailed_games:
-        # Sieg-Logik korrigiert (Vergleich Heim/Gast Punkte basierend auf Team-ID)
+        # 1. Sieg-Logik (Korrigiert: Identifiziert unser Team via ID)
         res = box.get("result", {})
         h_id = str(box.get("homeTeam", {}).get("teamId"))
         g_id = str(box.get("guestTeam", {}).get("teamId"))
@@ -69,61 +63,68 @@ def analyze_scouting_data(team_id, detailed_games):
         s_g = safe_int(res.get("guestTeamFinalScore"))
         
         is_home = (h_id == tid_str)
+        
+        # Sieg prüfen
         if (is_home and s_h > s_g) or (not is_home and s_g > s_h):
             stats["wins"] += 1
             
-        # Rotation & Spieler Aggregation
+        # 2. Rotation & Spieler Aggregation (Format: #Nummer Name)
         team_obj = box.get("homeTeam") if is_home else box.get("guestTeam")
         if team_obj:
             players = team_obj.get("playerStats", [])
-            active_this_game = 0
+            active_count = 0
             for p in players:
                 p_info = p.get("seasonPlayer", {})
                 pid = str(p_info.get("id"))
-                # Format: #Nummer Name
-                p_display_name = f"#{p_info.get('shirtNumber', '?')} {p_info.get('lastName', 'Unbekannt')}"
+                
+                # FORMATIERUNG: #Nummer Name
+                nr = p_info.get("shirtNumber", "?")
+                last_name = p_info.get("lastName", "Unbekannt")
+                p_display_name = f"#{nr} {last_name}"
                 
                 pts = safe_int(p.get("points"))
                 sec = safe_int(p.get("secondsPlayed"))
                 pm = safe_int(p.get("plusMinus"))
                 
-                if sec > 300: active_this_game += 1 # Mehr als 5 Min
+                if sec > 300: active_count += 1 # Rotation > 5 Min
                 
-                if pid not in stats["all_player_stats"]:
-                    stats["all_player_stats"][pid] = {"name": p_display_name, "pts": 0, "games": 0, "pm_total": 0}
+                if pid not in stats["all_players"]:
+                    stats["all_players"][pid] = {"name": p_display_name, "pts": 0, "pm": 0, "games": 0}
                 
-                stats["all_player_stats"][pid]["pts"] += pts
-                stats["all_player_stats"][pid]["pm_total"] += pm
-                stats["all_player_stats"][pid]["games"] += 1
+                stats["all_players"][pid]["pts"] += pts
+                stats["all_players"][pid]["pm"] += pm
+                stats["all_players"][pid]["games"] += 1
             
-            stats["rotation_depth"] += active_this_game
+            stats["rotation_depth"] += active_count
 
-        # Start Qualität (Q1 Punkte-Differenz)
+        # 3. Start-Qualität (Q1 Differenz)
         q1_h = safe_int(res.get("homeTeamQ1Score"))
         q1_g = safe_int(res.get("guestTeamQ1Score"))
-        stats["start_stats"]["pts_diff_first_5min"] += (q1_h - q1_g if is_home else q1_g - q1_h)
+        diff = q1_h - q1_g if is_home else q1_g - q1_h
+        stats["start_stats"]["pts_diff_first_5min"] += diff
 
-    # Averages
+    # Averages berechnen
     cnt = stats["games_count"] if stats["games_count"] > 0 else 1
     stats["rotation_depth"] = round(stats["rotation_depth"] / cnt, 1)
     stats["start_avg"] = round(stats["start_stats"]["pts_diff_first_5min"] / cnt, 1)
     
-    # Effektivste Spieler (nach Plus/Minus pro Spiel)
+    # Effektivste Spieler (Plus/Minus) Liste erstellen
     eff_list = []
-    for pid, d in stats["all_player_stats"].items():
+    for pid, d in stats["all_players"].items():
         if d["games"] > 0:
             eff_list.append({
-                "Spielerin": d["name"], 
-                "PPG": round(d["pts"] / d["games"], 1), 
-                "Avg +/-": round(d["pm_total"] / d["games"], 1)
+                "name": d["name"],
+                "ppg": round(d["pts"] / d["games"], 1),
+                "plusminus": round(d["pm"] / d["games"], 1)
             })
-    stats["effective_5"] = sorted(eff_list, key=lambda x: x["Avg +/-"], reverse=True)[:5]
+    
+    stats["top_performers"] = sorted(eff_list, key=lambda x: x["plusminus"], reverse=True)[:5]
 
     return stats
 
-# --- DASHBOARD RENDERING ---
-
 def render_team_analysis_dashboard(team_id, team_name):
+    from src.api import fetch_last_n_games_complete, get_best_team_logo
+    
     logo = get_best_team_logo(team_id)
     c1, c2 = st.columns([1, 4])
     with c1:
@@ -133,49 +134,58 @@ def render_team_analysis_dashboard(team_id, team_name):
         st.caption("Basierend auf der Play-by-Play Analyse der gesamten Saison")
 
     with st.spinner("Analysiere Spieldaten..."):
+        # Lade Daten
         games_data = fetch_last_n_games_complete(team_id, "2025", n=50)
         if not games_data:
             st.warning("Keine Daten gefunden."); return
+        
         scout = analyze_scouting_data(team_id, games_data)
 
-    # 1. Key Metrics (Der gelbe Bereich)
+    # --- UI RENDERING (GELBER BEREICH) ---
+    st.markdown("""<style>
+        .metric-container { background-color: #ffffcc; padding: 15px; border-radius: 5px; border: 1px solid #e6e600; }
+    </style>""", unsafe_allow_html=True)
+    
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Analysierte Spiele", scout["games_count"], f"{scout['wins']} Siege")
-    k2.metric("Start-Qualität (Q1)", f"{scout['start_avg']:+.1f}", help="Vorsprung/Rückstand nach dem 1. Viertel")
-    k3.metric("Rotation (Spieler >5min)", scout["rotation_depth"])
-    k4.metric("ATO Effizienz", "0.0 PPP", "0 Timeouts", delta_color="off")
+    with k1:
+        st.metric("Analysierte Spiele", scout["games_count"], f"{scout['wins']} Siege")
+    with k2:
+        st.metric("Start-Qualität (Q1)", f"{scout['start_avg']:+.1f}", help="Ø Punktedifferenz im 1. Viertel")
+    with k3:
+        st.metric("Rotation (Spieler >5min)", scout["rotation_depth"])
+    with k4:
+        st.metric("ATO Effizienz", "0.0 PPP", "0 Timeouts", delta_color="off")
 
     st.divider()
-
-    # 2. Die Effektivsten 5
-    st.subheader("🚀 Effektivste 5 Spielerinnen (nach +/- Rating)")
-    st.info("Diese Spielerinnen haben den größten positiven Einfluss auf den Punktestand, wenn sie auf dem Feld stehen.")
     
-    if scout["effective_5"]:
+    # --- EFFEKTIVSTE 5 (MIT NUMMERN) ---
+    st.subheader("🚀 Effektivste Spielerinnen (Ø Plus/Minus pro Spiel)")
+    if scout["top_performers"]:
         cols = st.columns(5)
-        for i, player in enumerate(scout["effective_5"]):
-            with cols[i]:
+        for idx, player in enumerate(scout["top_performers"]):
+            with cols[idx]:
                 st.markdown(f"""
-                <div style="background-color:#f0f2f6; padding:10px; border-radius:10px; text-align:center;">
-                    <div style="font-size:1.1em; font-weight:bold; color:#0e1117;">{player['Spielerin']}</div>
-                    <div style="font-size:1.5em; color:#28a745;">{player['Avg +/-']:+.1f}</div>
-                    <div style="font-size:0.8em; color:#666;">Avg +/- pro Spiel</div>
+                <div style="background-color:#f8f9fa; padding:10px; border-radius:10px; text-align:center; border: 1px solid #dee2e6;">
+                    <div style="font-weight:bold; color:#333;">{player['name']}</div>
+                    <div style="font-size:1.4em; color:#28a745;">{player['plusminus']:+.1f}</div>
+                    <div style="font-size:0.8em; color:#666;">{player['ppg']} PPG</div>
                 </div>
                 """, unsafe_allow_html=True)
-    
+
     st.divider()
-
-    # 3. Spiele & KI Prompt
-    col_left, col_right = st.columns(2)
-    with col_left:
-        st.subheader("📅 Spiel-Historie")
+    
+    # Rest der Seite (Historie & KI Prompt)
+    col_l, col_r = st.columns(2)
+    with col_l:
+        st.subheader("📅 Letzte Spiele")
         for g in games_data[:5]:
-            st.write(f"**{g.get('meta_date')}** vs {g.get('meta_opponent')} ({g.get('meta_result')})")
-
-    with col_right:
+            st.write(f"**{g.get('meta_date')}**: vs {g.get('meta_opponent')} ({g.get('meta_result')})")
+    
+    with col_r:
         st.subheader("🤖 KI Scouting Kontext")
-        st.caption("Kopiere diesen Text für eine tiefe Taktik-Analyse in ChatGPT.")
-        st.code(f"Analysiere Team {team_name}. Siege: {scout['wins']}/{scout['games_count']}. Top Lineup: {scout['effective_5'][0]['Spielerin'] if scout['effective_5'] else 'N/A'}", language="text")
+        st.code(f"Analyse {team_name}: {scout['wins']} Siege. Starke Q1 Phase (+{scout['start_avg']}).")
+
+# (Die restlichen Funktionen render_live_view, render_full_play_by_play etc. bleiben wie gehabt bestehen)
 
 # --- BESTEHENDE FUNKTIONEN (LIVE VIEW ETC.) ---
 # ... (Hier folgen deine restlichen Funktionen wie render_live_view, render_full_play_by_play etc.)
