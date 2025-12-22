@@ -8,6 +8,7 @@ from datetime import datetime, date, time
 import time as time_module 
 from urllib.parse import quote_plus 
 import base64 
+import pytz
 
 try:
     import pdfkit
@@ -32,7 +33,7 @@ from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_game_top_performers, generate_game_summary,
     generate_complex_ai_prompt, render_full_play_by_play, run_openai_generation,
-    render_prep_dashboard, render_live_view 
+    render_prep_dashboard, render_live_view, render_team_analysis_dashboard
 )
 
 # --- KONFIGURATION ---
@@ -165,9 +166,11 @@ def render_home():
              if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
         with r4_c2:
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
-         r5_c1, r5_c2 = st.columns(2)
+        st.write("")
+        r5_c1, r5_c2 = st.columns(2)
         with r5_c1:
-             if st.button("🧠 Team Spielanalyse", use_container_width=True): go_team_analysis()
+             if st.button("🧠 Team Spielanalyse", use_container_width=True): 
+                 go_team_analysis()
                  st.rerun()
 
 def render_team_stats_page():
@@ -302,162 +305,9 @@ def render_prep_page():
 
 def fetch_games_from_recent():
     """
-    Holt Spiele über den /games/recent Endpunkt (wie im PowerShell Skript),
-    da dieser zuverlässiger für den Spieltag/Live-Bereich ist.
-    """
-    from src.config import API_HEADERS
-    
-    # SlotSize erhöht, um sicherzustellen, dass wir genug vergangene Spiele für die Auswahl haben
-    url = "https://api-s.dbbl.scb.world/games/recent?slotSize=500"
-    
-    games_list = []
-    try:
-        r = requests.get(url, headers=API_HEADERS, timeout=4)
-        if r.status_code == 200:
-            data = r.json()
-            # Alle drei Kategorien zusammenführen, wie im PowerShell Skript
-            raw_games = []
-            if data.get("past"): raw_games.extend(data["past"])
-            if data.get("present"): raw_games.extend(data["present"])
-            if data.get("future"): raw_games.extend(data["future"])
-            
-            for g in raw_games:
-                # Datum parsen
-                raw_d = g.get("scheduledTime", "")
-                d_disp = "-"; date_only = "-"
-                dt_obj = None
-                if raw_d:
-                    try:
-                        # UTC zu Berlin Zeit
-                        dt_obj = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
-                        d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
-                        date_only = dt_obj.strftime("%d.%m.%Y")
-                    except: pass
-                
-                # Ergebnis Logik (Anpassung an PowerShell Logik $_.result.homeScore)
-                res = g.get("result", {}) or {}
-                # Manchmal heißen die Felder homeScore, manchmal homeTeamFinalScore je nach Endpoint.
-                # Wir prüfen beides sicherheitshalber.
-                h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
-                g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
-                
-                score_str = f"{h_s}:{g_s}" if (h_s is not None and g_s is not None) else "-:-"
-                
-                # Status Bestimmung
-                status = g.get("status", "SCHEDULED")
-                # Fallback: Wenn Ergebnis da ist, aber Status nicht ENDED, betrachte es als Live/Beendet
-                if h_s is not None and g_s is not None and status == "SCHEDULED":
-                    status = "ENDED" # Annahme
-                
-                games_list.append({
-                    "id": g.get("id"),
-                    "date": d_disp,
-                    "date_only": date_only,
-                    "datetime": dt_obj, # Für Sortierung
-                    "home": g.get("homeTeam", {}).get("name", "?"),
-                    "guest": g.get("guestTeam", {}).get("name", "?"),
-                    "score": score_str,
-                    "status": status,
-                    "home_score": h_s,
-                    "guest_score": g_s
-                })
-    except Exception as e:
-        print(f"Fehler beim Fetch Recent: {e}")
-        
-    return games_list
-
-def fetch_games_from_recent():
-    """
     Holt Spiele über die /games/recent Endpunkte (Nord & Süd).
     Führt past, present und future zusammen, um lückenlose Historie zu haben.
     """
-    import pytz # Import hier sicherstellen
-    from src.config import API_HEADERS
-    
-    # Wir fragen BEIDE APIs ab, da Teams manchmal in der anderen Staffel-DB auftauchen
-    # SlotSize erhöht auf 400, um weit genug zurückzublicken
-    endpoints = [
-        "https://api-s.dbbl.scb.world/games/recent?slotSize=400",
-        "https://api-n.dbbl.scb.world/games/recent?slotSize=400"
-    ]
-    
-    games_map = {} # Dictionary (Key: ID) verhindert Duplikate beim Merge
-
-    for url in endpoints:
-        try:
-            r = requests.get(url, headers=API_HEADERS, timeout=3)
-            if r.status_code == 200:
-                data = r.json()
-                
-                # Listen extrahieren und flachklopfen
-                lists_to_check = []
-                if isinstance(data.get("past"), list): lists_to_check.extend(data["past"])
-                if isinstance(data.get("present"), list): lists_to_check.extend(data["present"])
-                if isinstance(data.get("future"), list): lists_to_check.extend(data["future"])
-                
-                for g in lists_to_check:
-                    gid = g.get("id")
-                    if not gid or gid in games_map:
-                        continue # Bereits verarbeitet
-                        
-                    # Datum & Zeit parsen
-                    raw_d = g.get("scheduledTime", "")
-                    dt_obj = None
-                    d_disp = "-"; date_only = "-"
-                    
-                    if raw_d:
-                        try:
-                            # ISO Format 'Z' fixen für ältere Python Versionen
-                            clean_ts = raw_d.replace("Z", "+00:00")
-                            # Zeitzone anpassen (wichtig, damit 20.12. bleibt und nicht 19.12. wird)
-                            dt_obj = datetime.fromisoformat(clean_ts).astimezone(pytz.timezone("Europe/Berlin"))
-                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
-                            date_only = dt_obj.strftime("%d.%m.%Y")
-                        except: 
-                            pass
-                    
-                    # Scores extrahieren (API Felder variieren manchmal)
-                    res = g.get("result", {}) or {}
-                    h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
-                    g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
-                    
-                    score_str = f"{h_s}:{g_s}" if (h_s is not None and g_s is not None) else "-:-"
-                    
-                    # Status normalisieren
-                    status = g.get("status", "SCHEDULED")
-                    # Fallback: Wenn Ergebnis da ist, gilt es als beendet/live
-                    if h_s is not None and g_s is not None and status == "SCHEDULED":
-                        status = "ENDED"
-
-                    games_map[gid] = {
-                        "id": gid,
-                        "date": d_disp,
-                        "date_only": date_only,
-                        "datetime": dt_obj,
-                        "home": g.get("homeTeam", {}).get("name", "?"),
-                        "guest": g.get("guestTeam", {}).get("name", "?"),
-                        "score": score_str,
-                        "status": status,
-                        "home_score": h_s,
-                        "guest_score": g_s
-                    }
-
-        except Exception as e:
-            # Fehler bei einer URL ignorieren, weiter zur nächsten
-            print(f"Error fetching recent games from {url}: {e}")
-            pass
-            
-    # Liste zurückgeben (sortiert nach Datum)
-    result_list = list(games_map.values())
-    result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
-    return result_list
-
-def fetch_games_from_recent():
-    """
-    Holt Spiele über die /games/recent Endpunkte (Nord & Süd).
-    Führt past, present und future zusammen, um lückenlose Historie zu haben.
-    """
-    import pytz # Import hier sicherstellen
     from src.config import API_HEADERS
     
     # Wir fragen BEIDE APIs ab, da Teams manchmal in der anderen Staffel-DB auftauchen
@@ -719,7 +569,6 @@ def render_analysis_page():
         else: st.warning("Keine Spiele.")
 
 def render_team_analysis_page():
-    # Wenn bereits ein Team ausgewählt ist -> Dashboard zeigen
     if st.session_state.analysis_team_id:
         tid = st.session_state.analysis_team_id
         t_info = TEAMS_DB.get(tid, {})
@@ -730,15 +579,26 @@ def render_team_analysis_page():
             if st.button("⬅️ Teamwahl", key="back_ana_team"):
                 st.session_state.analysis_team_id = None
                 st.rerun()
-                # Aufruf der Logik aus analysis_ui.py
-        from src.analysis_ui import render_team_analysis_dashboard
-        render_team_analysis_dashboard(tid, t_name)
         
-    # Sonst -> Auswahlseite (Logos)
+        render_team_analysis_dashboard(tid, t_name)
     else:
         render_page_header("🧠 Team Spielanalyse & Scouting")
-        st.markdown("Wähle ein Team, um dessen Spielweise (Timeouts, Starts, Rotation) basierend auf den letzten Spielen zu analysieren.")
+        st.markdown("Wähle ein Team für die detaillierte Analyse (Timeouts, Starts, Rotation).")
         
+        staffel = st.radio("Liga wählen:", ["Süd", "Nord"], horizontal=True, key="ana_staffel_sel")
+        st.divider()
+        teams = {k: v for k, v in TEAMS_DB.items() if v.get("staffel") == staffel}
+        cols = st.columns(3)
+        for idx, (tid, info) in enumerate(teams.items()):
+            col = cols[idx % 3]
+            with col:
+                with st.container(border=True):
+                    logo = get_best_team_logo(tid)
+                    if logo: st.image(logo, use_container_width=True)
+                    else: st.markdown(f"### {info['name']}")
+                    if st.button(f"Analyse {info['name']}", key=f"btn_ana_{tid}", use_container_width=True):
+                        st.session_state.analysis_team_id = tid
+                        st.rerun()
 
 def render_scouting_page():
     render_page_header("📝 PreGame Report") 
@@ -859,3 +719,4 @@ elif st.session_state.current_page == "game_venue": render_game_venue_page()
 elif st.session_state.current_page == "prep": render_prep_page()
 elif st.session_state.current_page == "live": render_live_page()
 elif st.session_state.current_page == "team_stats": render_team_stats_page()
+elif st.session_state.current_page == "team_analysis": render_team_analysis_page()
