@@ -51,9 +51,6 @@ def get_player_lookup(box):
         for p in box.get(team_key, {}).get('playerStats', []):
             pid = str(p.get('seasonPlayer', {}).get('id'))
             name = f"{p.get('seasonPlayer', {}).get('lastName', '')}" 
-            # Optional: Vorname dazu nehmen für Eindeutigkeit
-            # fn = p.get('seasonPlayer', {}).get('firstName', '')
-            # name = f"{fn[0]}. {name}" if fn else name
             nr = p.get('seasonPlayer', {}).get('shirtNumber', '')
             lookup[pid] = f"#{nr} {name}"
     return lookup
@@ -648,24 +645,39 @@ def analyze_scouting_data(team_id, detailed_games):
     tid_str = str(team_id)
     
     for box in detailed_games:
-        # 1. Win/Loss Check
-        h_id = str(box.get("homeTeam", {}).get("seasonTeamId"))
+        # Find Home/Guest IDs
+        hid = str(box.get("homeTeam", {}).get("seasonTeamId"))
+        htid = str(box.get("homeTeam", {}).get("teamId"))
+        
+        gid = str(box.get("guestTeam", {}).get("seasonTeamId"))
+        gtid = str(box.get("guestTeam", {}).get("teamId"))
+        
+        # Determine is_home safely
+        is_home = False
+        if tid_str == hid or tid_str == htid:
+            is_home = True
+        elif tid_str == gid or tid_str == gtid:
+            is_home = False
+        else:
+            # Fallback: Check inner IDs
+            h_inner = str(box.get("homeTeam", {}).get("seasonTeam", {}).get("id"))
+            if h_inner == tid_str: is_home = True
+        
+        # Result logic
         res = box.get("result", {})
         if not res: 
-             # Fallback falls Result nicht im Boxscore Objekt
              res = {"homeTeamFinalScore": 0, "guestTeamFinalScore": 0} 
-             # Wir verlassen uns hier drauf, dass fetch_last_n_games_complete das gefixt hat oder API Daten da sind
 
-        s_h = safe_int(res.get("homeTeamFinalScore") or box.get("homeTeamPoints")) # Fallback
+        s_h = safe_int(res.get("homeTeamFinalScore") or box.get("homeTeamPoints"))
         s_g = safe_int(res.get("guestTeamFinalScore") or box.get("guestTeamPoints"))
 
-        is_home = (h_id == tid_str)
         if (is_home and s_h > s_g) or (not is_home and s_g > s_h):
             stats["wins"] += 1
             
         # 2. Player Stats Aggregation (für Top Scorer)
-        # Wir suchen das korrekte Team Objekt
+        # WICHTIG: Hier muss das korrekte Team-Objekt gewählt werden
         team_obj = box.get("homeTeam") if is_home else box.get("guestTeam")
+        
         if team_obj:
             players = team_obj.get("playerStats", [])
             active_players = 0
@@ -687,54 +699,44 @@ def analyze_scouting_data(team_id, detailed_games):
         actions = sorted(box.get("actions", []), key=lambda x: x.get('actionNumber', 0))
         
         # A) Spielstart (Erste 5 Minuten Q1)
-        # Wir berechnen das Delta in den ersten 5 Minuten
         start_score_h = 0; start_score_g = 0
         for act in actions:
-            # Check Q1 und Zeit (10 Min - 5 Min = 5 Min Rest)
             if act.get("period") != 1: break
-            
-            # Score update
-            h_p = act.get("homeTeamPoints")
-            g_p = act.get("guestTeamPoints")
+            h_p = act.get("homeTeamPoints"); g_p = act.get("guestTeamPoints")
             if h_p is not None: start_score_h = safe_int(h_p)
             if g_p is not None: start_score_g = safe_int(g_p)
-            
-            # Vereinfachung: Wir schauen uns den Score nach ca. 20 Aktionen im 1. Viertel an (grobe Schätzung für 5 min)
             if safe_int(act.get("actionNumber")) > 25: break 
             
         diff = start_score_h - start_score_g if is_home else start_score_g - start_score_h
         stats["start_stats"]["pts_diff_first_5min"] += diff
 
         # B) ATO (After Timeout)
-        # Suche nach Timeout UNSERES Teams
+        # Timeout ID kann auch seasonId oder permanent ID sein, daher flexibler check
+        # Wir prüfen, ob die ID im Timeout Event zu unserem Team gehört
+        my_ids = [tid_str, hid if is_home else gid, htid if is_home else gtid]
+        
         for i, act in enumerate(actions):
-            if "TIMEOUT" in str(act.get("type")).upper() and str(act.get("seasonTeamId")) == tid_str:
-                # Timeout gefunden. Analysiere die nächsten 3 Events auf Punkte
-                stats["ato_stats"]["possessions"] += 1
+            if "TIMEOUT" in str(act.get("type")).upper():
+                act_tid = str(act.get("seasonTeamId"))
                 
-                # Suche das nächste Scoring Event oder Turnover
-                # Wir schauen maximal 5 Aktionen weiter
-                found_result = False
-                for j in range(1, 6):
-                    if i + j >= len(actions): break
-                    next_act = actions[i+j]
+                # Check ob das Timeout von UNS war
+                if act_tid in my_ids:
+                    stats["ato_stats"]["possessions"] += 1
                     
-                    # Wenn Punkte erzielt wurden
-                    pts = safe_int(next_act.get("points"))
-                    act_tid = str(next_act.get("seasonTeamId"))
-                    
-                    if pts > 0 and act_tid == tid_str:
-                        stats["ato_stats"]["points"] += pts
-                        found_result = True
-                        break
-                    
-                    # Wenn Gegner punktet oder wir Turnover machen -> Possession vorbei ohne Punkte
-                    if (pts > 0 and act_tid != tid_str) or (next_act.get("type") == "TURNOVER" and act_tid == tid_str):
-                        found_result = True
-                        break
-                
-                # Wenn wir Punkte gemacht haben, zählt es als Erfolg
-                # (Punkte wurden oben addiert)
+                    # Suche Scoring
+                    for j in range(1, 6):
+                        if i + j >= len(actions): break
+                        next_act = actions[i+j]
+                        pts = safe_int(next_act.get("points"))
+                         n_tid = str(next_act.get("seasonTeamId"))
+                        
+                        # Punkte für uns?
+                        if pts > 0 and n_tid in my_ids:
+                            stats["ato_stats"]["points"] += pts
+                            break
+                        # Gegner Punkte oder eigener Turnover?
+                        if (pts > 0 and n_tid not in my_ids) or (next_act.get("type") == "TURNOVER" and n_tid in my_ids):
+                            break
 
     # Averages berechnen
     cnt = stats["games_count"] if stats["games_count"] > 0 else 1
@@ -757,6 +759,22 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
     tid_str = str(team_id)
     
     for g in detailed_games:
+        # Identifikation IDs für dieses Spiel
+        hid = str(g.get("homeTeam", {}).get("seasonTeamId"))
+        htid = str(g.get("homeTeam", {}).get("teamId"))
+        gid = str(g.get("guestTeam", {}).get("seasonTeamId"))
+        gtid = str(g.get("guestTeam", {}).get("teamId"))
+        
+        # Bestimme Home/Guest Status
+        is_home = False
+        if tid_str in [hid, htid]: is_home = True
+        elif tid_str in [gid, gtid]: is_home = False
+        else:
+             # Fallback
+             if str(g.get("homeTeam", {}).get("seasonTeam", {}).get("id")) == tid_str: is_home = True
+
+        my_ids = [tid_str, hid if is_home else gid, htid if is_home else gtid]
+
         opp = g.get('meta_opponent', 'Gegner'); res = g.get('meta_result', 'N/A')
         date_game = g.get('meta_date', 'Datum?')
         context += f"--- Spiel am {date_game} vs {opp} ({res}) ---\n"
@@ -764,9 +782,8 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
         # Lookups
         player_map = get_player_lookup(g)
         
-        # 1. Starting 5 und Closing Lineup ermitteln
+        # 1. Starting 5
         starters = []
-        is_home = (str(g.get("homeTeam", {}).get("seasonTeamId")) == tid_str)
         team_obj = g.get("homeTeam") if is_home else g.get("guestTeam")
         if team_obj:
             for p in team_obj.get("playerStats", []):
@@ -779,11 +796,11 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
         # Actions sortieren
         actions = sorted(g.get("actions", []), key=lambda x: x.get('actionNumber', 0))
         
-        # 2. Closing Lineup (Spieler aktiv in den letzten 10 Aktionen)
+        # 2. Closing Lineup
         closers = set()
         for act in reversed(actions):
             if len(closers) >= 5: break
-            if str(act.get("seasonTeamId")) == tid_str:
+            if str(act.get("seasonTeamId")) in my_ids:
                 pid = str(act.get("seasonPlayerId"))
                 if pid and pid != "None":
                     closers.add(player_map.get(pid, "Unbekannt"))
@@ -791,20 +808,18 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
         if closers:
             context += f"Closing Lineup (Endphase): {', '.join(list(closers))}\n"
 
-        # 3. Viertelstart extrahieren
+        # 3. Viertelstart
         context += "Start Phase (Q1 erste 12 Aktionen):\n"
         count = 0
         for act in actions:
             if act.get("period") == 1:
                 desc = translate_text(act.get("type", ""))
                 
-                # Wer war es?
+                tid = str(act.get("seasonTeamId"))
+                actor = "WIR" if tid in my_ids else "GEGNER"
+                
                 pid = str(act.get("seasonPlayerId"))
                 p_name = player_map.get(pid, "")
-                
-                tid = str(act.get("seasonTeamId"))
-                actor = "WIR" if tid == tid_str else "GEGNER"
-                
                 if p_name and actor == "WIR": actor += f" ({p_name})"
                 
                 pts = act.get("points", 0)
@@ -813,30 +828,26 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
                 count += 1
                 if count > 12: break
         
-        # 4. Timeouts filtern (ALLE Timeouts anzeigen zur Sicherheit)
+        # 4. Timeouts
         context += "\nReaktionen nach Auszeiten (ATO):\n"
         found_to = False
         for i, act in enumerate(actions):
             if "TIMEOUT" in str(act.get("type")).upper():
                 to_tid = str(act.get("seasonTeamId"))
                 
-                # Label wer Timeout genommen hat
-                who_took = "WIR" if to_tid == tid_str else "GEGNER"
-                if to_tid == "None" or not to_tid: who_took = "Team/Coach" # Fallback
+                who_took = "WIR" if to_tid in my_ids else "GEGNER"
                 
-                # Nur eigene Timeouts sind primär interessant, aber Kontext schadet nicht
                 if who_took == "WIR":
                     found_to = True
                     context += f"TIMEOUT ({who_took}) genommen.\n"
-                    # Die nächsten 4 Aktionen zeigen
+                    # Next 4 Actions
                     for j in range(1, 5):
                         if i+j < len(actions):
                             na = actions[i+j]
                             ntid = str(na.get("seasonTeamId"))
                             
-                            who_act = "WIR" if ntid == tid_str else "GEGNER"
+                            who_act = "WIR" if ntid in my_ids else "GEGNER"
                             
-                            # Spieler Name
                             npid = str(na.get("seasonPlayerId"))
                             np_name = player_map.get(npid, "")
                             if np_name and who_act == "WIR": who_act += f" ({np_name})"
@@ -846,13 +857,11 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
                             context += f"  -> {who_act}: {ndesc}\n"
         
         if not found_to: context += "(Keine eigenen Timeouts gefunden)\n"
-        
         context += "\n"
         
     return context
 
 def render_team_analysis_dashboard(team_id, team_name):
-    # Import hier damit keine Zirkelbezüge entstehen
     from src.api import fetch_last_n_games_complete, get_best_team_logo
     
     logo = get_best_team_logo(team_id)
