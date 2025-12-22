@@ -167,8 +167,7 @@ def render_home():
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
          r5_c1, r5_c2 = st.columns(2)
         with r5_c1:
-             if st.button("🧠 Team Spielanalyse", use_container_width=True): 
-                 go_team_analysis()
+             if st.button("🧠 Team Spielanalyse", use_container_width=True): go_team_analysis()
                  st.rerun()
 
 def render_team_stats_page():
