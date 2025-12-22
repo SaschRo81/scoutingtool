@@ -172,7 +172,11 @@ def render_full_play_by_play(box, height=600):
     home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
     guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
     data = []; running_h = 0; running_g = 0
-    for act in actions:
+    
+    # Sicherstellen, dass die Aktionen chronologisch sind für die Score-Berechnung
+    actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
+
+    for act in actions_sorted:
         h_pts = act.get("homeTeamPoints"); g_pts = act.get("guestTeamPoints")
         if h_pts is not None: running_h = safe_int(h_pts)
         if g_pts is not None: running_g = safe_int(g_pts)
@@ -201,8 +205,13 @@ def render_full_play_by_play(box, height=600):
         if qualifiers: qual_german = [translate_text(q) for q in qualifiers]; action_german += f" ({', '.join(qual_german)})"
         if act.get("points"): action_german += f" (+{act.get('points')})"
         data.append({"Zeit": time_label, "Score": score_str, "Team": team_display, "Spieler": actor, "Aktion": action_german})
+    
     df = pd.DataFrame(data)
-    if height == 400: df = df.iloc[::-1]
+    
+    # IMMER umdrehen, damit das neueste Event oben steht
+    if not df.empty:
+        df = df.iloc[::-1]
+        
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def render_game_header(details):
