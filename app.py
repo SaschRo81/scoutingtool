@@ -451,6 +451,94 @@ def fetch_games_from_recent():
     result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
     return result_list
 
+# --- Helper Funktion für Live Games (in app.py einfügen/ersetzen) ---
+
+def fetch_games_from_recent():
+    """
+    Holt Spiele über die /games/recent Endpunkte (Nord & Süd).
+    Führt past, present und future zusammen, um lückenlose Historie zu haben.
+    """
+    import pytz # Import hier sicherstellen
+    from src.config import API_HEADERS
+    
+    # Wir fragen BEIDE APIs ab, da Teams manchmal in der anderen Staffel-DB auftauchen
+    # SlotSize erhöht auf 400, um weit genug zurückzublicken
+    endpoints = [
+        "https://api-s.dbbl.scb.world/games/recent?slotSize=400",
+        "https://api-n.dbbl.scb.world/games/recent?slotSize=400"
+    ]
+    
+    games_map = {} # Dictionary (Key: ID) verhindert Duplikate beim Merge
+
+    for url in endpoints:
+        try:
+            r = requests.get(url, headers=API_HEADERS, timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                
+                # Listen extrahieren und flachklopfen
+                lists_to_check = []
+                if isinstance(data.get("past"), list): lists_to_check.extend(data["past"])
+                if isinstance(data.get("present"), list): lists_to_check.extend(data["present"])
+                if isinstance(data.get("future"), list): lists_to_check.extend(data["future"])
+                
+                for g in lists_to_check:
+                    gid = g.get("id")
+                    if not gid or gid in games_map:
+                        continue # Bereits verarbeitet
+                        
+                    # Datum & Zeit parsen
+                    raw_d = g.get("scheduledTime", "")
+                    dt_obj = None
+                    d_disp = "-"; date_only = "-"
+                    
+                    if raw_d:
+                        try:
+                            # ISO Format 'Z' fixen für ältere Python Versionen
+                            clean_ts = raw_d.replace("Z", "+00:00")
+                            # Zeitzone anpassen (wichtig, damit 20.12. bleibt und nicht 19.12. wird)
+                            dt_obj = datetime.fromisoformat(clean_ts).astimezone(pytz.timezone("Europe/Berlin"))
+                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
+                            date_only = dt_obj.strftime("%d.%m.%Y")
+                        except: 
+                            pass
+                    
+                    # Scores extrahieren (API Felder variieren manchmal)
+                    res = g.get("result", {}) or {}
+                    h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
+                    g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
+                    
+                    score_str = f"{h_s}:{g_s}" if (h_s is not None and g_s is not None) else "-:-"
+                    
+                    # Status normalisieren
+                    status = g.get("status", "SCHEDULED")
+                    # Fallback: Wenn Ergebnis da ist, gilt es als beendet/live
+                    if h_s is not None and g_s is not None and status == "SCHEDULED":
+                        status = "ENDED"
+
+                    games_map[gid] = {
+                        "id": gid,
+                        "date": d_disp,
+                        "date_only": date_only,
+                        "datetime": dt_obj,
+                        "home": g.get("homeTeam", {}).get("name", "?"),
+                        "guest": g.get("guestTeam", {}).get("name", "?"),
+                        "score": score_str,
+                        "status": status,
+                        "home_score": h_s,
+                        "guest_score": g_s
+                    }
+
+        except Exception as e:
+            # Fehler bei einer URL ignorieren, weiter zur nächsten
+            print(f"Error fetching recent games from {url}: {e}")
+            pass
+            
+    # Liste zurückgeben (sortiert nach Datum)
+    result_list = list(games_map.values())
+    result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
+    return result_list
+
 def render_live_page():
     # 1. LIVE VIEW (Detailansicht)
     if st.session_state.live_game_id:
