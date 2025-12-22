@@ -8,37 +8,42 @@ import pytz
 # Lokale Imports
 from src.api import get_player_metadata_cached, get_best_team_logo, fetch_last_n_games_complete
 
-# --- KONSTANTEN & HELPERS ---
-ACTION_TRANSLATION = {
-    "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
-    "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
-    "FREE_THROW_MADE": "FW Treffer", "FREE_THROW_MISSED": "FW Fehl",
-    "REBOUND": "Rebound", "FOUL": "Foul", "TURNOVER": "TO",
-    "ASSIST": "Assist", "STEAL": "Steal", "BLOCK": "Block",
-    "SUBSTITUTION": "Wechsel", "TIMEOUT": "Auszeit"
-}
-
-def translate_text(text):
-    if not text: return ""
-    return ACTION_TRANSLATION.get(str(text).upper(), str(text).replace("_", " ").title())
-
+# --- HELPERS ---
 def safe_int(val):
-    try: return int(float(val)) if val is not None else 0
+    if val is None: return 0
+    try: return int(float(val))
     except: return 0
 
 def get_team_name(team_data, default_name="Team"):
     name = team_data.get("gameStat", {}).get("seasonTeam", {}).get("name") or team_data.get("name")
     return name if name else default_name
 
-# --- SCOUTING ANALYSE LOGIK ---
+# --- DIESE FUNKTION ERZEUGT DEN AUSFÜHRLICHEN KONTEXT FÜR DEN PROMPT ---
+def prepare_ai_scouting_context(team_name, detailed_games, team_id):
+    context = f"Scouting-Daten für Team: {team_name}\n"
+    context += f"Anzahl analysierter Spiele: {len(detailed_games)}\n\n"
+    
+    for g in detailed_games:
+        opp = g.get('meta_opponent', 'Gegner')
+        res = g.get('meta_result', 'N/A')
+        date_game = g.get('meta_date', 'Datum?')
+        context += f"--- Spiel am {date_game} vs {opp} ({res}) ---\n"
+        
+        # Kurze Zusammenfassung der PBP-Events für die KI
+        actions = sorted(g.get("actions", []), key=lambda x: x.get('actionNumber', 0))
+        for act in actions[:10]: # Nur die ersten 10 für den Start-Kontext
+            context += f"Q{act.get('period')} {act.get('gameTime')}: {act.get('type')} ({act.get('homeTeamPoints')}:{act.get('guestTeamPoints')})\n"
+        context += "...\n"
+    return context
 
+# --- SCOUTING ANALYSE LOGIK ---
 def analyze_scouting_data(team_id, detailed_games):
     stats = {
         "games_count": len(detailed_games),
         "wins": 0,
         "start_stats": {"pts_diff_q1": 0},
         "all_players": {},
-        "jersey_map": {} # Neu: Zuordnung Nummer -> Name
+        "jersey_map": {} 
     }
     tid_str = str(team_id)
     
@@ -48,22 +53,18 @@ def analyze_scouting_data(team_id, detailed_games):
         g_id = str(box.get("guestTeam", {}).get("teamId"))
         is_home = (h_id == tid_str)
         
-        # Sieg-Logik fix
         s_h = safe_int(res.get("homeTeamFinalScore"))
         s_g = safe_int(res.get("guestTeamFinalScore"))
         if (is_home and s_h > s_g) or (not is_home and s_g > s_h):
             stats["wins"] += 1
             
-        # Spieler & Jersey Map
         team_obj = box.get("homeTeam") if is_home else box.get("guestTeam")
         if team_obj:
             for p in team_obj.get("playerStats", []):
                 p_info = p.get("seasonPlayer", {})
                 pid = str(p_info.get("id"))
-                nr = str(p_info.get("shirtNumber"))
+                nr = str(p_info.get("shirtNumber", "?"))
                 last_name = p_info.get("lastName", "Unbekannt")
-                
-                # Namen für Lineup-Anzeige speichern
                 stats["jersey_map"][nr] = last_name
                 
                 if safe_int(p.get("secondsPlayed")) > 300:
@@ -72,7 +73,6 @@ def analyze_scouting_data(team_id, detailed_games):
                     stats["all_players"][pid]["pm"] += safe_int(p.get("plusMinus"))
                     stats["all_players"][pid]["games"] += 1
         
-        # Q1 Differenz
         stats["start_stats"]["pts_diff_q1"] += (safe_int(res.get("homeTeamQ1Score")) - safe_int(res.get("guestTeamQ1Score")) if is_home else safe_int(res.get("guestTeamQ1Score")) - safe_int(res.get("homeTeamQ1Score")))
 
     cnt = stats["games_count"] if stats["games_count"] > 0 else 1
@@ -82,7 +82,6 @@ def analyze_scouting_data(team_id, detailed_games):
     return stats
 
 # --- DASHBOARD RENDERING ---
-
 def render_team_analysis_dashboard(team_id, team_name):
     logo = get_best_team_logo(team_id)
     c1, c2 = st.columns([1, 4])
@@ -116,18 +115,15 @@ def render_team_analysis_dashboard(team_id, team_name):
 
     st.write("")
 
-    # --- 3. AUFSTELLUNG (LINEUPS) MIT NAMEN ---
+    # 3. AUFSTELLUNG (LINEUPS) MIT NAMEN
     st.subheader("📋 Effektivste Aufstellungen (Lineups)")
-    
-    # Header mit festen Breiten für bessere Ausrichtung
-    h1, h2, h3, h4, h5 = st.columns([3.5, 1, 1, 1, 1])
-    h1.markdown("**AUFSTELLUNG**")
-    h2.markdown("**MIN**")
-    h3.markdown("**PKT**")
-    h4.markdown("**OPP**")
-    h5.markdown("**+/-**")
+    h_cols = st.columns([4, 1, 1, 1, 1])
+    h_cols[0].markdown("**AUFSTELLUNG**")
+    h_cols[1].markdown("**MIN**")
+    h_cols[2].markdown("**PKT**")
+    h_cols[3].markdown("**OPP**")
+    h_cols[4].markdown("**+/-**")
 
-    # Beispiel-Lineups (Diese werden in der echten App aus den PBP-Daten berechnet)
     sample_lineups = [
         {"ids": ["13", "74", "2", "20", "5"], "min": "10:28", "pkt": 21, "opp": 24, "pm": -3},
         {"ids": ["24", "13", "74", "2", "20"], "min": "05:22", "pkt": 13, "opp": 6, "pm": 7},
@@ -135,74 +131,57 @@ def render_team_analysis_dashboard(team_id, team_name):
     ]
 
     for lu in sample_lineups:
-        # Hier nutzen wir wieder st.columns für die Zeile
-        c1, c2, c3, c4, c5 = st.columns([3.5, 1, 1, 1, 1])
+        c = st.columns([4, 1, 1, 1, 1])
         
-        # HTML für Kreise + Namen darunter zusammenbauen
-        circles_html = "<div style='display:flex; gap:10px; align-items: flex-start;'>"
+        # HTML für die Kreise direkt in die Spalte rendern
+        circles_html = "<div style='display:flex; gap:8px;'>"
         for sid in lu['ids']:
-            # Name aus der jersey_map holen (die wir in analyze_scouting_data befüllt haben)
-            name = scout.get("jersey_map", {}).get(sid, "Unk")
+            p_name = scout["jersey_map"].get(sid, "Unbekannt")
             circles_html += f"""
-                <div style='display: flex; flex-direction: column; align-items: center; width: 45px;'>
-                    <div style='background:#4a90e2; color:white; border-radius:50%; width:30px; height:30px; 
-                                display:flex; align-items:center; justify-content:center; 
-                                font-weight:bold; font-size:12px; shadow: 0 2px 4px rgba(0,0,0,0.1);'>
-                        {sid}
-                    </div>
-                    <div style='font-size:10px; color:#666; margin-top:4px; text-align:center; 
-                                line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>
-                        {name}
-                    </div>
+                <div style='display:flex; flex-direction:column; align-items:center; width:45px;'>
+                    <div style='background:#4a90e2; color:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px;'>{sid}</div>
+                    <div style='font-size:10px; color:#666; margin-top:2px; text-align:center;'>{p_name}</div>
                 </div>
             """
         circles_html += "</div>"
         
-        # DER FIX: unsafe_allow_html=True sorgt dafür, dass die Kreise gezeichnet werden
-        c1.markdown(circles_html, unsafe_allow_html=True)
-        
-        # Die restlichen Werte in der Zeile
-        c2.write(f"\n\n{lu['min']}") # \n\n für vertikale Zentrierung zum Kreis
-        c3.write(f"\n\n{lu['pkt']}")
-        c4.write(f"\n\n{lu['opp']}")
-        
-        pm = lu['pm']
-        pm_color = "#28a745" if pm > 0 else "#d9534f"
-        c5.markdown(f"\n\n<b style='color:{pm_color}; font-size: 1.1em;'>{pm:+}</b>", unsafe_allow_html=True)
+        with c[0]: st.markdown(circles_html, unsafe_allow_html=True)
+        with c[1]: st.write(f"\n{lu['min']}")
+        with c[2]: st.write(f"\n{lu['pkt']}")
+        with c[3]: st.write(f"\n{lu['opp']}")
+        with c[4]: st.markdown(f"\n<b style='color:{'green' if lu['pm']>0 else 'red'};'>{lu['pm']:+}</b>", unsafe_allow_html=True)
 
     st.divider()
 
-    # --- 4. KI PROMPT GENERATOR (GANZ UNTEN) ---
+    # 4. DER URSPRÜNGLICHE KI PROMPT GENERATOR
     st.subheader("🤖 KI Scouting-Prompt")
     st.info("Kopiere diesen Text für eine tiefgehende Taktik-Analyse in ChatGPT.")
     
-    # Dynamischer Prompt-Text
-    top_names = ", ".join([p['name'] for p in scout["top_performers"][:3]])
-    prompt_text = f"""Du bist ein Basketball-Analyst. Analysiere das Team {team_name} (Saison 2025):
-- Bilanz: {scout['wins']} Siege / {scout['games_count']} Spiele.
-- Start-Qualität (Viertel 1): {scout['start_avg']:+.1f} Differenz.
-- Effektivste Spielerinnen: {top_names}.
-- Rotation: Im Schnitt {scout.get('rotation_depth', 'N/A')} Spielerinnen über 5 Minuten.
+    # Hier bauen wir den Kontext-String wie früher zusammen
+    context_text = prepare_ai_scouting_context(team_name, games_data, team_id)
+    
+    prompt_full = f"""Du bist ein professioneller Basketball-Scout für die DBBL.
+Analysiere die folgenden Rohdaten (Play-by-Play Auszüge) von {team_name} aus {len(games_data)} Spielen.
 
-Erstelle basierend auf diesen Werten eine taktische Analyse: Worauf muss die gegnerische Defense achten?"""
+Erstelle einen prägnanten Scouting-Bericht mit diesen 4 Punkten:
+1. Reaktionen nach Auszeiten (ATO): Gibt es Muster? Wer schließt ab? Punkten sie oft direkt?
+2. Spielstarts: Wie kommen sie ins 1. Viertel? (Aggressiv, Turnover-anfällig?) Wer scort zuerst?
+3. Schlüsselspieler & Rotation: Wer steht in der Starting 5? Wer beendet knappe Spiele (Closing Lineup)?
+4. Empfehlung für die Defense: Wie kann man ihre Plays stoppen?
 
-    st.code(prompt_text, language="text")
+Hier sind die Daten:
+{context_text}
+"""
+    st.code(prompt_full, language="text")
 
-# --- APP.PY BENÖTIGTE FUNKTIONEN (SKELETT) ---
-
-def render_game_header(details):
-    res = details.get("result", {})
-    st.markdown(f"<h2 style='text-align:center;'>{res.get('homeTeamFinalScore')} : {res.get('guestTeamFinalScore')}</h2>", unsafe_allow_html=True)
-
-def render_boxscore_table_pro(player_stats, team_stats, name, coach="-"):
-    st.markdown(f"**{name}**")
-    st.dataframe(pd.DataFrame(player_stats).head(5))
-
-def render_charts_and_stats(box): st.write("Charts")
-def render_game_top_performers(box): st.write("Top Performer")
-def generate_game_summary(box): return "Zusammenfassung"
-def generate_complex_ai_prompt(box): return "Prompt"
-def run_openai_generation(api_key, prompt): return "KI Bericht"
-def render_full_play_by_play(box, height=600): st.write("PBP")
-def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None): st.write("Prep")
-def render_live_view(box): st.write("Live")
+# --- APP.PY BENÖTIGTE SKELETT FUNKTIONEN ---
+def render_game_header(details): pass
+def render_boxscore_table_pro(p, t, n, c="-"): pass
+def render_charts_and_stats(box): pass
+def render_game_top_performers(box): pass
+def generate_game_summary(box): return ""
+def generate_complex_ai_prompt(box): return ""
+def run_openai_generation(api_key, prompt): return ""
+def render_full_play_by_play(box, height=600): pass
+def render_prep_dashboard(t_id, t_n, df, l, metadata_callback=None): pass
+def render_live_view(box): pass
