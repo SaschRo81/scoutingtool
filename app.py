@@ -113,7 +113,7 @@ DEFAULT_OFFENSE = [{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds
 DEFAULT_DEFENSE = [{"Fokus": "Rebound", "Beschreibung": "box out!"}, {"Fokus": "Transition", "Beschreibung": "Slow the ball down! Pick up the ball early!"}, {"Fokus": "Communication", "Beschreibung": "Talk on positioning, helpside & on screens"}, {"Fokus": "Positioning", "Beschreibung": "close the middle on close outs and drives"}, {"Fokus": "Pick´n Roll", "Beschreibung": "red (yellow, last 8 sec. from shot clock)"}, {"Fokus": "DHO", "Beschreibung": "aggressive switch - same size / gap - small and big"}, {"Fokus": "Offball screens", "Beschreibung": "yellow"}]
 DEFAULT_ABOUT = [{"Fokus": "Be ready", "Beschreibung": "for wild caotic / a lot of 1-1 and shooting"}, {"Fokus": "Stay ready", "Beschreibung": "no matter what happens Don’t be bothered by calls/no calls"}, {"Fokus": "No matter what", "Beschreibung": "the score is, we always give 100%."}, {"Fokus": "Together", "Beschreibung": "Fight for & trust in each other!"}, {"Fokus": "Take care", "Beschreibung": "of the ball no easy turnovers to prevent easy fastbreaks!"}, {"Fokus": "Halfcourt", "Beschreibung": "Take responsibility! Stop them as a team!"}, {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"}]
 
-for key, default in [("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None), ("roster_df", None), ("team_stats", None), ("game_meta", {}), ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}), ("facts_offense", pd.DataFrame(DEFAULT_OFFENSE)), ("facts_defense", pd.DataFrame(DEFAULT_DEFENSE)), ("facts_about", pd.DataFrame(DEFAULT_ABOUT)), ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None), ("stats_team_id", None), ("live_view_mode", "today"), ("live_date_filter", date.today())]:
+for key, default in [("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None), ("roster_df", None), ("team_stats", None), ("game_meta", {}), ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}), ("facts_offense", pd.DataFrame(DEFAULT_OFFENSE)), ("facts_defense", pd.DataFrame(DEFAULT_DEFENSE)), ("facts_about", pd.DataFrame(DEFAULT_ABOUT)), ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None), ("stats_team_id", None), ("live_view_mode", "today"), ("live_date_filter", date.today()), ("analysis_team_id", None)]:
     if key not in st.session_state: st.session_state[key] = default
 
 def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
@@ -125,6 +125,9 @@ def go_game_venue(): st.session_state.current_page = "game_venue"
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
 def go_team_stats(): st.session_state.current_page = "team_stats"
+def go_team_analysis(): st.session_state.current_page = "team_analysis"
+    
+    st.session_state.analysis_team_id = None
 
 def render_page_header(page_title):
     inject_custom_css()
@@ -164,6 +167,11 @@ def render_home():
              if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
         with r4_c2:
              if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
+         r5_c1, r5_c2 = st.columns(2)
+        with r5_c1:
+             if st.button("🧠 Team Spielanalyse", use_container_width=True): 
+                 go_team_analysis()
+                 st.rerun()
 
 def render_team_stats_page():
     if st.session_state.stats_team_id:
@@ -295,8 +303,6 @@ def render_prep_page():
             if df is not None: render_prep_dashboard(opp_id, opp_name, df, sched, metadata_callback=get_player_metadata_cached)
             else: st.error("Fehler beim Laden der Spielerdaten.")
 
-# --- IN app.py ---
-
 def fetch_games_from_recent():
     """
     Holt Spiele über den /games/recent Endpunkt (wie im PowerShell Skript),
@@ -362,8 +368,6 @@ def fetch_games_from_recent():
         print(f"Fehler beim Fetch Recent: {e}")
         
     return games_list
-
-# --- Helper Funktion für Live Games (in app.py einfügen/ersetzen) ---
 
 def fetch_games_from_recent():
     """
@@ -450,8 +454,6 @@ def fetch_games_from_recent():
     result_list = list(games_map.values())
     result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
     return result_list
-
-# --- Helper Funktion für Live Games (in app.py einfügen/ersetzen) ---
 
 def fetch_games_from_recent():
     """
@@ -718,6 +720,28 @@ def render_analysis_page():
                         with t3: render_full_play_by_play(box)
                     else: st.error("Fehler beim Laden.")
         else: st.warning("Keine Spiele.")
+
+def render_team_analysis_page():
+    # Wenn bereits ein Team ausgewählt ist -> Dashboard zeigen
+    if st.session_state.analysis_team_id:
+        tid = st.session_state.analysis_team_id
+        t_info = TEAMS_DB.get(tid, {})
+        t_name = t_info.get("name", "Team")
+        
+        c_back, _ = st.columns([1, 5])
+        with c_back:
+            if st.button("⬅️ Teamwahl", key="back_ana_team"):
+                st.session_state.analysis_team_id = None
+                st.rerun()
+                # Aufruf der Logik aus analysis_ui.py
+        from src.analysis_ui import render_team_analysis_dashboard
+        render_team_analysis_dashboard(tid, t_name)
+        
+    # Sonst -> Auswahlseite (Logos)
+    else:
+        render_page_header("🧠 Team Spielanalyse & Scouting")
+        st.markdown("Wähle ein Team, um dessen Spielweise (Timeouts, Starts, Rotation) basierend auf den letzten Spielen zu analysieren.")
+        
 
 def render_scouting_page():
     render_page_header("📝 PreGame Report") 
