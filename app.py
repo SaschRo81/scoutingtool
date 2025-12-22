@@ -296,34 +296,135 @@ def render_prep_page():
             else: st.error("Fehler beim Laden der Spielerdaten.")
 
 def render_live_page():
+    # 1. Fall: Ein Spiel ist ausgewählt -> Zeige Live View (Scoreboard + Ticker)
     if st.session_state.live_game_id:
         c_back, c_title = st.columns([1, 5])
         with c_back:
-            if st.button("⬅️ Zurück", key="live_back_btn"): st.session_state.live_game_id = None; st.rerun()
-        with c_title: st.title("🔴 Live View")
-    else: render_page_header("🔴 Live Games Übersicht")
-    if st.session_state.live_game_id:
-        gid = st.session_state.live_game_id; auto = st.checkbox("🔄 Auto-Refresh (15s)", value=False, key="live_auto_refresh")
-        st.divider(); box = fetch_game_boxscore(gid); det = fetch_game_details(gid)
+            if st.button("⬅️ Zurück zur Übersicht", key="live_back_btn"): 
+                st.session_state.live_game_id = None
+                st.rerun()
+        with c_title: st.title("🔴 Live View Center")
+        
+        gid = st.session_state.live_game_id
+        
+        # Auto-Refresh Logik
+        c_ref, _ = st.columns([1, 4])
+        with c_ref:
+            auto = st.checkbox("🔄 Auto-Refresh (15s)", value=False, key="live_auto_refresh")
+
+        st.divider()
+        
+        # Daten holen
+        box = fetch_game_boxscore(gid)
+        det = fetch_game_details(gid)
+        
         if box and det:
-            box["gameTime"] = det.get("gameTime"); box["period"] = det.get("period"); box["result"] = det.get("result") 
+            # Details in Boxscore mergen für Anzeige
+            box["gameTime"] = det.get("gameTime")
+            box["period"] = det.get("period")
+            box["result"] = det.get("result")
+            
+            # Render aus analysis_ui.py aufrufen
             render_live_view(box)
-            if auto: time_module.sleep(15); st.rerun()
-        else: st.info("Warte auf Datenverbindung...")
-    else:
-        st.markdown("### Spiele von heute")
-        with st.spinner("Lade aktuellen Spielplan..."): all_games = fetch_season_games(CURRENT_SEASON_ID)
-        today_str = datetime.now().strftime("%d.%m.%Y")
-        todays_games = [g for g in all_games if g['date_only'] == today_str] if all_games else []
-        if not todays_games: st.info(f"Keine Spiele für heute ({today_str}) gefunden.")
+            
+            if auto:
+                time_module.sleep(15)
+                st.rerun()
         else:
-            todays_games.sort(key=lambda x: x['date']); cols = st.columns(3) 
-            for i, game in enumerate(todays_games):
+            st.info("Warte auf Datenverbindung oder Spielstart...")
+            
+    # 2. Fall: Übersicht anzeigen (Heute vs. Vergangen)
+    else:
+        render_page_header("🏀 Game Center Übersicht")
+
+        # Steuerung: Heute vs. Vergangene
+        c_mode1, c_mode2, c_space = st.columns([1, 1, 3])
+        
+        with c_mode1:
+            if st.button("📅 Spiele von Heute", type="primary" if st.session_state.live_view_mode == "today" else "secondary", use_container_width=True):
+                st.session_state.live_view_mode = "today"
+                st.rerun()
+        
+        with c_mode2:
+            if st.button("rewind Vergangene Spiele", type="primary" if st.session_state.live_view_mode == "past" else "secondary", use_container_width=True):
+                st.session_state.live_view_mode = "past"
+                st.rerun()
+
+        st.divider()
+
+        # Lade alle Spiele (Cache nutzen)
+        with st.spinner("Lade Spielplan..."): 
+            all_games = fetch_season_games(CURRENT_SEASON_ID)
+
+        games_to_show = []
+        display_date_str = ""
+
+        # LOGIK: HEUTE
+        if st.session_state.live_view_mode == "today":
+            today_str = datetime.now().strftime("%d.%m.%Y")
+            display_date_str = f"Heute ({today_str})"
+            if all_games:
+                games_to_show = [g for g in all_games if g['date_only'] == today_str]
+
+        # LOGIK: VERGANGENE
+        else:
+            st.markdown("##### Wähle ein Datum:")
+            # Date Picker für vergangene Spiele
+            sel_date = st.date_input("Datum", value=st.session_state.live_date_filter, key="hist_date_picker", label_visibility="collapsed")
+            st.session_state.live_date_filter = sel_date
+            
+            search_str = sel_date.strftime("%d.%m.%Y")
+            display_date_str = search_str
+            
+            if all_games:
+                games_to_show = [g for g in all_games if g['date_only'] == search_str]
+
+        # ANZEIGE DER SPIELE
+        if not games_to_show:
+            st.info(f"Keine Spiele für {display_date_str} gefunden.")
+        else:
+            st.success(f"{len(games_to_show)} Spiele am {display_date_str} gefunden:")
+            # Sortieren nach Uhrzeit
+            games_to_show.sort(key=lambda x: x['date'])
+            
+            cols = st.columns(3) 
+            for i, game in enumerate(games_to_show):
                 col = cols[i % 3]
                 with col:
                     with st.container():
-                        st.markdown(f"""<div style="border:1px solid #ddd; border-radius:10px; padding:15px; margin-bottom:10px; background-color:white; text-align:center;"><div style="font-weight:bold; color:#555;">{game['date'].split(' ')[1]} Uhr</div><div style="font-size:1.1em; margin:10px 0;"><b>{game['home']}</b><br>vs<br><b>{game['guest']}</b></div><div style="font-size:1.5em; font-weight:bold; color:#d9534f;">{game['score']}</div></div>""", unsafe_allow_html=True)
-                        if st.button(f"Zum Spiel ({game['home'][:3]} vs {game['guest'][:3]})", key=f"btn_live_{game['id']}", use_container_width=True): st.session_state.live_game_id = game['id']; st.rerun()
+                        # Status Farbe
+                        border_color = "#ddd"
+                        status_text = "Geplant"
+                        score_color = "#333"
+                        
+                        if game.get("status") == "ENDED":
+                            border_color = "#28a745" # Grün für beendet
+                            status_text = "Beendet"
+                        elif game.get("status") == "RUNNING":
+                            border_color = "#dc3545" # Rot für live
+                            status_text = "🔴 LIVE"
+                            score_color = "#dc3545"
+
+                        # Card HTML
+                        html = f"""
+                        <div style="border:1px solid {border_color}; border-radius:10px; padding:15px; margin-bottom:10px; background-color:white; text-align:center; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size:12px; color:#888; margin-bottom:5px;">{game['date'].split(' ')[1]} Uhr | {status_text}</div>
+                            <div style="font-size:1.1em; margin:10px 0; line-height: 1.4;">
+                                <b>{game['home']}</b><br>
+                                <span style="font-size:0.8em; color:#666;">vs</span><br>
+                                <b>{game['guest']}</b>
+                            </div>
+                            <div style="font-size:1.6em; font-weight:bold; color:{score_color}; margin-top:5px;">
+                                {game['score']}
+                            </div>
+                        </div>
+                        """
+                        st.markdown(html, unsafe_allow_html=True)
+                        
+                        btn_label = "Zum Liveticker" if game.get("status") == "RUNNING" else "Zum Spiel / Stats"
+                        if st.button(f"{btn_label}", key=f"btn_live_{game['id']}", use_container_width=True): 
+                            st.session_state.live_game_id = game['id']
+                            st.rerun()
 
 def render_game_venue_page():
     render_page_header("📍 Spielorte der Teams"); c1, c2 = st.columns([1, 2])
