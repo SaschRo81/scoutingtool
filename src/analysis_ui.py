@@ -51,6 +51,9 @@ def get_player_lookup(box):
         for p in box.get(team_key, {}).get('playerStats', []):
             pid = str(p.get('seasonPlayer', {}).get('id'))
             name = f"{p.get('seasonPlayer', {}).get('lastName', '')}" 
+            # Optional: Vorname dazu nehmen für Eindeutigkeit
+            # fn = p.get('seasonPlayer', {}).get('firstName', '')
+            # name = f"{fn[0]}. {name}" if fn else name
             nr = p.get('seasonPlayer', {}).get('shirtNumber', '')
             lookup[pid] = f"#{nr} {name}"
     return lookup
@@ -755,40 +758,94 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
     
     for g in detailed_games:
         opp = g.get('meta_opponent', 'Gegner'); res = g.get('meta_result', 'N/A')
-        context += f"--- Spiel vs {opp} ({res}) ---\n"
+        date_game = g.get('meta_date', 'Datum?')
+        context += f"--- Spiel am {date_game} vs {opp} ({res}) ---\n"
+        
+        # Lookups
+        player_map = get_player_lookup(g)
+        
+        # 1. Starting 5 und Closing Lineup ermitteln
+        starters = []
+        is_home = (str(g.get("homeTeam", {}).get("seasonTeamId")) == tid_str)
+        team_obj = g.get("homeTeam") if is_home else g.get("guestTeam")
+        if team_obj:
+            for p in team_obj.get("playerStats", []):
+                if p.get("isStartingFive"):
+                    pid = str(p.get("seasonPlayer", {}).get("id"))
+                    starters.append(player_map.get(pid, "Unbekannt"))
+        
+        context += f"Starting 5: {', '.join(starters)}\n"
+        
+        # Actions sortieren
         actions = sorted(g.get("actions", []), key=lambda x: x.get('actionNumber', 0))
         
-        # 1. Viertelstart extrahieren
+        # 2. Closing Lineup (Spieler aktiv in den letzten 10 Aktionen)
+        closers = set()
+        for act in reversed(actions):
+            if len(closers) >= 5: break
+            if str(act.get("seasonTeamId")) == tid_str:
+                pid = str(act.get("seasonPlayerId"))
+                if pid and pid != "None":
+                    closers.add(player_map.get(pid, "Unbekannt"))
+        
+        if closers:
+            context += f"Closing Lineup (Endphase): {', '.join(list(closers))}\n"
+
+        # 3. Viertelstart extrahieren
         context += "Start Phase (Q1 erste 12 Aktionen):\n"
         count = 0
         for act in actions:
             if act.get("period") == 1:
                 desc = translate_text(act.get("type", ""))
+                
+                # Wer war es?
+                pid = str(act.get("seasonPlayerId"))
+                p_name = player_map.get(pid, "")
+                
                 tid = str(act.get("seasonTeamId"))
                 actor = "WIR" if tid == tid_str else "GEGNER"
+                
+                if p_name and actor == "WIR": actor += f" ({p_name})"
+                
                 pts = act.get("points", 0)
                 if pts: desc += f" (+{pts} Pkt)"
                 context += f"- {actor}: {desc}\n"
                 count += 1
                 if count > 12: break
         
-        # 2. Timeouts filtern
-        context += "Reaktionen nach Auszeiten (ATO):\n"
+        # 4. Timeouts filtern (ALLE Timeouts anzeigen zur Sicherheit)
+        context += "\nReaktionen nach Auszeiten (ATO):\n"
         found_to = False
         for i, act in enumerate(actions):
-            if "TIMEOUT" in str(act.get("type")).upper() and str(act.get("seasonTeamId")) == tid_str:
-                found_to = True
-                context += "TIMEOUT genommen.\n"
-                # Die nächsten 4 Aktionen zeigen
-                for j in range(1, 5):
-                    if i+j < len(actions):
-                        na = actions[i+j]
-                        ntid = str(na.get("seasonTeamId"))
-                        who = "WIR" if ntid == tid_str else "GEGNER"
-                        ndesc = translate_text(na.get("type", ""))
-                        if na.get("points"): ndesc += f" (+{na.get('points')})"
-                        context += f"  -> {who}: {ndesc}\n"
-        if not found_to: context += "(Keine Timeouts)\n"
+            if "TIMEOUT" in str(act.get("type")).upper():
+                to_tid = str(act.get("seasonTeamId"))
+                
+                # Label wer Timeout genommen hat
+                who_took = "WIR" if to_tid == tid_str else "GEGNER"
+                if to_tid == "None" or not to_tid: who_took = "Team/Coach" # Fallback
+                
+                # Nur eigene Timeouts sind primär interessant, aber Kontext schadet nicht
+                if who_took == "WIR":
+                    found_to = True
+                    context += f"TIMEOUT ({who_took}) genommen.\n"
+                    # Die nächsten 4 Aktionen zeigen
+                    for j in range(1, 5):
+                        if i+j < len(actions):
+                            na = actions[i+j]
+                            ntid = str(na.get("seasonTeamId"))
+                            
+                            who_act = "WIR" if ntid == tid_str else "GEGNER"
+                            
+                            # Spieler Name
+                            npid = str(na.get("seasonPlayerId"))
+                            np_name = player_map.get(npid, "")
+                            if np_name and who_act == "WIR": who_act += f" ({np_name})"
+                            
+                            ndesc = translate_text(na.get("type", ""))
+                            if na.get("points"): ndesc += f" (+{na.get('points')})"
+                            context += f"  -> {who_act}: {ndesc}\n"
+        
+        if not found_to: context += "(Keine eigenen Timeouts gefunden)\n"
         
         context += "\n"
         
@@ -856,9 +913,9 @@ def render_team_analysis_dashboard(team_id, team_name):
 Analysiere die folgenden Rohdaten (Play-by-Play Auszüge) von {team_name} aus {len(games_data)} Spielen.
 
 Erstelle einen prägnanten Scouting-Bericht mit diesen 4 Punkten:
-1. Reaktionen nach Auszeiten (ATO): Gibt es Muster? Punkten sie oft direkt?
-2. Spielstarts: Wie kommen sie ins 1. Viertel? (Aggressiv, Turnover-anfällig?)
-3. Schlüsselspieler & Rotation: Wer übernimmt in diesen Phasen Verantwortung?
+1. Reaktionen nach Auszeiten (ATO): Gibt es Muster? Wer schließt ab? Punkten sie oft direkt?
+2. Spielstarts: Wie kommen sie ins 1. Viertel? (Aggressiv, Turnover-anfällig?) Wer scort zuerst?
+3. Schlüsselspieler & Rotation: Wer steht in der Starting 5? Wer beendet knappe Spiele (Closing Lineup)?
 4. Empfehlung für die Defense: Wie kann man ihre Plays stoppen?
 
 Hier sind die Daten:
