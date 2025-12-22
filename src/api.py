@@ -3,15 +3,14 @@
 import streamlit as st
 import requests
 import pandas as pd
+import base64
 from datetime import datetime
 import pytz
-import base64
 from src.config import API_HEADERS, SEASON_ID, TEAMS_DB
 
 # --- HILFSFUNKTIONEN ---
 
 def get_base_url(team_id):
-    """Ermittelt Server (Nord/Süd) anhand der Team-ID."""
     try:
         tid = int(team_id)
         team_info = TEAMS_DB.get(tid)
@@ -46,17 +45,14 @@ def extract_nationality(data_obj):
         return data_obj["nationality"].get("name", "-")
     return "-"
 
-# --- NEU: LOGO FUNKTION HIERHER VERSCHOBEN ---
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_best_team_logo(team_id):
     if not team_id: return None
-    # Wir nutzen SEASON_ID aus der Config oder Fallback
     sid = SEASON_ID if SEASON_ID else "2025"
-    
     candidates = [
         f"https://api-s.dbbl.scb.world/images/teams/logo/{sid}/{team_id}",
         f"https://api-n.dbbl.scb.world/images/teams/logo/{sid}/{team_id}",
-        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}", # Fallback Vorjahr
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}",
         f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
     ]
     headers = { "User-Agent": "Mozilla/5.0", "Accept": "image/*", "Referer": "https://dbbl.de/" }
@@ -372,10 +368,8 @@ def fetch_season_games(season_id):
 
 @st.cache_data(ttl=1800)
 def fetch_team_rank(team_id, season_id):
-    # 1. Staffel ermitteln (Nord/Süd)
     staffel = ""
     team_name_db = ""
-    
     try:
         tid_int = int(team_id)
         if tid_int in TEAMS_DB:
@@ -383,7 +377,6 @@ def fetch_team_rank(team_id, season_id):
             team_name_db = TEAMS_DB[tid_int].get("name", "")
     except: pass
 
-    # 2. URLs aufbauen (mit Priorität für die korrekte Gruppe)
     urls = []
     if staffel == "Süd":
         urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
@@ -391,36 +384,29 @@ def fetch_team_rank(team_id, season_id):
     elif staffel == "Nord":
         urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
         urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
-    
     urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}")
     urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}")
 
     search_id = str(team_id)
-
     for url in urls:
         try:
             r = requests.get(url, headers=API_HEADERS, timeout=3)
             if r.status_code == 200:
                 data = r.json()
                 items = data if isinstance(data, list) else data.get("items", [])
-
                 for idx, entry in enumerate(items):
-                    # NEUE LOGIK BASIEREND AUF POWERSHELL OUTPUT
                     st_obj = entry.get("seasonTeam", {})
-                    
                     tid_found = str(st_obj.get("id", ""))
                     teamId_found = str(st_obj.get("teamId", ""))
                     name_found = st_obj.get("name", "")
                     
                     match_by_id = (tid_found == search_id or teamId_found == search_id)
                     match_by_name = False
-                    
                     if team_name_db and name_found:
                         if team_name_db.lower() in name_found.lower() or name_found.lower() in team_name_db.lower():
                             match_by_name = True
 
                     if match_by_id or match_by_name:
-                        # HIER GREIFEN WIR JETZT DIE KORREKTEN FELDER AB
                         return {
                             "rank": entry.get("rank", 0),
                             "totalGames": entry.get("totalGames", 0),
@@ -428,46 +414,61 @@ def fetch_team_rank(team_id, season_id):
                             "totalLosses": entry.get("totalLosses", 0),
                             "last10Victories": entry.get("last10Victories", 0),
                             "last10Losses": entry.get("last10Losses", 0),
-                            # Nutze "totalPointsMade" als Punkte, da die API das so liefert
                             "points": entry.get("totalPointsMade", 0) 
                         }
-        except:
-            continue
+        except: continue
     return None
-# --- IN src/api.py AM ENDE EINFÜGEN ---
+
+@st.cache_data(ttl=1800)
+def fetch_league_standings(season_id, league_selection):
+    """
+    Holt die Tabelle basierend auf der Liga-Auswahl.
+    """
+    group_param = ""
+    if league_selection == "Nord": group_param = "&group=NORTH"
+    elif league_selection == "Süd": group_param = "&group=SOUTH"
+    urls = [ f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}{group_param}", f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}{group_param}" ]
+    for url in urls:
+        try:
+            r = requests.get(url, headers=API_HEADERS, timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                items = data if isinstance(data, list) else data.get("items", [])
+                if not items: continue
+                table_data = []
+                for entry in items:
+                    team_name = entry.get("seasonTeam", {}).get("name", "Unknown")
+                    rank = entry.get("rank", 0)
+                    wins = entry.get("totalVictories", 0)
+                    losses = entry.get("totalLosses", 0)
+                    table_data.append({ "Platz": rank, "Team": team_name, "W": wins, "L": losses })
+                table_data.sort(key=lambda x: x["Platz"])
+                return pd.DataFrame(table_data)
+        except: continue
+    return pd.DataFrame()
 
 def fetch_last_n_games_complete(team_id, season_id, n=3):
     """
     Holt die letzten n absolvierten Spiele eines Teams INKLUSIVE Boxscore & PBP.
-    Dient dem Scouting-Algorithmus.
     """
-    # 1. Schedule holen
     schedule = fetch_schedule(team_id, season_id)
     if not schedule: return []
     
-    # 2. Nur beendete Spiele mit Ergebnis filtern
-    # Sortieren: Neueste zuerst
     def parse_dt(d):
         try: return datetime.strptime(d['date'], "%d.%m.%Y %H:%M")
         except: return datetime.min
 
     played = [g for g in schedule if g.get('has_result')]
     played.sort(key=lambda x: parse_dt(x), reverse=True)
-    
-    # Die letzten n nehmen
     selection = played[:n]
     
     detailed_games = []
-    
-    # 3. Details für diese Spiele laden
     for game in selection:
         gid = game['id']
         box = fetch_game_boxscore(gid) # Enthält 'actions' (PBP)
         if box:
-            # Resultat und Gegner noch sauber reinmergen falls nötig
             box['meta_opponent'] = game['home'] if str(game['homeTeamId']) != str(team_id) else game['guest']
             box['meta_date'] = game['date']
             box['meta_result'] = game['score']
             detailed_games.append(box)
-            
     return detailed_games
