@@ -116,12 +116,18 @@ def render_team_analysis_dashboard(team_id, team_name):
 
     st.write("")
 
-    # 3. AUFSTELLUNG (LINEUPS) MIT NAMEN
+    # --- 3. AUFSTELLUNG (LINEUPS) MIT NAMEN ---
     st.subheader("📋 Effektivste Aufstellungen (Lineups)")
+    
+    # Header mit festen Breiten für bessere Ausrichtung
     h1, h2, h3, h4, h5 = st.columns([3.5, 1, 1, 1, 1])
-    h1.markdown("**AUFSTELLUNG**"); h2.markdown("**MIN**"); h3.markdown("**PKT**"); h4.markdown("**OPP**"); h5.markdown("**+/-**")
+    h1.markdown("**AUFSTELLUNG**")
+    h2.markdown("**MIN**")
+    h3.markdown("**PKT**")
+    h4.markdown("**OPP**")
+    h5.markdown("**+/-**")
 
-    # Beispiel-Lineups (In Realität aus PBP extrahiert)
+    # Beispiel-Lineups (Diese werden in der echten App aus den PBP-Daten berechnet)
     sample_lineups = [
         {"ids": ["13", "74", "2", "20", "5"], "min": "10:28", "pkt": 21, "opp": 24, "pm": -3},
         {"ids": ["24", "13", "74", "2", "20"], "min": "05:22", "pkt": 13, "opp": 6, "pm": 7},
@@ -129,40 +135,58 @@ def render_team_analysis_dashboard(team_id, team_name):
     ]
 
     for lu in sample_lineups:
+        # Hier nutzen wir wieder st.columns für die Zeile
         c1, c2, c3, c4, c5 = st.columns([3.5, 1, 1, 1, 1])
         
-        # HTML für Kreise + Namen darunter
-        circles_html = "<div style='display:flex; gap:10px;'>"
+        # HTML für Kreise + Namen darunter zusammenbauen
+        circles_html = "<div style='display:flex; gap:10px; align-items: flex-start;'>"
         for sid in lu['ids']:
-            name = scout["jersey_map"].get(sid, "Unk")
+            # Name aus der jersey_map holen (die wir in analyze_scouting_data befüllt haben)
+            name = scout.get("jersey_map", {}).get(sid, "Unk")
             circles_html += f"""
-                <div style='text-align:center;'>
-                    <div style='background:#4a90e2;color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;margin:0 auto;'>{sid}</div>
-                    <div style='font-size:10px; color:#666; margin-top:2px;'>{name}</div>
+                <div style='display: flex; flex-direction: column; align-items: center; width: 45px;'>
+                    <div style='background:#4a90e2; color:white; border-radius:50%; width:30px; height:30px; 
+                                display:flex; align-items:center; justify-content:center; 
+                                font-weight:bold; font-size:12px; shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+                        {sid}
+                    </div>
+                    <div style='font-size:10px; color:#666; margin-top:4px; text-align:center; 
+                                line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>
+                        {name}
+                    </div>
                 </div>
             """
         circles_html += "</div>"
         
+        # DER FIX: unsafe_allow_html=True sorgt dafür, dass die Kreise gezeichnet werden
         c1.markdown(circles_html, unsafe_allow_html=True)
-        c2.write(lu['min']); c3.write(str(lu['pkt'])); c4.write(str(lu['opp']))
-        c5.markdown(f"<b style='color:{'green' if lu['pm']>0 else 'red'};'>{lu['pm']:+}</b>", unsafe_allow_html=True)
+        
+        # Die restlichen Werte in der Zeile
+        c2.write(f"\n\n{lu['min']}") # \n\n für vertikale Zentrierung zum Kreis
+        c3.write(f"\n\n{lu['pkt']}")
+        c4.write(f"\n\n{lu['opp']}")
+        
+        pm = lu['pm']
+        pm_color = "#28a745" if pm > 0 else "#d9534f"
+        c5.markdown(f"\n\n<b style='color:{pm_color}; font-size: 1.1em;'>{pm:+}</b>", unsafe_allow_html=True)
 
     st.divider()
 
-    # 4. KI PROMPT GENERATOR (JETZT GANZ UNTEN)
+    # --- 4. KI PROMPT GENERATOR (GANZ UNTEN) ---
     st.subheader("🤖 KI Scouting-Prompt")
     st.info("Kopiere diesen Text für eine tiefgehende Taktik-Analyse in ChatGPT.")
     
+    # Dynamischer Prompt-Text
     top_names = ", ".join([p['name'] for p in scout["top_performers"][:3]])
-    prompt = f"""Analysiere die Basketball-Daten für {team_name}.
-- Bilanz: {scout['wins']} Siege aus {scout['games_count']} Spielen.
-- Start-Qualität (Q1): {scout['start_avg']:+.1f} im Schnitt.
-- Top-Spielerinnen (Effizienz): {top_names}.
-- Auffälligkeit: Rotation liegt bei ca. 9 Spielerinnen.
+    prompt_text = f"""Du bist ein Basketball-Analyst. Analysiere das Team {team_name} (Saison 2025):
+- Bilanz: {scout['wins']} Siege / {scout['games_count']} Spiele.
+- Start-Qualität (Viertel 1): {scout['start_avg']:+.1f} Differenz.
+- Effektivste Spielerinnen: {top_names}.
+- Rotation: Im Schnitt {scout.get('rotation_depth', 'N/A')} Spielerinnen über 5 Minuten.
 
-Erstelle einen kurzen Scouting-Bericht über die Stärken und Schwächen."""
-    
-    st.code(prompt, language="text")
+Erstelle basierend auf diesen Werten eine taktische Analyse: Worauf muss die gegnerische Defense achten?"""
+
+    st.code(prompt_text, language="text")
 
 # --- APP.PY BENÖTIGTE FUNKTIONEN (SKELETT) ---
 
