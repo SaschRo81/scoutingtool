@@ -363,8 +363,96 @@ def fetch_games_from_recent():
         
     return games_list
 
+# --- Helper Funktion für Live Games (in app.py einfügen/ersetzen) ---
+
+def fetch_games_from_recent():
+    """
+    Holt Spiele über die /games/recent Endpunkte (Nord & Süd).
+    Führt past, present und future zusammen, um lückenlose Historie zu haben.
+    """
+    import pytz # Import hier sicherstellen
+    from src.config import API_HEADERS
+    
+    # Wir fragen BEIDE APIs ab, da Teams manchmal in der anderen Staffel-DB auftauchen
+    # SlotSize erhöht auf 400, um weit genug zurückzublicken
+    endpoints = [
+        "https://api-s.dbbl.scb.world/games/recent?slotSize=400",
+        "https://api-n.dbbl.scb.world/games/recent?slotSize=400"
+    ]
+    
+    games_map = {} # Dictionary (Key: ID) verhindert Duplikate beim Merge
+
+    for url in endpoints:
+        try:
+            r = requests.get(url, headers=API_HEADERS, timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                
+                # Listen extrahieren und flachklopfen
+                lists_to_check = []
+                if isinstance(data.get("past"), list): lists_to_check.extend(data["past"])
+                if isinstance(data.get("present"), list): lists_to_check.extend(data["present"])
+                if isinstance(data.get("future"), list): lists_to_check.extend(data["future"])
+                
+                for g in lists_to_check:
+                    gid = g.get("id")
+                    if not gid or gid in games_map:
+                        continue # Bereits verarbeitet
+                        
+                    # Datum & Zeit parsen
+                    raw_d = g.get("scheduledTime", "")
+                    dt_obj = None
+                    d_disp = "-"; date_only = "-"
+                    
+                    if raw_d:
+                        try:
+                            # ISO Format 'Z' fixen für ältere Python Versionen
+                            clean_ts = raw_d.replace("Z", "+00:00")
+                            # Zeitzone anpassen (wichtig, damit 20.12. bleibt und nicht 19.12. wird)
+                            dt_obj = datetime.fromisoformat(clean_ts).astimezone(pytz.timezone("Europe/Berlin"))
+                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
+                            date_only = dt_obj.strftime("%d.%m.%Y")
+                        except: 
+                            pass
+                    
+                    # Scores extrahieren (API Felder variieren manchmal)
+                    res = g.get("result", {}) or {}
+                    h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
+                    g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
+                    
+                    score_str = f"{h_s}:{g_s}" if (h_s is not None and g_s is not None) else "-:-"
+                    
+                    # Status normalisieren
+                    status = g.get("status", "SCHEDULED")
+                    # Fallback: Wenn Ergebnis da ist, gilt es als beendet/live
+                    if h_s is not None and g_s is not None and status == "SCHEDULED":
+                        status = "ENDED"
+
+                    games_map[gid] = {
+                        "id": gid,
+                        "date": d_disp,
+                        "date_only": date_only,
+                        "datetime": dt_obj,
+                        "home": g.get("homeTeam", {}).get("name", "?"),
+                        "guest": g.get("guestTeam", {}).get("name", "?"),
+                        "score": score_str,
+                        "status": status,
+                        "home_score": h_s,
+                        "guest_score": g_s
+                    }
+
+        except Exception as e:
+            # Fehler bei einer URL ignorieren, weiter zur nächsten
+            print(f"Error fetching recent games from {url}: {e}")
+            pass
+            
+    # Liste zurückgeben (sortiert nach Datum)
+    result_list = list(games_map.values())
+    result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
+    return result_list
+
 def render_live_page():
-    # 1. LIVE VIEW (Detailansicht eines Spiels)
+    # 1. LIVE VIEW (Detailansicht)
     if st.session_state.live_game_id:
         c_back, c_title = st.columns([1, 5])
         with c_back:
@@ -375,13 +463,14 @@ def render_live_page():
         
         gid = st.session_state.live_game_id
         
-        # Auto-Refresh
+        # Auto-Refresh Option
         c_ref, _ = st.columns([1, 4])
         with c_ref:
             auto = st.checkbox("🔄 Auto-Refresh (15s)", value=False, key="live_auto_refresh")
 
         st.divider()
         
+        # Details laden
         box = fetch_game_boxscore(gid)
         det = fetch_game_details(gid)
         
@@ -401,7 +490,7 @@ def render_live_page():
     else:
         render_page_header("🏀 Game Center Übersicht")
 
-        # Modus-Auswahl
+        # Umschalter: Heute / Vergangenheit
         c_mode1, c_mode2, c_space = st.columns([1, 1, 3])
         with c_mode1:
             if st.button("📅 Spiele von Heute", type="primary" if st.session_state.live_view_mode == "today" else "secondary", use_container_width=True):
@@ -414,67 +503,59 @@ def render_live_page():
 
         st.divider()
 
-        # Daten laden (mit der neuen Recent-Funktion)
-        with st.spinner("Lade aktuellen Spielplan (Recent)..."): 
+        # Laden der Daten (Recent)
+        with st.spinner("Lade Spielplan (Nord & Süd)..."): 
             all_games = fetch_games_from_recent()
 
         games_to_show = []
         display_info = ""
 
-        # --- LOGIK HEUTE ---
+        # --- HEUTE ---
         if st.session_state.live_view_mode == "today":
             today_str = datetime.now().strftime("%d.%m.%Y")
             display_info = f"Spiele vom {today_str}"
             if all_games:
                 games_to_show = [g for g in all_games if g['date_only'] == today_str]
 
-        # --- LOGIK VERGANGENE / KALENDER ---
+        # --- VERGANGENHEIT ---
         else:
             st.markdown("##### Datum auswählen:")
-            # Kalender Widget
             sel_date = st.date_input("Datum", value=st.session_state.live_date_filter, key="hist_date_picker", label_visibility="collapsed")
             st.session_state.live_date_filter = sel_date
             
-            # Konvertierung des Pickers (YYYY-MM-DD) in String (DD.MM.YYYY)
             search_str = sel_date.strftime("%d.%m.%Y")
             display_info = f"Spiele am {search_str}"
             
             if all_games:
-                # Filterung anhand des Strings
+                # Filterung nach String-Vergleich (dd.mm.yyyy)
                 games_to_show = [g for g in all_games if g['date_only'] == search_str]
 
         # --- ANZEIGE ---
         if not games_to_show:
             st.info(f"Keine Spiele für {display_info} gefunden.")
-            # Debug-Hilfe (optional auskommentieren):
-            # st.caption(f"Gesuchte ID/Datum: {search_str}. Geladene Spiele (Total): {len(all_games)}")
         else:
             st.success(f"{len(games_to_show)} {display_info}:")
-            
-            # Sortieren nach Uhrzeit
-            games_to_show.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
             
             cols = st.columns(3) 
             for i, game in enumerate(games_to_show):
                 col = cols[i % 3]
                 with col:
                     with st.container():
-                        # Visuelles Styling basierend auf Status
+                        # Styles definieren
                         border_color = "#ddd"
                         status_label = "Geplant"
                         score_color = "#333"
                         
                         raw_status = game.get("status", "")
-                        
                         if raw_status == "ENDED":
-                            border_color = "#28a745" # Grün
+                            border_color = "#28a745"
                             status_label = "Beendet"
                         elif raw_status == "RUNNING":
-                            border_color = "#dc3545" # Rot
+                            border_color = "#dc3545"
                             status_label = "🔴 LIVE"
                             score_color = "#dc3545"
                         
-                        # Card
+                        # Karte rendern
                         html = f"""
                         <div style="border:1px solid {border_color}; border-radius:10px; padding:15px; margin-bottom:10px; background-color:white; text-align:center; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                             <div style="font-size:12px; color:#888; margin-bottom:5px;">{game['date'].split(' ')[1]} Uhr | {status_label}</div>
