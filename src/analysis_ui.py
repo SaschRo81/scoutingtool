@@ -626,3 +626,203 @@ def render_live_view(box):
     with tab_pbp:
         st.subheader("📜 Live Ticker")
         render_full_play_by_play(box, height=600)
+# --- IN src/analysis_ui.py AM ENDE EINFÜGEN ---
+
+def analyze_scouting_data(team_id, detailed_games):
+    """
+    Analysiert eine Liste von Spielen (JSON) auf Scouting-Aspekte.
+    """
+    stats = {
+        "games_count": len(detailed_games),
+        "wins": 0,
+        "ato_stats": {"possessions": 0, "points": 0, "score_pct": 0}, # After Time Out
+        "start_stats": {"pts_diff_first_5min": 0},
+        "top_scorers": {},
+        "rotation_depth": 0
+    }
+    
+    tid_str = str(team_id)
+    
+    for box in detailed_games:
+        # 1. Win/Loss Check
+        h_id = str(box.get("homeTeam", {}).get("seasonTeamId"))
+        res = box.get("result", {})
+        if not res: 
+             # Fallback falls Result nicht im Boxscore Objekt
+             res = {"homeTeamFinalScore": 0, "guestTeamFinalScore": 0} 
+             # Wir verlassen uns hier drauf, dass fetch_last_n_games_complete das gefixt hat oder API Daten da sind
+
+        s_h = safe_int(res.get("homeTeamFinalScore") or box.get("homeTeamPoints")) # Fallback
+        s_g = safe_int(res.get("guestTeamFinalScore") or box.get("guestTeamPoints"))
+
+        is_home = (h_id == tid_str)
+        if (is_home and s_h > s_g) or (not is_home and s_g > s_h):
+            stats["wins"] += 1
+            
+        # 2. Player Stats Aggregation (für Top Scorer)
+        # Wir suchen das korrekte Team Objekt
+        team_obj = box.get("homeTeam") if is_home else box.get("guestTeam")
+        if team_obj:
+            players = team_obj.get("playerStats", [])
+            active_players = 0
+            for p in players:
+                pid = p.get("seasonPlayer", {}).get("id")
+                name = p.get("seasonPlayer", {}).get("lastName", "Unk")
+                pts = safe_int(p.get("points"))
+                sec = safe_int(p.get("secondsPlayed"))
+                
+                if sec > 300: active_players += 1 # Mind. 5 Min gespielt für Rotation
+                
+                if pid not in stats["top_scorers"]: stats["top_scorers"][pid] = {"name": name, "pts": 0, "games": 0}
+                stats["top_scorers"][pid]["pts"] += pts
+                stats["top_scorers"][pid]["games"] += 1
+            
+            stats["rotation_depth"] += active_players
+
+        # 3. PBP Analyse (ATO & Start)
+        actions = box.get("actions", [])
+        # Sortieren
+        actions.sort(key=lambda x: x.get('actionNumber', 0))
+        
+        # A) Spielstart (Erste 5 Minuten Q1)
+        # Wir berechnen das Delta in den ersten 5 Minuten
+        start_score_h = 0; start_score_g = 0
+        for act in actions:
+            # Check Q1 und Zeit (10 Min - 5 Min = 5 Min Rest)
+            # Zeitformat ist oft "PT08M22S". Wir machen es einfach:
+            # Wir nehmen einfach die ersten 15 Aktionen die Punkte bringen, falls Zeitparsing schwer ist
+            # Oder besser: period == 1. 
+            if act.get("period") != 1: break
+            
+            # Score update
+            h_p = act.get("homeTeamPoints")
+            g_p = act.get("guestTeamPoints")
+            if h_p is not None: start_score_h = safe_int(h_p)
+            if g_p is not None: start_score_g = safe_int(g_p)
+            
+            # Wenn Zeitparsing implementiert ist:
+            # game_time = act.get("gameTime") ...
+            # Vereinfachung: Wir schauen uns den Score nach ca. 20 Aktionen im 1. Viertel an (grobe Schätzung für 5 min)
+            if act.get("actionNumber") > 25: break 
+            
+        diff = start_score_h - start_score_g if is_home else start_score_g - start_score_h
+        stats["start_stats"]["pts_diff_first_5min"] += diff
+
+        # B) ATO (After Timeout)
+        # Suche nach Timeout UNSERES Teams
+        for i, act in enumerate(actions):
+            if act.get("type") == "TIMEOUT" and str(act.get("seasonTeamId")) == tid_str:
+                # Timeout gefunden. Analysiere die nächsten 3 Events auf Punkte
+                stats["ato_stats"]["possessions"] += 1
+                
+                # Suche das nächste Scoring Event oder Turnover
+                # Wir schauen maximal 5 Aktionen weiter
+                found_result = False
+                for j in range(1, 6):
+                    if i + j >= len(actions): break
+                    next_act = actions[i+j]
+                    
+                    # Wenn Punkte erzielt wurden
+                    pts = safe_int(next_act.get("points"))
+                    act_tid = str(next_act.get("seasonTeamId"))
+                    
+                    if pts > 0 and act_tid == tid_str:
+                        stats["ato_stats"]["points"] += pts
+                        found_result = True
+                        break
+                    
+                    # Wenn Gegner punktet oder wir Turnover machen -> Possession vorbei ohne Punkte
+                    if (pts > 0 and act_tid != tid_str) or (next_act.get("type") == "TURNOVER" and act_tid == tid_str):
+                        found_result = True
+                        break
+                
+                # Wenn wir Punkte gemacht haben, zählt es als Erfolg
+                # (Punkte wurden oben addiert)
+
+    # Averages berechnen
+    cnt = stats["games_count"] if stats["games_count"] > 0 else 1
+    stats["rotation_depth"] = round(stats["rotation_depth"] / cnt, 1)
+    stats["start_stats"]["avg_diff"] = round(stats["start_stats"]["pts_diff_first_5min"] / cnt, 1)
+    
+    # Top Scorers sortieren
+    scorer_list = []
+    for pid, data in stats["top_scorers"].items():
+        avg = data["pts"] / data["games"]
+        scorer_list.append({"name": data["name"], "ppg": round(avg, 1)})
+    stats["top_scorers_list"] = sorted(scorer_list, key=lambda x: x["ppg"], reverse=True)[:5]
+
+    return stats
+
+def render_team_analysis_dashboard(team_id, team_name):
+    from src.api import fetch_last_n_games_complete, get_best_team_logo
+    
+    logo = get_best_team_logo(team_id)
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        if logo: st.image(logo, width=100)
+    with c2:
+        st.title(f"Scouting Report: {team_name}")
+        st.caption("Basierend auf der Play-by-Play Analyse der letzten 3 Spiele")
+
+    with st.spinner(f"Analysiere die letzten Spiele von {team_name}..."):
+        # Daten laden (letzte 3 Spiele reichen für Trend)
+        games_data = fetch_last_n_games_complete(team_id, "2025", n=3)
+        
+        if not games_data:
+            st.warning("Keine Spieldaten verfügbar.")
+            return
+
+        # Analyse durchführen
+        scout = analyze_scouting_data(team_id, games_data)
+
+    # --- UI RENDERING ---
+    
+    # 1. Key Facts Row
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Analysierte Spiele", scout["games_count"], f"{scout['wins']} Siege")
+    
+    # Start Verhalten
+    start_val = scout["start_stats"]["avg_diff"]
+    k2.metric("Start-Qualität (Q1)", f"{start_val:+.1f}", help="Durchschnittliche Punktedifferenz in den ersten 5 Minuten")
+    
+    # Rotation
+    k3.metric("Rotation (Spieler >5min)", scout["rotation_depth"])
+    
+    # ATO Efficiency
+    ato_pts = scout["ato_stats"]["points"]
+    ato_poss = scout["ato_stats"]["possessions"]
+    ato_ppp = round(ato_pts / ato_poss, 2) if ato_poss > 0 else 0.0
+    k4.metric("ATO Effizienz", f"{ato_ppp} PPP", f"{ato_poss} Timeouts")
+
+    st.divider()
+    
+    # 2. Detail Spalten
+    c_left, c_right = st.columns([1, 1])
+    
+    with c_left:
+        st.subheader("🔑 Schlüsselspieler (Last 3)")
+        if scout["top_scorers_list"]:
+            df_top = pd.DataFrame(scout["top_scorers_list"])
+            st.dataframe(
+                df_top, 
+                column_config={
+                    "name": "Name",
+                    "ppg": st.column_config.ProgressColumn("PPG (Trend)", format="%.1f", min_value=0, max_value=30)
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+        else:
+            st.info("Keine Scorer Daten.")
+            
+        st.info("💡 **ATO (After Timeout):** Zeigt, wie gut das Team direkt nach einer Auszeit punktet (Points per Possession). Ein hoher Wert (>1.0) deutet auf gutes Coaching/Set-Plays hin.")
+
+    with c_right:
+        st.subheader("📅 Analysierte Spiele")
+        for g in games_data:
+            opp = g.get('meta_opponent', 'Gegner')
+            res = g.get('meta_result', '-:-')
+            date = g.get('meta_date', '')
+            with st.expander(f"{date}: vs {opp} ({res})"):
+                # Mini PBP Summary
+                st.caption(analyze_game_flow(g.get("actions", []), get_team_name(g.get("homeTeam",{})), get_team_name(g.get("guestTeam",{}))))
