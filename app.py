@@ -18,11 +18,10 @@ except ImportError:
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.utils import get_logo_url 
-# WICHTIG: get_best_team_logo jetzt aus src.api importieren!
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
-    fetch_season_games, get_best_team_logo, fetch_league_standings
+    fetch_season_games
 )
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
@@ -86,6 +85,26 @@ def inject_custom_css():
         """
         st.markdown(clean_css, unsafe_allow_html=True)
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_best_team_logo(team_id):
+    if not team_id: return None
+    candidates = [
+        f"https://api-s.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
+        f"https://api-n.dbbl.scb.world/images/teams/logo/{CURRENT_SEASON_ID}/{team_id}",
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}",
+        f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
+    ]
+    headers = { "User-Agent": "Mozilla/5.0", "Accept": "image/*", "Referer": "https://dbbl.de/" }
+    for url in candidates:
+        try:
+            r = requests.get(url, headers=headers, timeout=1.0)
+            if r.status_code == 200 and len(r.content) > 500: 
+                b64 = base64.b64encode(r.content).decode()
+                mime = "image/jpeg" if "jpg" in url or "jpeg" in url else "image/png"
+                return f"data:{mime};base64,{b64}"
+        except: continue
+    return None
+
 def image_to_base64_str(img_bytes):
     if not img_bytes: return ""
     try: return f"data:image/png;base64,{base64.b64encode(img_bytes).decode()}"
@@ -95,7 +114,7 @@ DEFAULT_OFFENSE = [{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds
 DEFAULT_DEFENSE = [{"Fokus": "Rebound", "Beschreibung": "box out!"}, {"Fokus": "Transition", "Beschreibung": "Slow the ball down! Pick up the ball early!"}, {"Fokus": "Communication", "Beschreibung": "Talk on positioning, helpside & on screens"}, {"Fokus": "Positioning", "Beschreibung": "close the middle on close outs and drives"}, {"Fokus": "Pick´n Roll", "Beschreibung": "red (yellow, last 8 sec. from shot clock)"}, {"Fokus": "DHO", "Beschreibung": "aggressive switch - same size / gap - small and big"}, {"Fokus": "Offball screens", "Beschreibung": "yellow"}]
 DEFAULT_ABOUT = [{"Fokus": "Be ready", "Beschreibung": "for wild caotic / a lot of 1-1 and shooting"}, {"Fokus": "Stay ready", "Beschreibung": "no matter what happens Don’t be bothered by calls/no calls"}, {"Fokus": "No matter what", "Beschreibung": "the score is, we always give 100%."}, {"Fokus": "Together", "Beschreibung": "Fight for & trust in each other!"}, {"Fokus": "Take care", "Beschreibung": "of the ball no easy turnovers to prevent easy fastbreaks!"}, {"Fokus": "Halfcourt", "Beschreibung": "Take responsibility! Stop them as a team!"}, {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"}]
 
-for key, default in [("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None), ("roster_df", None), ("team_stats", None), ("game_meta", {}), ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}), ("facts_offense", pd.DataFrame(DEFAULT_OFFENSE)), ("facts_defense", pd.DataFrame(DEFAULT_DEFENSE)), ("facts_about", pd.DataFrame(DEFAULT_ABOUT)), ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None), ("stats_team_id", None), ("live_view_mode", "today"), ("live_date_filter", date.today()), ("analysis_team_id", None), ("stats_league_selection", None)]:
+for key, default in [("current_page", "home"), ("print_mode", False), ("final_html", ""), ("pdf_bytes", None), ("roster_df", None), ("team_stats", None), ("game_meta", {}), ("report_filename", "scouting_report.pdf"), ("saved_notes", {}), ("saved_colors", {}), ("facts_offense", pd.DataFrame(DEFAULT_OFFENSE)), ("facts_defense", pd.DataFrame(DEFAULT_DEFENSE)), ("facts_about", pd.DataFrame(DEFAULT_ABOUT)), ("selected_game_id", None), ("generated_ai_report", None), ("live_game_id", None), ("stats_team_id", None), ("live_view_mode", "today"), ("live_date_filter", date.today()), ("analysis_team_id", None)]:
     if key not in st.session_state: st.session_state[key] = default
 
 def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
@@ -106,13 +125,8 @@ def go_player_comparison(): st.session_state.current_page = "player_comparison"
 def go_game_venue(): st.session_state.current_page = "game_venue" 
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
-def go_team_stats(): 
-    st.session_state.current_page = "team_stats"
-    st.session_state.stats_team_id = None
-    st.session_state.stats_league_selection = None
-def go_team_analysis(): 
-    st.session_state.current_page = "team_analysis"
-    st.session_state.analysis_team_id = None
+def go_team_stats(): st.session_state.current_page = "team_stats"
+def go_team_analysis(): st.session_state.current_page = "team_analysis"; st.session_state.analysis_team_id = None
 
 def render_page_header(page_title):
     inject_custom_css()
@@ -160,13 +174,13 @@ def render_home():
                  st.rerun()
 
 def render_team_stats_page():
-    inject_custom_css()
     if st.session_state.stats_team_id:
+        inject_custom_css() 
         tid = st.session_state.stats_team_id
         col_back, col_head = st.columns([1, 5])
         with col_back:
             if st.button("⬅️ Zur Übersicht", key="back_from_stats"): st.session_state.stats_team_id = None; st.rerun()
-        with st.spinner("Lade Team Statistiken..."): df, ts = fetch_team_data(tid, CURRENT_SEASON_ID); games_data = fetch_schedule(tid, CURRENT_SEASON_ID)
+        with st.spinner("Lade Team Statistiken..."): df, ts = fetch_team_data(tid, CURRENT_SEASON_ID)
         has_data = (df is not None and not df.empty) or (ts and len(ts) > 0)
         if has_data:
             t_info = TEAMS_DB.get(tid, {})
@@ -189,53 +203,26 @@ def render_team_stats_page():
                 col_config = { "NR": st.column_config.TextColumn("#", width="small"), "NAME_FULL": st.column_config.TextColumn("Name", width="medium"), "GP": st.column_config.NumberColumn("Spiele"), "MIN_DISPLAY": st.column_config.TextColumn("Min"), "PPG": st.column_config.NumberColumn("PTS", format="%.1f"), "FG%": st.column_config.NumberColumn("FG%", format="%.1f %%"), "3PCT": st.column_config.NumberColumn("3P%", format="%.1f %%"), "FTPCT": st.column_config.NumberColumn("FW%", format="%.1f %%"), "TOT": st.column_config.NumberColumn("REB", format="%.1f"), "AS": st.column_config.NumberColumn("AST", format="%.1f"), "ST": st.column_config.NumberColumn("STL", format="%.1f"), "TO": st.column_config.NumberColumn("TO", format="%.1f"), "PF": st.column_config.NumberColumn("PF", format="%.1f") }
                 st.dataframe(df[display_cols], column_config=col_config, hide_index=True, use_container_width=True, height=600)
             else: st.info("Keine Spielerdaten verfügbar.")
-            st.divider(); st.subheader("Saisonverlauf")
-            if games_data:
-                played = [g for g in games_data if g.get('has_result')]
-                if played:
-                    try: played.sort(key=lambda x: datetime.strptime(x['date'], "%d.%m.%Y %H:%M") if x['date'] and x['date'] != "-" else datetime.min, reverse=True)
-                    except: pass
-                    hist = []
-                    for g in played:
-                        is_home = str(g.get('homeTeamId')) == str(tid)
-                        own = int(g['home_score']) if is_home else int(g['guest_score'])
-                        opp = int(g['guest_score']) if is_home else int(g['home_score'])
-                        hist.append({ "Datum": g['date'].split(" ")[0], "Ort": "vs" if is_home else "@", "Gegner": g['guest'] if is_home else g['home'], "Ergebnis": g['score'], "W/L": "W" if own > opp else ("L" if own < opp else "T"), "Diff": f"{'+' if own > opp else ''}{own-opp}" })
-                    st.dataframe(pd.DataFrame(hist), hide_index=True, use_container_width=True)
-                else: st.info("Keine absolvierten Spiele.")
-            else: st.info("Keine Spieldaten.")
         else: st.error(f"Daten konnten für Saison {CURRENT_SEASON_ID} nicht geladen werden.")
-    elif st.session_state.stats_league_selection is None:
-        render_page_header("📈 Liga Auswahl")
-        c1, c2, c3 = st.columns(3)
-        if c1.button("1. DBBL", use_container_width=True): st.session_state.stats_league_selection = "1. DBBL"; st.rerun()
-        if c2.button("2. DBBL Nord", use_container_width=True): st.session_state.stats_league_selection = "Nord"; st.rerun()
-        if c3.button("2. DBBL Süd", use_container_width=True): st.session_state.stats_league_selection = "Süd"; st.rerun()
     else:
-        sel = st.session_state.stats_league_selection
-        c_back, c_title = st.columns([1, 4])
-        if c_back.button("⬅️ Zurück"): st.session_state.stats_league_selection = None; st.rerun()
-        c_title.title(f"Übersicht: {sel}"); st.divider()
-        c_tbl, c_grid = st.columns([1, 2], gap="large")
-        with c_tbl:
-            st.subheader("Tabelle")
-            with st.spinner("Lade Tabelle..."): df = fetch_league_standings(CURRENT_SEASON_ID, sel)
-            if not df.empty: st.dataframe(df, hide_index=True, use_container_width=True, height=600)
-            else: st.info("Tabelle nicht verfügbar.")
-        with c_grid:
-            st.subheader("Teams")
-            teams = {k: v for k, v in TEAMS_DB.items() if v.get("staffel") == sel}
-            if teams:
-                cols = st.columns(3)
-                for idx, (tid, info) in enumerate(teams.items()):
-                    with cols[idx % 3]:
-                        with st.container(border=True):
-                            l = get_best_team_logo(tid)
-                            c_i, c_t = st.columns([1, 2])
-                            if l: c_i.image(l, use_container_width=True)
-                            else: c_i.write(BASKETBALL_ICON)
-                            c_t.markdown(f"**{info['name']}**")
-                            if st.button("Stats ➜", key=f"btn_stats_{tid}", use_container_width=True): st.session_state.stats_team_id = tid; st.rerun()
+        render_page_header("📈 Team Statistiken")
+        tab_nord, tab_sued = st.tabs(["Nord", "Süd"])
+        def render_logo_grid(staffel_name):
+            teams = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == staffel_name}
+            cols = st.columns(5)
+            for idx, (tid, info) in enumerate(teams.items()):
+                col = cols[idx % 5]
+                with col:
+                    with st.container(border=True):
+                        logo_b64 = get_best_team_logo(tid)
+                        c_l, c_m, c_r = st.columns([1, 2, 1])
+                        with c_m:
+                            if logo_b64: st.image(logo_b64, width=100)
+                            else: st.markdown(f"<div style='font-size: 40px; text-align:center;'>{BASKETBALL_ICON}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='text-align:center; font-weight:bold; height: 3em; display:flex; align-items:center; justify-content:center;'>{info['name']}</div>", unsafe_allow_html=True)
+                        if st.button("Stats anzeigen", key=f"btn_stats_{tid}", use_container_width=True): st.session_state.stats_team_id = tid; st.rerun()
+        with tab_nord: st.subheader("Teams Nord"); render_logo_grid("Nord")
+        with tab_sued: st.subheader("Teams Süd"); render_logo_grid("Süd")
 
 def render_comparison_page():
     render_page_header("📊 Head-to-Head Vergleich") 
@@ -607,8 +594,7 @@ def render_team_analysis_page():
             with col:
                 with st.container(border=True):
                     logo = get_best_team_logo(tid)
-                    # HIER WURDE DER WIDTH PARAMETER HINZUGEFÜGT
-                    if logo: st.image(logo, width=100)
+                    if logo: st.image(logo, use_container_width=True)
                     else: st.markdown(f"### {info['name']}")
                     if st.button(f"Analyse {info['name']}", key=f"btn_ana_{tid}", use_container_width=True):
                         st.session_state.analysis_team_id = tid
