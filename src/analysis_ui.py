@@ -332,11 +332,7 @@ def generate_complex_ai_prompt(box):
 
 def run_openai_generation(api_key, prompt):
     # Dies wird nur noch für die Einzelspiel-Analyse genutzt, nicht mehr für das Team-Scouting
-    client = openai.OpenAI(api_key=api_key)
-    try:
-        response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": "Du bist ein Sportjournalist."}, {"role": "user", "content": prompt}], temperature=0.7)
-        return response.choices[0].message.content
-    except Exception as e: return f"Fehler: {str(e)}"
+    pass
 
 # --- NEUE FUNKTIONEN FÜR PREP & LIVE ---
 
@@ -728,7 +724,7 @@ def analyze_scouting_data(team_id, detailed_games):
                         if i + j >= len(actions): break
                         next_act = actions[i+j]
                         pts = safe_int(next_act.get("points"))
-                         n_tid = str(next_act.get("seasonTeamId"))
+                        n_tid = str(next_act.get("seasonTeamId"))
                         
                         # Punkte für uns?
                         if pts > 0 and n_tid in my_ids:
