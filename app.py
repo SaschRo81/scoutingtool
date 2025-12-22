@@ -585,7 +585,7 @@ def render_live_page():
                 st.session_state.live_view_mode = "today"
                 st.rerun()
         with c_mode2:
-            if st.button("rewind Vergangene Spiele", type="primary" if st.session_state.live_view_mode == "past" else "secondary", use_container_width=True):
+            if st.button("Vergangene Spiele", type="primary" if st.session_state.live_view_mode == "past" else "secondary", use_container_width=True):
                 st.session_state.live_view_mode = "past"
                 st.rerun()
 
