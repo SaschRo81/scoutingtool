@@ -5,6 +5,7 @@ import requests
 import pandas as pd
 from datetime import datetime
 import pytz
+import base64
 from src.config import API_HEADERS, SEASON_ID, TEAMS_DB
 
 # --- HILFSFUNKTIONEN ---
@@ -44,6 +45,30 @@ def extract_nationality(data_obj):
     if "nationality" in data_obj and isinstance(data_obj["nationality"], dict):
         return data_obj["nationality"].get("name", "-")
     return "-"
+
+# --- NEU: LOGO FUNKTION HIERHER VERSCHOBEN ---
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_best_team_logo(team_id):
+    if not team_id: return None
+    # Wir nutzen SEASON_ID aus der Config oder Fallback
+    sid = SEASON_ID if SEASON_ID else "2025"
+    
+    candidates = [
+        f"https://api-s.dbbl.scb.world/images/teams/logo/{sid}/{team_id}",
+        f"https://api-n.dbbl.scb.world/images/teams/logo/{sid}/{team_id}",
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}", # Fallback Vorjahr
+        f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
+    ]
+    headers = { "User-Agent": "Mozilla/5.0", "Accept": "image/*", "Referer": "https://dbbl.de/" }
+    for url in candidates:
+        try:
+            r = requests.get(url, headers=headers, timeout=1.0)
+            if r.status_code == 200 and len(r.content) > 500: 
+                b64 = base64.b64encode(r.content).decode()
+                mime = "image/jpeg" if "jpg" in url or "jpeg" in url else "image/png"
+                return f"data:{mime};base64,{b64}"
+        except: continue
+    return None
 
 # --- CACHED API CALLS ---
 
