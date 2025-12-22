@@ -125,9 +125,7 @@ def go_game_venue(): st.session_state.current_page = "game_venue"
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
 def go_team_stats(): st.session_state.current_page = "team_stats"
-def go_team_analysis(): st.session_state.current_page = "team_analysis"
-    
-    st.session_state.analysis_team_id = None
+def go_team_analysis(): st.session_state.current_page = "team_analysis"; st.session_state.analysis_team_id = None
 
 def render_page_header(page_title):
     inject_custom_css()
