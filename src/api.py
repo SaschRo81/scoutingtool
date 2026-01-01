@@ -413,11 +413,11 @@ def fetch_team_rank(team_id, season_id):
 @st.cache_data(ttl=1800)
 def fetch_league_standings(season_id, league_selection):
     """
-    Holt die Tabelle basierend auf der Liga-Auswahl (Nord/Süd/1. DBBL).
-    Priorisiert die korrekte API, um falsche Tabellen (z.B. Süd statt Nord) zu vermeiden.
+    Holt die Tabelle basierend auf der Liga-Auswahl.
+    VALIDIERT den Inhalt, um sicherzustellen, dass die API nicht einfach die falsche Staffel zurückgibt.
     """
+    # 1. URLs definieren mit Priorisierung
     urls = []
-    
     if league_selection == "Nord":
         urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
         urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
@@ -437,6 +437,30 @@ def fetch_league_standings(season_id, league_selection):
                 items = data if isinstance(data, list) else data.get("items", [])
                 
                 if not items: continue
+
+                # --- VALIDIERUNG START ---
+                # Wir prüfen stichprobenartig, ob die Teams zur gewählten Staffel passen.
+                # Wenn wir "Nord" wollen, sollten die Team-IDs auch "Nord"-Teams aus unserer TEAMS_DB sein.
+                if league_selection in ["Nord", "Süd"]:
+                    match_count = 0
+                    check_count = 0
+                    
+                    for entry in items:
+                        # Versuchen die Team ID zu finden (seasonTeam -> teamId)
+                        st_obj = entry.get("seasonTeam", {})
+                        tid = safe_int(st_obj.get("teamId"))
+                        if not tid: tid = safe_int(st_obj.get("id")) # Fallback
+                        
+                        if tid in TEAMS_DB:
+                            check_count += 1
+                            if TEAMS_DB[tid].get("staffel") == league_selection:
+                                match_count += 1
+                    
+                    # Wenn wir Teams aus unserer DB gefunden haben, aber weniger als 50% passen zur Staffel:
+                    # Dann ist das die falsche Tabelle! (z.B. Süd API liefert Süd Tabelle trotz group=NORTH)
+                    if check_count > 0 and (match_count / check_count) < 0.5:
+                        continue # Nächste URL probieren!
+                # --- VALIDIERUNG ENDE ---
 
                 table_data = []
                 for entry in items:
@@ -458,6 +482,12 @@ def fetch_league_standings(season_id, league_selection):
             continue
             
     return pd.DataFrame()
+
+# Helper für safe_int in api.py da es hier auch genutzt wird
+def safe_int(val):
+    if val is None: return 0
+    try: return int(float(val))
+    except: return 0
 
 def fetch_last_n_games_complete(team_id, season_id, n=3):
     """
