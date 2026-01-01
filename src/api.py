@@ -168,25 +168,44 @@ def fetch_team_data(team_id, season_id):
             if p_list:
                 df = pd.json_normalize(p_list)
                 df.columns = [str(c).lower() for c in df.columns]
-                def get_val(key, default=0.0):
-                    matches = [c for c in df.columns if key == c or (key in c and 'pergame' not in c and 'percent' not in c)]
-                    if matches: return pd.to_numeric(df[sorted(matches, key=len)[0]], errors="coerce").fillna(default)
-                    return pd.Series([default]*len(df), index=df.index)
+                
+                # --- WICHTIG: ROBUSTE NAMENSFINDUNG ---
+                # Prüfen auf verschiedene API-Strukturen
+                col_fn = None
+                col_ln = None
+                
+                # Variante 1: seasonPlayer.firstName
+                if 'seasonplayer.firstname' in df.columns: col_fn = 'seasonplayer.firstname'
+                elif 'firstname' in df.columns: col_fn = 'firstname'
+                
+                if 'seasonplayer.lastname' in df.columns: col_ln = 'seasonplayer.lastname'
+                elif 'lastname' in df.columns: col_ln = 'lastname'
+                
+                # Name zusammensetzen
+                if col_fn and col_ln:
+                    df["NAME_FULL"] = (df[col_fn].astype(str) + " " + df[col_ln].astype(str)).str.strip()
+                else:
+                    # Fallback wenn Spalten fehlen
+                    df["NAME_FULL"] = "Unknown"
 
+                # ID finden
                 col_id_opts = ["seasonplayer.id", "seasonplayerid", "personid", "playerid", "id"]
                 col_id = None
                 for opt in col_id_opts:
                      matches = [c for c in df.columns if opt in c]
                      if matches: col_id = sorted(matches, key=len)[0]; break
                 
-                col_fn = next((c for c in df.columns if "firstname" in c), None)
-                col_ln = next((c for c in df.columns if "lastname" in c), None)
+                # Nummer finden
                 col_nr = next((c for c in df.columns if "shirtnumber" in c or "jerseynumber" in c), None)
 
-                df["NAME_FULL"] = (df[col_fn].astype(str) + " " + df[col_ln].astype(str)).str.strip() if col_fn and col_ln else "Unknown"
                 df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
                 df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
                 
+                def get_val(key, default=0.0):
+                    matches = [c for c in df.columns if key == c or (key in c and 'pergame' not in c and 'percent' not in c)]
+                    if matches: return pd.to_numeric(df[sorted(matches, key=len)[0]], errors="coerce").fillna(default)
+                    return pd.Series([default]*len(df), index=df.index)
+
                 def get_meta_field(pid, field_key):
                     val = roster_lookup.get(pid, {}).get(field_key)
                     if val and val != "-": return val
@@ -393,7 +412,13 @@ def fetch_team_rank(team_id, season_id):
 
                     if match_by_id or match_by_name:
                         return {
-                            "rank": entry.get("rank", 0), "totalGames": entry.get("totalGames", 0), "totalVictories": entry.get("totalVictories", 0), "totalLosses": entry.get("totalLosses", 0), "last10Victories": entry.get("last10Victories", 0), "last10Losses": entry.get("last10Losses", 0), "points": entry.get("totalPointsMade", 0) 
+                            "rank": entry.get("rank", 0),
+                            "totalGames": entry.get("totalGames", 0),
+                            "totalVictories": entry.get("totalVictories", 0),
+                            "totalLosses": entry.get("totalLosses", 0),
+                            "last10Victories": entry.get("last10Victories", 0),
+                            "last10Losses": entry.get("last10Losses", 0),
+                            "points": entry.get("totalPointsMade", 0) 
                         }
         except: continue
     return None
@@ -414,7 +439,9 @@ def fetch_league_standings(season_id, league_selection):
                 table_data = []
                 for entry in items:
                     team_name = entry.get("seasonTeam", {}).get("name", "Unknown")
-                    rank = entry.get("rank", 0); wins = entry.get("totalVictories", 0); losses = entry.get("totalLosses", 0)
+                    rank = entry.get("rank", 0)
+                    wins = entry.get("totalVictories", 0)
+                    losses = entry.get("totalLosses", 0)
                     table_data.append({ "Platz": rank, "Team": team_name, "W": wins, "L": losses })
                 table_data.sort(key=lambda x: x["Platz"])
                 return pd.DataFrame(table_data)
@@ -454,28 +481,3 @@ def fetch_last_n_games_complete(team_id, season_id, n=3):
             box['meta_result'] = game['score']
             detailed_games.append(box)
     return detailed_games
-    
-@st.cache_data(ttl=1800)
-def fetch_team_rank(team_id, season_id):
-    """Holt die echte Bilanz (Siege/Niederlagen) aus der Tabelle."""
-    staffel = TEAMS_DB.get(int(team_id), {}).get("staffel", "")
-    group = "SOUTH" if staffel == "Süd" else "NORTH"
-    
-    for sub in ["api-s", "api-n"]:
-        try:
-            r = requests.get(f"https://{sub}.dbbl.scb.world/standings?seasonId={season_id}&group={group}", headers=API_HEADERS, timeout=3)
-            if r.status_code == 200:
-                data = r.json()
-                for entry in data:
-                    st_obj = entry.get("seasonTeam", {})
-                    # Abgleich über Team-ID oder SeasonTeam-ID
-                    if str(st_obj.get("teamId")) == str(team_id) or str(st_obj.get("id")) == str(team_id):
-                        return {
-                            "rank": entry.get("rank"),
-                            "totalGames": entry.get("totalGames"),
-                            "totalVictories": entry.get("totalVictories"), # Hier kommen die 7 Siege her
-                            "totalLosses": entry.get("totalLosses"),
-                            "points": entry.get("totalPointsMade")
-                        }
-        except: continue
-    return {"rank": "-", "totalGames": 0, "totalVictories": 0, "totalLosses": 0}
