@@ -169,35 +169,22 @@ def fetch_team_data(team_id, season_id):
                 df = pd.json_normalize(p_list)
                 df.columns = [str(c).lower() for c in df.columns]
                 
-                # --- WICHTIG: ROBUSTE NAMENSFINDUNG ---
-                # Prüfen auf verschiedene API-Strukturen
-                col_fn = None
-                col_ln = None
-                
-                # Variante 1: seasonPlayer.firstName
+                col_fn = None; col_ln = None
                 if 'seasonplayer.firstname' in df.columns: col_fn = 'seasonplayer.firstname'
                 elif 'firstname' in df.columns: col_fn = 'firstname'
-                
                 if 'seasonplayer.lastname' in df.columns: col_ln = 'seasonplayer.lastname'
                 elif 'lastname' in df.columns: col_ln = 'lastname'
                 
-                # Name zusammensetzen
-                if col_fn and col_ln:
-                    df["NAME_FULL"] = (df[col_fn].astype(str) + " " + df[col_ln].astype(str)).str.strip()
-                else:
-                    # Fallback wenn Spalten fehlen
-                    df["NAME_FULL"] = "Unknown"
+                if col_fn and col_ln: df["NAME_FULL"] = (df[col_fn].astype(str) + " " + df[col_ln].astype(str)).str.strip()
+                else: df["NAME_FULL"] = "Unknown"
 
-                # ID finden
                 col_id_opts = ["seasonplayer.id", "seasonplayerid", "personid", "playerid", "id"]
                 col_id = None
                 for opt in col_id_opts:
                      matches = [c for c in df.columns if opt in c]
                      if matches: col_id = sorted(matches, key=len)[0]; break
                 
-                # Nummer finden
                 col_nr = next((c for c in df.columns if "shirtnumber" in c or "jerseynumber" in c), None)
-
                 df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
                 df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
                 
@@ -425,27 +412,51 @@ def fetch_team_rank(team_id, season_id):
 
 @st.cache_data(ttl=1800)
 def fetch_league_standings(season_id, league_selection):
-    group_param = ""
-    if league_selection == "Nord": group_param = "&group=NORTH"
-    elif league_selection == "Süd": group_param = "&group=SOUTH"
-    urls = [ f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}{group_param}", f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}{group_param}" ]
+    """
+    Holt die Tabelle basierend auf der Liga-Auswahl (Nord/Süd/1. DBBL).
+    Priorisiert die korrekte API, um falsche Tabellen (z.B. Süd statt Nord) zu vermeiden.
+    """
+    urls = []
+    
+    if league_selection == "Nord":
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
+    elif league_selection == "Süd":
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
+    else:
+        # Fallback für 1. DBBL oder andere
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}")
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}")
+
     for url in urls:
         try:
             r = requests.get(url, headers=API_HEADERS, timeout=3)
             if r.status_code == 200:
                 data = r.json()
                 items = data if isinstance(data, list) else data.get("items", [])
+                
                 if not items: continue
+
                 table_data = []
                 for entry in items:
                     team_name = entry.get("seasonTeam", {}).get("name", "Unknown")
                     rank = entry.get("rank", 0)
                     wins = entry.get("totalVictories", 0)
                     losses = entry.get("totalLosses", 0)
-                    table_data.append({ "Platz": rank, "Team": team_name, "W": wins, "L": losses })
+                    
+                    table_data.append({
+                        "Platz": rank,
+                        "Team": team_name,
+                        "W": wins,
+                        "L": losses
+                    })
+                
                 table_data.sort(key=lambda x: x["Platz"])
                 return pd.DataFrame(table_data)
-        except: continue
+        except:
+            continue
+            
     return pd.DataFrame()
 
 def fetch_last_n_games_complete(team_id, season_id, n=3):
