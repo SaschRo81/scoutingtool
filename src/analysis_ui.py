@@ -1,9 +1,7 @@
-# --- START OF FILE src/analysis_ui.py ---
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from datetime import datetime
 import time
+from datetime import datetime
 
 # --- HELPER FUNCTIONS ---
 
@@ -215,8 +213,6 @@ def calculate_real_lineups(team_id, detailed_games):
                 parts = raw_time.split(':')
                 m, s = int(parts[-2]), int(parts[-1])
                 # (Periode - 1) * 10 Minuten * 60 Sekunden + abgelaufene Zeit im Viertel
-                # Achtung: PBP Zeit läuft oft RUNTER. DBBL API ist oft "played time". 
-                # Annahme hier: gameTime steigt an (00:00 -> 10:00).
                 current_time_total_secs = (act.get("period", 1)-1)*600 + (m*60 + s)
             except: 
                 current_time_total_secs = last_time_total_secs
