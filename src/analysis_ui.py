@@ -61,40 +61,43 @@ def get_player_lookup(box):
             lookup[pid] = f"#{nr} {name}"
     return lookup
 
-def get_player_team_map(box):
-    """Erstellt eine Map: PlayerID -> TeamName."""
-    player_team = {}
-    h_name = get_team_name(box.get("homeTeam", {}), "Heim")
-    g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-    for p in box.get("homeTeam", {}).get('playerStats', []):
-        player_team[str(p.get('seasonPlayer', {}).get('id'))] = h_name
-    for p in box.get("guestTeam", {}).get('playerStats', []):
-        player_team[str(p.get('seasonPlayer', {}).get('id'))] = g_name
-    return player_team
-
-def get_time_info(time_str, period):
-    """Berechnet Originalzeit und Restzeit."""
-    if not time_str: return "00:00", "10:00"
-    p_int = safe_int(period)
-    base_min = 5 if p_int > 4 else 10
-    total_sec = base_min * 60
-    elapsed_sec = 0
+def get_time_display_values(api_time_str, period):
+    """
+    DBBL API sendet gameTime meist als Countdown (Remaining).
+    Gibt (Restzeit, Verstrichene Zeit) zurück.
+    """
+    if not api_time_str: return "00:00", "00:00"
+    
     try:
-        if "PT" in str(time_str):
-            t = str(time_str).replace("PT", "").replace("S", "")
+        # Zeit in Sekunden umwandeln
+        if "PT" in str(api_time_str):
+            t = str(api_time_str).replace("PT", "").replace("S", "")
             if "M" in t:
                 parts = t.split("M")
-                elapsed_sec = int(float(parts[0])) * 60 + int(float(parts[1] or 0))
-            else: elapsed_sec = int(float(t))
-        elif ":" in str(time_str):
-            parts = str(time_str).split(":")
-            if len(parts) == 3: elapsed_sec = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
-            elif len(parts) == 2: elapsed_sec = int(parts[0])*60 + int(parts[1])
-        else: elapsed_sec = int(float(time_str))
-        rem_sec = total_sec - elapsed_sec
-        if rem_sec < 0: rem_sec = 0
-        return f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}", f"{rem_sec // 60:02d}:{rem_sec % 60:02d}"
-    except: return str(time_str), "10:00"
+                api_seconds = int(float(parts[0])) * 60 + int(float(parts[1] or 0))
+            else:
+                api_seconds = int(float(t))
+        elif ":" in str(api_time_str):
+            parts = str(api_time_str).split(":")
+            if len(parts) == 3: api_seconds = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
+            elif len(parts) == 2: api_seconds = int(parts[0])*60 + int(parts[1])
+        else:
+            api_seconds = int(float(api_time_str))
+
+        # DBBL Logik: api_seconds ist meistens schon der Countdown
+        # Wir berechnen die verstrichene Zeit für die Anzeige in Klammern
+        base_min = 5 if safe_int(period) > 4 else 10
+        total_sec = base_min * 60
+        
+        elapsed_sec = total_sec - api_seconds
+        if elapsed_sec < 0: elapsed_sec = 0
+        
+        countdown = f"{api_seconds // 60:02d}:{api_seconds % 60:02d}"
+        elapsed = f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}"
+        
+        return countdown, elapsed
+    except:
+        return str(api_time_str), "00:00"
 
 # --- VISUELLE KOMPONENTEN ---
 
@@ -122,7 +125,7 @@ def render_live_comparison_bars(box):
             hf, gf = (hv/mv)*100, (gv/mv)*100
         st.markdown(f"""<div class="stat-container"><div class="stat-label">{label}</div><div class="bar-wrapper"><div class="val-text" style="text-align:right;">{hd}</div><div class="bar-bg"><div class="bar-fill-home" style="width:{hf}%;"></div></div><div class="bar-bg"><div class="bar-fill-guest" style="width:{gf}%;"></div></div><div class="val-text" style="text-align:left;">{gd}</div></div></div>""", unsafe_allow_html=True)
 
-# --- REINE ANALYSIS-FUNKTIONEN ---
+# --- ANALYSIS FUNKTIONEN ---
 
 def render_game_header(details):
     h_data, g_data = details.get("homeTeam", {}), details.get("guestTeam", {})
@@ -170,12 +173,6 @@ def generate_game_summary(box):
     res = box.get("result", {})
     return f"Spiel zwischen {h} und {g}. Endstand {res.get('homeTeamFinalScore')}:{res.get('guestTeamFinalScore')}."
 
-def generate_complex_ai_prompt(box):
-    return f"KI-Prompt für Game ID {box.get('id','-')}"
-
-def run_openai_generation(api_key, prompt):
-    return "KI-Dienst momentan über Prompt-Generator verfügbar."
-
 # --- LIVE VIEW & TICKER ---
 
 def render_full_play_by_play(box, height=600):
@@ -183,44 +180,41 @@ def render_full_play_by_play(box, height=600):
     if not actions: st.info("Keine Play-by-Play Daten verfügbar."); return
     
     player_map = get_player_lookup(box)
-    player_team_map = get_player_team_map(box)
     
-    h_name = get_team_name(box.get("homeTeam", {}))
-    g_name = get_team_name(box.get("guestTeam", {}))
+    # Umfangreiche Team-ID Map erstellen für saubere Zuordnung
+    h_data, g_data = box.get("homeTeam", {}), box.get("guestTeam", {})
+    h_name, g_name = get_team_name(h_data), get_team_name(g_data)
     
+    team_id_map = {}
+    for team_obj, name in [(h_data, h_name), (g_data, g_name)]:
+        team_id_map[str(team_obj.get("seasonTeamId"))] = name
+        team_id_map[str(team_obj.get("teamId"))] = name
+        team_id_map[str(team_obj.get("seasonTeam", {}).get("id"))] = name
+
     data = []
     run_h, run_g = 0, 0
     actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
     
     for act in actions_sorted:
-        # Score Carry-Over
+        # Score Fortschreibung
         hr, gr = act.get("homeTeamPoints"), act.get("guestTeamPoints")
         if hr is not None and gr is not None:
             nh, ng = safe_int(hr), safe_int(gr)
-            if (nh + ng) >= (run_h + run_g): 
-                run_h, run_g = nh, ng
+            if (nh + ng) >= (run_h + run_g): run_h, run_g = nh, ng
         
         p = act.get("period", "")
-        t_orig, t_rem = get_time_info(act.get("gameTime") or act.get("timeInGame"), p)
+        # Zeit Logik: API liefert Countdown
+        t_rem, t_elap = get_time_display_values(act.get("gameTime") or act.get("timeInGame"), p)
         
-        # Team Zuordnung über Spieler-Map
-        pid = str(act.get("seasonPlayerId"))
-        team = player_team_map.get(pid, "-")
+        tid = str(act.get("seasonTeamId"))
+        team = team_id_map.get(tid, "-")
         
-        # Falls Spieler ID fehlt (z.B. bei Timeouts), versuche über seasonTeamId
-        if team == "-":
-            tid = str(act.get("seasonTeamId"))
-            h_sid = str(box.get("homeTeam",{}).get("seasonTeamId"))
-            g_sid = str(box.get("guestTeam",{}).get("seasonTeamId"))
-            if tid == h_sid: team = h_name
-            elif tid == g_sid: team = g_name
-
-        actor = player_map.get(pid, "")
+        actor = player_map.get(str(act.get("seasonPlayerId")), "")
         desc = translate_text(act.get("type", ""))
         if act.get("points"): desc += f" (+{act.get('points')})"
         
         data.append({
-            "Zeit": f"Q{p} | {t_orig} (noch {t_rem})", 
+            "Zeit": f"Q{p} | {t_rem} (gespielt {t_elap})", 
             "Score": f"{run_h}:{run_g}", 
             "Team": team, 
             "Spieler": actor, 
@@ -228,10 +222,7 @@ def render_full_play_by_play(box, height=600):
         })
     
     df = pd.DataFrame(data)
-    # WICHTIG: Umkehren, damit die aktuellste Aktion oben steht
-    if not df.empty:
-        df = df.iloc[::-1]
-    
+    if not df.empty: df = df.iloc[::-1] # Neueste oben
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def create_live_boxscore_df(team_data):
@@ -261,17 +252,21 @@ def render_live_view(box):
     sh, sg = safe_int(res.get('homeTeamFinalScore')), safe_int(res.get('guestTeamFinalScore'))
     period = res.get('period') or box.get('period')
     actions = box.get("actions", [])
+    
     if sh == 0 and sg == 0 and actions:
         last = sorted(actions, key=lambda x: x.get('actionNumber', 0))[-1]
         sh, sg = safe_int(last.get('homeTeamPoints')), safe_int(last.get('guestTeamPoints'))
         if not period: period = last.get('period')
+        
     p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
     if not period or period == 0:
         for act in reversed(actions):
             if act.get('period'): period = act.get('period'); break
     p_str = (f"OT{safe_int(period)-4}" if safe_int(period) > 4 else p_map.get(safe_int(period), f"Q{period}")) if period else "-"
+    
     gt = box.get('gameTime') or (actions[-1].get('gameTime') if actions else None)
-    t_rem, t_orig = get_time_info(gt, period)
+    t_rem, t_elap = get_time_display_values(gt, period)
+    
     h_hc = h_data.get("headCoachName") or h_data.get("headCoach",{}).get("lastName","-")
     g_hc = g_data.get("headCoachName") or g_data.get("headCoach",{}).get("lastName","-")
 
@@ -280,7 +275,7 @@ def render_live_view(box):
             <div style='font-size:1.4em; font-weight:bold;'>{h_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {h_hc})</span></div>
             <div style='font-size:3.5em; font-weight:bold; line-height:1;'>{sh} : {sg}</div>
             <div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div>
-            <div style='color:#ffcc00; font-weight:bold; font-size:2em; margin-top:10px;'>{p_str} | {t_rem} <span style='font-size:0.5em; color:#fff;'> (gespielt {t_orig})</span></div>
+            <div style='color:#ffcc00; font-weight:bold; font-size:2em; margin-top:10px;'>{p_str} | {t_rem} <span style='font-size:0.5em; color:#fff;'> (gespielt {t_elap})</span></div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -298,7 +293,7 @@ def render_live_view(box):
     with t2: render_live_comparison_bars(box)
     with t3: render_full_play_by_play(box)
 
-# --- PREP & SCOUTING (Team-Analyse) ---
+# --- PREP & SCOUTING ---
 
 def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
     st.subheader(f"Analyse: {team_name}")
