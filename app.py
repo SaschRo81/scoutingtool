@@ -36,7 +36,14 @@ from src.analysis_ui import (
     generate_complex_ai_prompt, render_full_play_by_play, run_openai_generation,
     render_prep_dashboard, render_live_view, render_team_analysis_dashboard
 )
-
+# --- DIRECT LINKING LOGIC ---
+# Prüft, ob in der URL ein Parameter wie ?page=live steht
+if "page" in st.query_params:
+    requested_page = st.query_params["page"]
+    # Liste der erlaubten Seiten (Sicherheitssperre)
+    if requested_page in ["live", "scouting", "comparison", "analysis", "team_analysis"]:
+        st.session_state.current_page = requested_page
+        
 # --- KONFIGURATION ---
 CURRENT_SEASON_ID = "2025" 
 
