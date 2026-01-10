@@ -54,20 +54,7 @@ def get_player_lookup(box):
             lookup[pid] = f"#{nr} {name}"
     return lookup
 
-def get_player_team_lookup(box):
-    lookup = {}
-    h_name = get_team_name(box.get("homeTeam", {}), "Heim")
-    g_name = get_team_name(box.get("guestTeam", {}), "Gast")
-    for p in box.get("homeTeam", {}).get('playerStats', []):
-        pid = str(p.get('seasonPlayer', {}).get('id'))
-        lookup[pid] = h_name
-    for p in box.get("guestTeam", {}).get('playerStats', []):
-        pid = str(p.get('seasonPlayer', {}).get('id'))
-        lookup[pid] = g_name
-    return lookup
-
 def convert_elapsed_to_remaining(time_str, period):
-    """Berechnet die Restzeit (Countdown) von 10:00 abwärts."""
     if not time_str: return "10:00"
     base_min = 5 if safe_int(period) > 4 else 10
     total_sec = base_min * 60
@@ -89,78 +76,101 @@ def convert_elapsed_to_remaining(time_str, period):
         return f"{rem_sec // 60:02d}:{rem_sec % 60:02d}"
     except: return "10:00"
 
-def calculate_advanced_stats_from_actions(actions, home_id, guest_id):
-    stats = {"h_lead": 0, "g_lead": 0, "h_run": 0, "g_run": 0, "h_paint": 0, "g_paint": 0, "h_2nd": 0, "g_2nd": 0, "h_fb": 0, "g_fb": 0}
-    if not actions: return stats
-    cur_h = 0; cur_g = 0; run_team = None; run_score = 0; hid_str = str(home_id)
-    sorted_actions = sorted(actions, key=lambda x: x.get('actionNumber', 0))
-    for act in sorted_actions:
-        new_h = safe_int(act.get("homeTeamPoints")); new_g = safe_int(act.get("guestTeamPoints"))
-        if new_h == 0 and new_g == 0 and act.get("homeTeamPoints") is None: new_h = cur_h; new_g = cur_g
-        pts_h = new_h - cur_h; pts_g = new_g - cur_g
-        if pts_h > 0:
-            if run_team == "home": run_score += pts_h
-            else: run_team = "home"; run_score = pts_h
-            if run_score > stats["h_run"]: stats["h_run"] = run_score
-        elif pts_g > 0:
-            if run_team == "guest": run_score += pts_g
-            else: run_team = "guest"; run_score = pts_g
-            if run_score > stats["g_run"]: stats["g_run"] = run_score
-        pts_total = pts_h + pts_g
-        if pts_total > 0:
-            act_tid = str(act.get("seasonTeamId", ""))
-            is_home_action = (act_tid == hid_str) if act_tid else (pts_h > 0)
-            qualifiers = act.get("qualifiers", []); q_str = " ".join([str(x).lower() for x in qualifiers]); type_str = str(act.get("type", "")).lower()
-            if "fastbreak" in q_str or "fastbreak" in type_str:
-                if is_home_action: stats["h_fb"] += pts_total
-                else: stats["g_fb"] += pts_total
-            if "paint" in q_str or "inside" in q_str or "layup" in type_str:
-                if is_home_action: stats["h_paint"] += pts_total
-                else: stats["g_paint"] += pts_total
-            if "second" in q_str or "2nd" in q_str:
-                if is_home_action: stats["h_2nd"] += pts_total
-                else: stats["g_2nd"] += pts_total
-        diff = new_h - new_g
-        if diff > 0 and diff > stats["h_lead"]: stats["h_lead"] = diff
-        if diff < 0 and abs(diff) > stats["g_lead"]: stats["g_lead"] = abs(diff)
-        cur_h = new_h; cur_g = new_g
-    return stats
+# --- NEU: VISUELLE STATISTIK-BALKEN ---
 
-def analyze_game_flow(actions, home_name, guest_name):
-    if not actions: return "Keine Play-by-Play Daten verfügbar."
-    lead_changes = 0; ties = 0; last_leader = None; crunch_log = []
-    sorted_actions = sorted(actions, key=lambda x: x.get('actionNumber', 0))
-    for act in sorted_actions:
-        h_score = safe_int(act.get("homeTeamPoints")); g_score = safe_int(act.get("guestTeamPoints"))
-        if h_score == 0 and g_score == 0: continue
-        if h_score > g_score: current_leader = 'home'
-        elif g_score > h_score: current_leader = 'guest'
-        else: current_leader = 'tie'
-        if last_leader is not None:
-            if current_leader != last_leader:
-                if current_leader == 'tie': ties += 1
-                elif last_leader != 'tie': lead_changes += 1
-                elif last_leader == 'tie': lead_changes += 1
-        last_leader = current_leader
-    relevant_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
-    filtered_actions = [a for a in sorted_actions if a.get("type") in relevant_types]
-    last_events = filtered_actions[-10:] 
-    crunch_log.append("\n**Schlussphase:**")
-    for ev in last_events:
-        h_pts = ev.get('homeTeamPoints'); g_pts = ev.get('guestTeamPoints'); score_str = f"{h_pts}:{g_pts}"
-        action_desc = translate_text(ev.get("type", ""))
-        if ev.get("points"): action_desc += f" (+{ev.get('points')})"
-        crunch_log.append(f"- {score_str}: {action_desc}")
-    summary = f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.\n"
-    summary += "\n".join(crunch_log)
-    return summary
+def render_live_comparison_bars(box):
+    h_stat = box.get("homeTeam", {}).get("gameStat", {})
+    g_stat = box.get("guestTeam", {}).get("gameStat", {})
+    
+    h_name = get_team_name(box.get("homeTeam", {}))
+    g_name = get_team_name(box.get("guestTeam", {}))
+
+    def get_pct(made, att):
+        m = safe_int(made); a = safe_int(att)
+        return round((m / a * 100), 1) if a > 0 else 0.0
+
+    stats_to_show = [
+        ("2 PUNKTE", "twoPointShotsMade", "twoPointShotsAttempted", True),
+        ("3 PUNKTE", "threePointShotsMade", "threePointShotsAttempted", True),
+        ("FIELDGOALS", "fieldGoalsMade", "fieldGoalsAttempted", True),
+        ("FREIWÜRFE", "freeThrowsMade", "freeThrowsAttempted", True),
+        ("DEF. REBOUNDS", "defensiveRebounds", None, False),
+        ("OFF. REBOUNDS", "offensiveRebounds", None, False),
+        ("ASSISTS", "assists", None, False),
+        ("STEALS", "steals", None, False),
+        ("BLOCKS", "blocks", None, False),
+        ("TURNOVERS", "turnovers", None, False),
+        ("FOULS", "foulsCommitted", None, False),
+    ]
+
+    st.markdown("""
+        <style>
+        .stat-container { margin-bottom: 15px; width: 100%; font-family: sans-serif; }
+        .stat-label { text-align: center; font-weight: bold; font-style: italic; color: #555; font-size: 0.9em; margin-bottom: 2px; }
+        .bar-wrapper { display: flex; align-items: center; justify-content: center; gap: 10px; height: 12px; }
+        .bar-bg { background-color: #eee; flex-grow: 1; height: 100%; border-radius: 2px; position: relative; overflow: hidden; }
+        .bar-fill-home { background-color: #e35b00; height: 100%; position: absolute; right: 0; transition: width 0.5s; }
+        .bar-fill-guest { background-color: #333; height: 100%; position: absolute; left: 0; transition: width 0.5s; }
+        .val-text { width: 80px; font-weight: bold; font-size: 0.95em; }
+        .val-left { text-align: right; }
+        .val-right { text-align: left; }
+        .sub-val { font-size: 0.7em; color: #888; font-weight: normal; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Team Namen Header
+    c1, c2, c3 = st.columns([1, 1, 1])
+    c1.markdown(f"<h4 style='text-align:right; color:#e35b00;'>{h_name}</h4>", unsafe_allow_html=True)
+    c2.write("")
+    c3.markdown(f"<h4 style='text-align:left; color:#333;'>{g_name}</h4>", unsafe_allow_html=True)
+
+    for label, key_made, key_att, is_pct in stats_to_show:
+        h_val_main = safe_int(h_stat.get(key_made))
+        g_val_main = safe_int(g_stat.get(key_made))
+        
+        h_disp = f"{h_val_main}"
+        g_disp = f"{g_val_main}"
+        
+        h_fill_width = 0
+        g_fill_width = 0
+
+        if is_pct:
+            h_a = safe_int(h_stat.get(key_att))
+            g_a = safe_int(g_stat.get(key_att))
+            h_p = get_pct(h_val_main, h_a)
+            g_p = get_pct(g_val_main, g_a)
+            h_disp = f"{h_p}% <span class='sub-val'>({h_val_main}/{h_a})</span>"
+            g_disp = f"{g_p}% <span class='sub-val'>({g_val_main}/{g_a})</span>"
+            h_fill_width = h_p
+            g_fill_width = g_p
+        else:
+            # Für normale Stats: Balken relativ zum höheren Wert
+            max_v = max(h_val_main, g_val_main, 1)
+            h_fill_width = (h_val_main / max_v) * 100
+            g_fill_width = (g_val_main / max_v) * 100
+
+        st.markdown(f"""
+            <div class="stat-container">
+                <div class="stat-label">{label}</div>
+                <div class="bar-wrapper">
+                    <div class="val-text val-left">{h_disp}</div>
+                    <div class="bar-bg"><div class="bar-fill-home" style="width: {h_fill_width}%;"></div></div>
+                    <div class="bar-bg"><div class="bar-fill-guest" style="width: {g_fill_width}%;"></div></div>
+                    <div class="val-text val-right">{g_disp}</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+# --- STANDARD RENDERING ---
 
 def render_full_play_by_play(box, height=600):
     actions = box.get("actions", [])
     if not actions: st.info("Keine Play-by-Play Daten verfügbar."); return
-    player_map = get_player_lookup(box); player_team_map = get_player_team_lookup(box)
-    home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME")); guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
-    home_name = get_team_name(box.get("homeTeam", {}), "Heim"); guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    player_map = get_player_lookup(box); player_team_map = {} # Lookup handled differently in live
+    home_id = str(box.get("homeTeam", {}).get("seasonTeamId", "HOME"))
+    guest_id = str(box.get("guestTeam", {}).get("seasonTeamId", "GUEST"))
+    home_name = get_team_name(box.get("homeTeam", {}), "Heim")
+    guest_name = get_team_name(box.get("guestTeam", {}), "Gast")
     data = []; running_h = 0; running_g = 0
     actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
     for act in actions_sorted:
@@ -173,7 +183,6 @@ def render_full_play_by_play(box, height=600):
         pid = str(act.get("seasonPlayerId")); actor = player_map.get(pid, ""); tid = str(act.get("seasonTeamId"))
         if tid == home_id: team_display = home_name
         elif tid == guest_id: team_display = guest_name
-        elif pid in player_team_map: team_display = player_team_map[pid]
         else: team_display = "-" 
         raw_type = act.get("type", ""); action_german = translate_text(raw_type); is_successful = act.get("isSuccessful")
         if "Wurf" in action_german or "Freiwurf" in action_german or "Treffer" in action_german or "Fehlwurf" in action_german:
@@ -188,67 +197,6 @@ def render_full_play_by_play(box, height=600):
     if not df.empty: df = df.iloc[::-1]
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
-def render_game_header(details):
-    h_data = details.get("homeTeam", {}); g_data = details.get("guestTeam", {})
-    h_name = get_team_name(h_data, "Heim"); g_name = get_team_name(g_data, "Gast")
-    res = details.get("result", {}); score_h = res.get("homeTeamFinalScore", 0); score_g = res.get("guestTeamFinalScore", 0)
-    time_str = format_date_time(details.get("scheduledTime"))
-    venue = details.get("venue", {}); venue_str = f"{venue.get('name', '-')}, {venue.get('address', '').split(',')[-1].strip()}"
-    refs = []
-    for i in range(1, 4):
-        r = details.get(f"referee{i}")
-        if r and isinstance(r, dict): refs.append(f"{r.get('lastName')} {r.get('firstName')}")
-    ref_str = ", ".join(refs) if refs else "-"
-    st.markdown(f"<div style='text-align: center; color: #666; font-size: 1.1em;'>📍 {venue_str} | 🕒 {time_str}</div>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([2, 1, 2])
-    with c1: st.markdown(f"## {h_name}")
-    with c2:
-        st.markdown(f"<h1 style='text-align: center;'>{score_h} : {score_g}</h1>", unsafe_allow_html=True)
-        q_data = { "Q1": [res.get("homeTeamQ1Score",0), res.get("guestTeamQ1Score",0)], "Q2": [res.get("homeTeamQ2Score",0), res.get("guestTeamQ2Score",0)], "Q3": [res.get("homeTeamQ3Score",0), res.get("guestTeamQ3Score",0)], "Q4": [res.get("homeTeamQ4Score",0), res.get("guestTeamQ4Score",0)] }
-        if res.get("homeTeamOT1Score", 0) > 0: q_data["OT"] = [res.get("homeTeamOT1Score",0), res.get("guestTeamOT1Score",0)]
-        q_html = "<table style='width:100%; font-size:12px; border-collapse:collapse; margin:0 auto; text-align:center;'><tr style='border-bottom:1px solid #ddd;'><th></th>" + "".join([f"<th>{k}</th>" for k in q_data.keys()]) + "</tr>"
-        q_html += f"<tr><td style='font-weight:bold;'>{h_name[:3].upper()}</td>" + "".join([f"<td>{v[0]}</td>" for v in q_data.values()]) + "</tr>"
-        q_html += f"<tr><td style='font-weight:bold;'>{g_name[:3].upper()}</td>" + "".join([f"<td>{v[1]}</td>" for v in q_data.values()]) + "</tr></table>"
-        st.markdown(q_html, unsafe_allow_html=True)
-    with c3: st.markdown(f"## {g_name}")
-    st.write("---")
-    st.markdown(f"<div style='display: flex; justify-content: space-between; font-size: 14px; background-color: #f9f9f9; padding: 10px; border-radius: 5px;'><span>👥 <b>Zuschauer:</b> {res.get('spectators', '-')}</span><span>⚖️ <b>Refs:</b> {ref_str}</span><span>🆔 <b>ID:</b> {details.get('id', '-')}</span></div>", unsafe_allow_html=True)
-
-def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coach_name="-"):
-    if not player_stats: return
-    data = []; sum_pts=0; sum_3pm=0; sum_3pa=0; sum_fgm=0; sum_fga=0; sum_ftm=0; sum_fta=0; sum_or=0; sum_dr=0; sum_tr=0; sum_as=0; sum_st=0; sum_to=0; sum_bs=0; sum_pf=0; sum_eff=0; sum_pm=0
-    for p in player_stats:
-        info = p.get("seasonPlayer", {}); name = f"{info.get('lastName', '')}, {info.get('firstName', '')}"; nr = info.get("shirtNumber", "-"); starter = "*" if p.get("isStartingFive") else ""; sec = safe_int(p.get("secondsPlayed"))
-        pts = safe_int(p.get("points")); sum_pts += pts; m2 = safe_int(p.get("twoPointShotsMade")); a2 = safe_int(p.get("twoPointShotsAttempted")); p2 = safe_int(p.get("twoPointShotSuccessPercent"))
-        m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted")); p3 = safe_int(p.get("threePointShotSuccessPercent")); sum_3pm += m3; sum_3pa += a3
-        mfg = safe_int(p.get("fieldGoalsMade")); afg = safe_int(p.get("fieldGoalsAttempted")); pfg = safe_int(p.get("fieldGoalsSuccessPercent")); sum_fgm += mfg; sum_fga += afg
-        mft = safe_int(p.get("freeThrowsMade")); aft = safe_int(p.get("freeThrowsAttempted")); pft = safe_int(p.get("freeThrowsSuccessPercent")); sum_ftm += mft; sum_fta += aft
-        oreb = safe_int(p.get("offensiveRebounds")); dreb = safe_int(p.get("defensiveRebounds")); treb = safe_int(p.get("totalRebounds")); sum_or += oreb; sum_dr += dreb; sum_tr += treb
-        ast = safe_int(p.get("assists")); sum_as += ast; stl = safe_int(p.get("steals")); sum_st += stl; tov = safe_int(p.get("turnovers")); sum_to += tov; blk = safe_int(p.get("blocks")); sum_bs += blk; pf = safe_int(p.get("foulsCommitted")); sum_pf += pf; eff = safe_int(p.get("efficiency")); sum_eff += eff; pm = safe_int(p.get("plusMinus")); sum_pm += pm
-        min_str = f"{int(sec//60):02d}:{int(sec%60):02d}" if sec > 0 else "DNP"
-        s_2p = f"{m2}/{a2} ({int(p2)}%)" if a2 and sec > 0 else ""; s_3p = f"{m3}/{a3} ({int(p3)}%)" if a3 and sec > 0 else ""; s_fg = f"{mfg}/{afg} ({int(pfg)}%)" if sec > 0 else ""; s_ft = f"{mft}/{aft} ({int(pft)}%)" if aft and sec > 0 else ""
-        data.append({"No.": f"{starter}{nr}", "Name": name, "Min": min_str, "PTS": pts, "2P": s_2p, "3P": s_3p, "FG": s_fg, "FT": s_ft, "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "ST": stl, "TO": tov, "BS": blk, "PF": pf, "EFF": eff, "+/-": pm})
-    if team_stats_official:
-        t_off = team_stats_official; team_pts = safe_int(t_off.get("points")) - sum_pts; team_or = safe_int(t_off.get("offensiveRebounds")) - sum_or; team_dr = safe_int(t_off.get("defensiveRebounds")) - sum_dr
-        team_tr = safe_int(t_off.get("totalRebounds")) - sum_tr; team_as = safe_int(t_off.get("assists")) - sum_as; team_st = safe_int(t_off.get("steals")) - sum_st; team_to = safe_int(t_off.get("turnovers")) - sum_to
-        team_bs = safe_int(t_off.get("blocks")) - sum_bs; team_pf = safe_int(t_off.get("foulsCommitted")) - sum_pf
-        if (team_or != 0 or team_dr != 0 or team_tr != 0 or team_to != 0 or team_pf != 0 or team_pts != 0):
-            data.append({"No.": "", "Name": "Team / Coach", "Min": "", "PTS": team_pts, "2P": "", "3P": "", "FG": "", "FT": "", "OR": team_or, "DR": team_dr, "TR": team_tr, "AS": team_as, "ST": team_st, "TO": team_to, "BS": team_bs, "PF": team_pf, "EFF": "", "+/-": ""})
-    t_off = team_stats_official if team_stats_official else {}
-    final_pts = safe_int(t_off.get("points")) if t_off else sum_pts; final_fgm = safe_int(t_off.get("fieldGoalsMade")) if t_off else sum_fgm; final_fga = safe_int(t_off.get("fieldGoalsAttempted")) if t_off else sum_fga
-    final_3pm = safe_int(t_off.get("threePointShotsMade")) if t_off else sum_3pm; final_3pa = safe_int(t_off.get("threePointShotsAttempted")) if t_off else sum_3pa; final_ftm = safe_int(t_off.get("freeThrowsMade")) if t_off else sum_ftm
-    final_fta = safe_int(t_off.get("freeThrowsAttempted")) if t_off else sum_fta
-    tot_fg_pct = int(final_fgm/final_fga*100) if final_fga else 0; tot_3p_pct = int(final_3pm/final_3pa*100) if final_3pa else 0; tot_ft_pct = int(final_ftm/final_fta*100) if final_fta else 0
-    totals = {"No.": "", "Name": "TOTALS", "Min": "200:00", "PTS": final_pts, "2P": "", "3P": f"{final_3pm}/{final_3pa} ({tot_3p_pct}%)", "FG": f"{final_fgm}/{final_fga} ({tot_fg_pct}%)", "FT": f"{final_ftm}/{final_fta} ({tot_ft_pct}%)", "OR": safe_int(t_off.get("offensiveRebounds")) if t_off else sum_or, "DR": safe_int(t_off.get("defensiveRebounds")) if t_off else sum_dr, "TR": safe_int(t_off.get("totalRebounds")) if t_off else sum_tr, "AS": safe_int(t_off.get("assists")) if t_off else sum_as, "ST": safe_int(t_off.get("steals")) if t_off else sum_st, "TO": safe_int(t_off.get("turnovers")) if t_off else sum_to, "BS": safe_int(t_off.get("blocks")) if t_off else sum_bs, "PF": safe_int(t_off.get("foulsCommitted")) if t_off else sum_pf, "EFF": safe_int(t_off.get("efficiency")) if t_off else sum_eff, "+/-": ""}
-    data.append(totals)
-    df = pd.DataFrame(data)
-    def highlight_totals(row):
-        if row['Name'] == 'TOTALS': return ['font-weight: bold; background-color: #f0f0f0' for _ in row]
-        if row['Name'] == 'Team / Coach': return ['font-style: italic; color: #555;' for _ in row]
-        return ['' for _ in row]
-    st.markdown(f"#### {team_name}"); calc_height = (len(df) + 1) * 35 + 3; st.dataframe(df.style.apply(highlight_totals, axis=1), hide_index=True, use_container_width=True, height=calc_height)
-    if coach_name and coach_name != "-": st.markdown(f"*Head Coach: {coach_name}*")
-
 def create_live_boxscore_df(team_data):
     stats = []
     players = team_data.get("playerStats", [])
@@ -258,7 +206,7 @@ def create_live_boxscore_df(team_data):
         m3 = safe_int(p.get("threePointShotsMade")); a3 = safe_int(p.get("threePointShotsAttempted"))
         ftm = safe_int(p.get("freeThrowsMade")); fta = safe_int(p.get("freeThrowsAttempted"))
         is_on_court = p.get("onCourt", False) or p.get("isOnCourt", False); is_starter = p.get("isStartingFive", False)
-        stats.append({"#": p.get("seasonPlayer", {}).get("shirtNumber", "-"), "Name": p.get("seasonPlayer", {}).get("lastName", "Unk"), "Min": min_str, "PTS": safe_int(p.get("points")), "FG": f"{fgm}/{fga}", "FG%": (fgm/fga) if fga>0 else 0.0, "3P": f"{m3}/{a3}", "3P%": (m3/a3) if a3>0 else 0.0, "FT": f"{ftm}/{fta}", "FT%": (ftm/fta) if fta>0 else 0.0, "OR": safe_int(p.get("offensiveRebounds")), "DR": safe_int(p.get("defensiveRebounds")), "TR": safe_int(p.get("totalRebounds")), "AS": safe_int(p.get("assists")), "TO": safe_int(p.get("turnovers")), "ST": safe_int(p.get("steals")), "BS": safe_int(p.get("blocks")), "PF": safe_int(p.get("foulsCommitted")), "+/-": safe_int(p.get("plusMinus")), "OnCourt": is_on_court, "Starter": is_starter})
+        stats.append({"#": p.get("seasonPlayer", {}).get("shirtNumber", "-"), "Name": p.get("seasonPlayer", {}).get("lastName", "Unk"), "Min": min_str, "PTS": safe_int(p.get("points")), "FG": f"{fgm}/{fga}", "FG%": (fgm/fga) if fga>0 else 0.0, "3P": f"{m3}/{a3}", "3P%": (m3/a3) if a3>0 else 0.0, "FT": f"{ftm}/{fta}", "FT%": (ftm/fta) if fta>0 else 0.0, "TR": safe_int(p.get("totalRebounds")), "AS": safe_int(p.get("assists")), "TO": safe_int(p.get("turnovers")), "PF": safe_int(p.get("foulsCommitted")), "+/-": safe_int(p.get("plusMinus")), "OnCourt": is_on_court, "Starter": is_starter})
     df = pd.DataFrame(stats)
     if not df.empty: df = df.sort_values(by=["PTS", "Min"], ascending=[False, False])
     return df
@@ -292,8 +240,11 @@ def render_live_view(box):
     ref_str = ", ".join(refs) if refs else "-"; h_coach = box.get("homeTeam", {}).get("headCoachName") or box.get("homeTeam", {}).get("headCoach", {}).get("lastName", "-")
     g_coach = box.get("guestTeam", {}).get("headCoachName") or box.get("guestTeam", {}).get("headCoach", {}).get("lastName", "-")
     st.markdown(f"<div style='text-align:center;background:#222;color:#fff;padding:15px;border-radius:10px;margin-bottom:20px;'><div style='font-size:1em; color:#bbb; margin-bottom:5px;'>{date_str} @ {v_name}</div><div style='font-size:1.4em; margin-bottom:5px; font-weight:bold;'>{h_name} <span style='font-size:0.6em; font-weight:normal; color:#aaa;'>(HC: {h_coach})</span></div><div style='font-size:3.5em;font-weight:bold;line-height:1;'>{s_h} : {s_g}</div><div style='font-size:1.4em; margin-top:5px; font-weight:bold;'>{g_name} <span style='font-size:0.6em; font-weight:normal; color:#aaa;'>(HC: {g_coach})</span></div><div style='color:#ffcc00; font-weight:bold; font-size:1.4em; margin-top:10px;'>{p_str} | {time_disp}</div><div style='font-size:0.8em; color:#666; margin-top:5px;'>Refs: {ref_str}</div></div>", unsafe_allow_html=True)
-    tab_stats, tab_pbp = st.tabs(["📊 Live Boxscore & Stats", "📜 Play-by-Play"])
-    with tab_stats:
+    
+    # NEUE TABS
+    tab_box, tab_match, tab_pbp = st.tabs(["📋 Boxscore", "📊 Team-Vergleich", "📜 Play-by-Play"])
+    
+    with tab_box:
         df_h = create_live_boxscore_df(box.get("homeTeam", {})); df_g = create_live_boxscore_df(box.get("guestTeam", {}))
         col_cfg = { "#": st.column_config.TextColumn("#", width="small"), "Name": st.column_config.TextColumn("Name", width="medium"), "Min": st.column_config.TextColumn("Min", width="small"), "PTS": st.column_config.ProgressColumn("Pkt", min_value=0, max_value=40, format="%d"), "FG": st.column_config.TextColumn("FG", width="small"), "FG%": st.column_config.ProgressColumn("FG%", min_value=0, max_value=1, format="%.2f"), "3P": st.column_config.TextColumn("3P", width="small"), "3P%": st.column_config.ProgressColumn("3P%", min_value=0, max_value=1, format="%.2f"), "FT": st.column_config.TextColumn("FW", width="small"), "FT%": st.column_config.ProgressColumn("FW%", min_value=0, max_value=1, format="%.2f"), "OnCourt": st.column_config.CheckboxColumn("Court", disabled=True), "Starter": st.column_config.CheckboxColumn("Start", disabled=True) }
         def highlight_active(row):
@@ -307,15 +258,15 @@ def render_live_view(box):
         with c2:
             st.markdown(f"### {g_name}")
             if not df_g.empty: st.dataframe(df_g[["#", "Name", "Min", "PTS", "FG", "FG%", "3P", "3P%", "TR", "AS", "TO", "PF", "+/-"]].style.apply(highlight_active, axis=1), column_config=col_cfg, hide_index=True, use_container_width=True, height=(len(df_g)+1)*35+3)
-        st.divider(); st.subheader("📈 Team Vergleich")
-        def get_totals(df):
-            if df.empty: return {"PTS":0, "REB":0, "AST":0, "TO":0, "STL":0, "BLK":0, "PF":0}
-            return { "PTS": df["PTS"].sum(), "REB": df["TR"].sum(), "AST": df["AS"].sum(), "TO": df["TO"].sum(), "STL": df["ST"].sum(), "BLK": df["BS"].sum(), "PF": df["PF"].sum() }
-        t_h = get_totals(df_h); t_g = get_totals(df_g); chart_data = []; metrics = ["PTS", "REB", "AST", "TO", "STL", "PF"]
-        for m in metrics: chart_data.append({"Team": h_name, "Metric": m, "Value": t_h[m]}); chart_data.append({"Team": g_name, "Metric": m, "Value": t_g[m]})
-        st.altair_chart(alt.Chart(pd.DataFrame(chart_data)).mark_bar().encode(x=alt.X('Metric', title=None, sort=metrics), y=alt.Y('Value', title=None), color=alt.Color('Team', title="Team"), xOffset='Team', tooltip=['Team', 'Metric', 'Value']).properties(height=300), use_container_width=True)
-    with tab_pbp: st.subheader("📜 Live Ticker"); render_full_play_by_play(box, height=600)
+    
+    with tab_match:
+        render_live_comparison_bars(box)
+        
+    with tab_pbp:
+        st.subheader("📜 Live Ticker")
+        render_full_play_by_play(box, height=600)
 
+# (Alle weiteren Scouting/Analyse-Funktionen bleiben hier unverändert...)
 def analyze_scouting_data(team_id, detailed_games):
     stats = { "games_count": len(detailed_games), "wins": 0, "ato_stats": {"possessions": 0, "points": 0}, "start_stats": {"pts_diff_first_5min": 0}, "top_scorers": {}, "rotation_depth": 0 }
     tid_str = str(team_id)
@@ -353,7 +304,7 @@ def analyze_scouting_data(team_id, detailed_games):
                     if i + j >= len(actions): break
                     na = actions[i+j]; pts = safe_int(na.get("points")); act_tid = str(na.get("seasonTeamId"))
                     if pts > 0 and act_tid == target_tid: stats["ato_stats"]["points"] += pts; break
-                    if (pts > 0 and act_tid != target_tid) or (na.get("type") == "TURNOVER" and act_tid == target_tid): break
+                    if (pts > 0 and act_tid != target_tid) or (na.get("type") == "TURNOVER" and na.get("seasonTeamId") == target_tid): break
     cnt = stats["games_count"] if stats["games_count"] > 0 else 1
     stats["rotation_depth"] = round(stats["rotation_depth"] / cnt, 1); stats["start_stats"]["avg_diff"] = round(stats["start_stats"]["pts_diff_first_5min"] / cnt, 1)
     scorer_list = []
@@ -401,7 +352,7 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
                 for j in range(1, 5):
                     if i+j < len(actions):
                         na = actions[i+j]; ntid = str(na.get("seasonTeamId")); who_act = "WIR" if ntid == my_sid else "GEGNER"
-                        npid = str(na.get("seasonPlayerId")); np_name = p_map.get(npid, "")
+                        npid = str(na.get("seasonPlayerId")); np_name = player_map.get(npid, "")
                         if np_name and who_act == "WIR": who_act += f" ({np_name})"
                         ndesc = translate_text(na.get("type", "")); 
                         if na.get("points"): ndesc += f" (+{na.get('points')})"
