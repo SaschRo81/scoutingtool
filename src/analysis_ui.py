@@ -17,14 +17,19 @@ ACTION_TRANSLATION = {
     "JUMP_BALL": "Sprungball", "START": "Start", "END": "Ende",
     "TWO_POINT_THROW": "2P Wurf", "THREE_POINT_THROW": "3P Wurf",
     "FREE_THROW": "Freiwurf", "layup": "Korbleger", "jump_shot": "Sprung",
-    "dunk": "Dunk", "offensive": "Off", "defensive": "Def"
+    "dunk": "Dunk", "offensive": "Off", "defensive": "Def",
+    "personal_foul": "Persönlich", "technical_foul": "Technisch",
+    "unsportsmanlike_foul": "Unsportlich"
 }
 
 def translate_text(text):
     if not text: return ""
     text_upper = str(text).upper()
     if text_upper in ACTION_TRANSLATION: return ACTION_TRANSLATION[text_upper]
-    return text.replace("_", " ").title()
+    clean_text = text.replace("_", " ").lower()
+    for eng, ger in ACTION_TRANSLATION.items():
+        if eng.lower() in clean_text: clean_text = clean_text.replace(eng.lower(), ger)
+    return clean_text.capitalize()
 
 def safe_int(val):
     if val is None: return 0
@@ -86,7 +91,6 @@ def get_time_info(time_str, period):
             if len(parts) == 3: elapsed_sec = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
             elif len(parts) == 2: elapsed_sec = int(parts[0])*60 + int(parts[1])
         else: elapsed_sec = int(float(time_str))
-        
         rem_sec = total_sec - elapsed_sec
         if rem_sec < 0: rem_sec = 0
         return f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}", f"{rem_sec // 60:02d}:{rem_sec % 60:02d}"
@@ -189,7 +193,7 @@ def render_full_play_by_play(box, height=600):
     actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
     
     for act in actions_sorted:
-        # Score Carry-Over: Letzten Stand behalten, wenn API 0:0 oder null schickt
+        # Score Carry-Over
         hr, gr = act.get("homeTeamPoints"), act.get("guestTeamPoints")
         if hr is not None and gr is not None:
             nh, ng = safe_int(hr), safe_int(gr)
@@ -197,7 +201,6 @@ def render_full_play_by_play(box, height=600):
                 run_h, run_g = nh, ng
         
         p = act.get("period", "")
-        # Zeit Logik: Original und Restzeit
         t_orig, t_rem = get_time_info(act.get("gameTime") or act.get("timeInGame"), p)
         
         # Team Zuordnung über Spieler-Map
@@ -225,7 +228,10 @@ def render_full_play_by_play(box, height=600):
         })
     
     df = pd.DataFrame(data)
-    # Chronologisch lassen ("normal laufen lassen"), Ende ist unten
+    # WICHTIG: Umkehren, damit die aktuellste Aktion oben steht
+    if not df.empty:
+        df = df.iloc[::-1]
+    
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def create_live_boxscore_df(team_data):
@@ -265,7 +271,7 @@ def render_live_view(box):
             if act.get('period'): period = act.get('period'); break
     p_str = (f"OT{safe_int(period)-4}" if safe_int(period) > 4 else p_map.get(safe_int(period), f"Q{period}")) if period else "-"
     gt = box.get('gameTime') or (actions[-1].get('gameTime') if actions else None)
-    t_orig, t_rem = get_time_info(gt, period)
+    t_rem, t_orig = get_time_info(gt, period)
     h_hc = h_data.get("headCoachName") or h_data.get("headCoach",{}).get("lastName","-")
     g_hc = g_data.get("headCoachName") or g_data.get("headCoach",{}).get("lastName","-")
 
@@ -274,7 +280,7 @@ def render_live_view(box):
             <div style='font-size:1.4em; font-weight:bold;'>{h_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {h_hc})</span></div>
             <div style='font-size:3.5em; font-weight:bold; line-height:1;'>{sh} : {sg}</div>
             <div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div>
-            <div style='color:#ffcc00; font-weight:bold; font-size:1.4em; margin-top:10px;'>{p_str} | {t_orig} <span style='font-size:0.8em; color:#fff;'> (noch {t_rem} Min.)</span></div>
+            <div style='color:#ffcc00; font-weight:bold; font-size:2em; margin-top:10px;'>{p_str} | {t_rem} <span style='font-size:0.5em; color:#fff;'> (gespielt {t_orig})</span></div>
         </div>
     """, unsafe_allow_html=True)
     
