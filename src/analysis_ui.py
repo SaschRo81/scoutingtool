@@ -16,14 +16,21 @@ ACTION_TRANSLATION = {
     "ASSIST": "Assist", "STEAL": "Steal", "BLOCK": "Block",
     "SUBSTITUTION": "Wechsel", "TIMEOUT": "Auszeit",
     "JUMP_BALL": "Sprungball", "START": "Start", "END": "Ende",
-    "offensive": "Off", "defensive": "Def"
+    "TWO_POINT_THROW": "2P Wurf", "THREE_POINT_THROW": "3P Wurf",
+    "FREE_THROW": "Freiwurf", "layup": "Korbleger", "jump_shot": "Sprung",
+    "dunk": "Dunk", "offensive": "Off", "defensive": "Def",
+    "personal_foul": "Persönlich", "technical_foul": "Technisch",
+    "unsportsmanlike_foul": "Unsportlich", "half_or_far_distance": "Mitteldistanz", "close_distance": "Nahdistanz"
 }
 
 def translate_text(text):
     if not text: return ""
     text_upper = str(text).upper()
     if text_upper in ACTION_TRANSLATION: return ACTION_TRANSLATION[text_upper]
-    return text.replace("_", " ").title()
+    clean_text = text.replace("_", " ").lower()
+    for eng, ger in ACTION_TRANSLATION.items():
+        if eng.lower() in clean_text: clean_text = clean_text.replace(eng.lower(), ger)
+    return clean_text.capitalize()
 
 def safe_int(val):
     if val is None: return 0
@@ -56,7 +63,6 @@ def get_player_lookup(box):
     return lookup
 
 def convert_elapsed_to_remaining(time_str, period):
-    """Berechnet die Restzeit (7:30 gespielt -> 2:30 Rest)."""
     if not time_str: return "10:00"
     p_int = safe_int(period)
     base_min = 5 if p_int > 4 else 10
@@ -82,7 +88,6 @@ def convert_elapsed_to_remaining(time_str, period):
 # --- VISUELLE KOMPONENTEN ---
 
 def render_live_comparison_bars(box):
-    """Zeigt die grafischen Balken-Statistiken (wie im gewünschten Screenshot)."""
     h_stat = box.get("homeTeam", {}).get("gameStat", {})
     g_stat = box.get("guestTeam", {}).get("gameStat", {})
     h_name = get_team_name(box.get("homeTeam", {}))
@@ -146,7 +151,7 @@ def render_live_comparison_bars(box):
             </div>
         """, unsafe_allow_html=True)
 
-# --- REINE ANALYSIS-FUNKTIONEN (Importiert von app.py) ---
+# --- REINE ANALYSIS-FUNKTIONEN ---
 
 def render_game_header(details):
     h_data, g_data = details.get("homeTeam", {}), details.get("guestTeam", {})
@@ -203,20 +208,52 @@ def run_openai_generation(api_key, prompt):
 def render_full_play_by_play(box, height=600):
     actions = box.get("actions", [])
     if not actions: st.info("Keine Play-by-Play Daten verfügbar."); return
+    
     player_map = get_player_lookup(box)
-    h_id, g_id = str(box.get("homeTeam",{}).get("seasonTeamId")), str(box.get("guestTeam",{}).get("seasonTeamId"))
-    h_name, g_name = get_team_name(box.get("homeTeam")), get_team_name(box.get("guestTeam"))
+    
+    # Team Namen & IDs für Zuordnung
+    h_id = str(box.get("homeTeam", {}).get("seasonTeamId"))
+    g_id = str(box.get("guestTeam", {}).get("seasonTeamId"))
+    h_name = get_team_name(box.get("homeTeam", {}))
+    g_name = get_team_name(box.get("guestTeam", {}))
+    
     data = []
+    run_h, run_g = 0, 0
     actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
+    
     for act in actions_sorted:
+        # Score Fortschreibung: Nur aktualisieren, wenn Punkte vorhanden sind
+        h_score_raw = act.get("homeTeamPoints")
+        g_score_raw = act.get("guestTeamPoints")
+        
+        # Wenn die API einen Score schickt, der >= dem aktuellen ist, übernehmen wir ihn.
+        # So verhindern wir, dass 0:0 angezeigt wird, wenn die API bei Fouls o.ä. null/0 schickt.
+        if h_score_raw is not None and g_score_raw is not None:
+            new_h, new_g = safe_int(h_score_raw), safe_int(g_score_raw)
+            if (new_h + new_g) >= (run_h + run_g):
+                run_h, run_g = new_h, new_g
+        
         p = act.get("period", "")
         time_rem = convert_elapsed_to_remaining(act.get("gameTime") or act.get("timeInGame"), p)
+        
+        # Team Zuordnung
         tid = str(act.get("seasonTeamId"))
-        team = h_name if tid == h_id else (g_name if tid == g_id else "-")
+        if tid == h_id: team_disp = h_name
+        elif tid == g_id: team_disp = g_name
+        else: team_disp = "-"
+        
         actor = player_map.get(str(act.get("seasonPlayerId")), "")
         desc = translate_text(act.get("type", ""))
         if act.get("points"): desc += f" (+{act.get('points')})"
-        data.append({"Zeit": f"Q{p} {time_rem}", "Score": f"{act.get('homeTeamPoints','0')}:{act.get('guestTeamPoints','0')}", "Team": team, "Spieler": actor, "Aktion": desc})
+        
+        data.append({
+            "Zeit": f"Q{p} {time_rem}", 
+            "Score": f"{run_h}:{run_g}", 
+            "Team": team_disp, 
+            "Spieler": actor, 
+            "Aktion": desc
+        })
+        
     df = pd.DataFrame(data)
     if not df.empty: df = df.iloc[::-1]
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
@@ -229,10 +266,12 @@ def render_live_view(box):
     s_h, s_g = safe_int(res.get('homeTeamFinalScore')), safe_int(res.get('guestTeamFinalScore'))
     period = res.get('period') or box.get('period')
     actions = box.get("actions", [])
+    
     if s_h == 0 and s_g == 0 and actions:
         last = actions[-1]
         s_h, s_g = safe_int(last.get('homeTeamPoints')), safe_int(last.get('guestTeamPoints'))
         if not period: period = last.get('period')
+        
     p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
     if not period or period == 0:
         for act in reversed(actions):
@@ -276,7 +315,7 @@ def create_live_boxscore_df(team_data):
     df = pd.DataFrame(stats)
     return df.sort_values(by=["PTS", "Min"], ascending=[False, False]) if not df.empty else df
 
-# --- PREP & SCOUTING (Team-Analyse) ---
+# --- PREP & SCOUTING ---
 
 def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
     st.subheader(f"Analyse: {team_name}")
