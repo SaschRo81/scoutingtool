@@ -56,13 +56,20 @@ def get_player_lookup(box):
             lookup[pid] = f"#{nr} {name}"
     return lookup
 
+def get_player_team_map(box):
+    """Erstellt eine Map: PlayerID -> TeamName."""
+    player_team = {}
+    h_name = get_team_name(box.get("homeTeam", {}), "Heim")
+    g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    for p in box.get("homeTeam", {}).get('playerStats', []):
+        player_team[str(p.get('seasonPlayer', {}).get('id'))] = h_name
+    for p in box.get("guestTeam", {}).get('playerStats', []):
+        player_team[str(p.get('seasonPlayer', {}).get('id'))] = g_name
+    return player_team
+
 def get_time_info(time_str, period):
-    """
-    Berechnet die Zeiten.
-    Gibt (Restzeit, Originalzeit) zurück.
-    Beispiel: (07:56, 02:04)
-    """
-    if not time_str: return "10:00", "00:00"
+    """Berechnet Originalzeit und Restzeit."""
+    if not time_str: return "00:00", "10:00"
     p_int = safe_int(period)
     base_min = 5 if p_int > 4 else 10
     total_sec = base_min * 60
@@ -82,80 +89,36 @@ def get_time_info(time_str, period):
         
         rem_sec = total_sec - elapsed_sec
         if rem_sec < 0: rem_sec = 0
-        
-        orig = f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}"
-        remaining = f"{rem_sec // 60:02d}:{rem_sec % 60:02d}"
-        return remaining, orig
-    except:
-        return "10:00", str(time_str)
+        return f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}", f"{rem_sec // 60:02d}:{rem_sec % 60:02d}"
+    except: return str(time_str), "10:00"
 
 # --- VISUELLE KOMPONENTEN ---
 
 def render_live_comparison_bars(box):
     h_stat = box.get("homeTeam", {}).get("gameStat", {})
     g_stat = box.get("guestTeam", {}).get("gameStat", {})
-    h_name = get_team_name(box.get("homeTeam", {}))
-    g_name = get_team_name(box.get("guestTeam", {}))
-
+    h_name, g_name = get_team_name(box.get("homeTeam", {})), get_team_name(box.get("guestTeam", {}))
     def get_pct(made, att):
         m, a = safe_int(made), safe_int(att)
         return round((m / a * 100), 1) if a > 0 else 0.0
-
-    stats_to_show = [
-        ("2 PUNKTE", "twoPointShotsMade", "twoPointShotsAttempted", True),
-        ("3 PUNKTE", "threePointShotsMade", "threePointShotsAttempted", True),
-        ("FIELDGOALS", "fieldGoalsMade", "fieldGoalsAttempted", True),
-        ("FREIWÜRFE", "freeThrowsMade", "freeThrowsAttempted", True),
-        ("DEF. REBOUNDS", "defensiveRebounds", None, False),
-        ("OFF. REBOUNDS", "offensiveRebounds", None, False),
-        ("ASSISTS", "assists", None, False),
-        ("STEALS", "steals", None, False),
-        ("BLOCKS", "blocks", None, False),
-        ("TURNOVERS", "turnovers", None, False),
-        ("FOULS", "foulsCommitted", None, False),
-    ]
-
-    st.markdown("""
-        <style>
-        .stat-container { margin-bottom: 12px; width: 100%; }
-        .stat-label { text-align: center; font-weight: bold; font-style: italic; color: #555; font-size: 0.85em; }
-        .bar-wrapper { display: flex; align-items: center; justify-content: center; gap: 8px; height: 10px; }
-        .bar-bg { background-color: #eee; flex-grow: 1; height: 100%; border-radius: 2px; position: relative; }
-        .bar-fill-home { background-color: #e35b00; height: 100%; position: absolute; right: 0; }
-        .bar-fill-guest { background-color: #333; height: 100%; position: absolute; left: 0; }
-        .val-text { width: 85px; font-weight: bold; font-size: 0.85em; }
-        </style>
-    """, unsafe_allow_html=True)
-
+    stats_to_show = [("2 PUNKTE", "twoPointShotsMade", "twoPointShotsAttempted", True), ("3 PUNKTE", "threePointShotsMade", "threePointShotsAttempted", True), ("FIELDGOALS", "fieldGoalsMade", "fieldGoalsAttempted", True), ("FREIWÜRFE", "freeThrowsMade", "freeThrowsAttempted", True), ("DEF. REBOUNDS", "defensiveRebounds", None, False), ("OFF. REBOUNDS", "offensiveRebounds", None, False), ("ASSISTS", "assists", None, False), ("STEALS", "steals", None, False), ("BLOCKS", "blocks", None, False), ("TURNOVERS", "turnovers", None, False), ("FOULS", "foulsCommitted", None, False)]
+    st.markdown("""<style>.stat-container { margin-bottom: 12px; width: 100%; }.stat-label { text-align: center; font-weight: bold; font-style: italic; color: #555; font-size: 0.85em; }.bar-wrapper { display: flex; align-items: center; justify-content: center; gap: 8px; height: 10px; }.bar-bg { background-color: #eee; flex-grow: 1; height: 100%; border-radius: 2px; position: relative; }.bar-fill-home { background-color: #e35b00; height: 100%; position: absolute; right: 0; }.bar-fill-guest { background-color: #333; height: 100%; position: absolute; left: 0; }.val-text { width: 85px; font-weight: bold; font-size: 0.85em; }</style>""", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 1])
     c1.markdown(f"<h4 style='text-align:right; color:#e35b00;'>{h_name}</h4>", unsafe_allow_html=True)
     c3.markdown(f"<h4 style='text-align:left; color:#333;'>{g_name}</h4>", unsafe_allow_html=True)
-
-    for label, key_made, key_att, is_pct in stats_to_show:
-        h_v, g_v = safe_int(h_stat.get(key_made)), safe_int(g_stat.get(key_made))
-        if is_pct:
-            h_a, g_a = safe_int(h_stat.get(key_att)), safe_int(g_stat.get(key_att))
-            h_p, g_p = get_pct(h_v, h_a), get_pct(g_v, g_a)
-            h_d, g_d = f"{h_p}%", f"{g_p}%"
-            h_fill, g_fill = h_p, g_p
+    for label, km, ka, is_p in stats_to_show:
+        hv, gv = safe_int(h_stat.get(km)), safe_int(g_stat.get(km))
+        if is_p:
+            ha, ga = safe_int(h_stat.get(ka)), safe_int(g_stat.get(ka))
+            hp, gp = get_pct(hv, ha), get_pct(gv, ga)
+            hd, gd, hf, gf = f"{hp}%", f"{gp}%", hp, gp
         else:
-            h_d, g_d = str(h_v), str(g_v)
-            max_v = max(h_v, g_v, 1)
-            h_fill, g_fill = (h_v/max_v)*100, (g_v/max_v)*100
+            hd, gd = str(hv), str(gv)
+            mv = max(hv, gv, 1)
+            hf, gf = (hv/mv)*100, (gv/mv)*100
+        st.markdown(f"""<div class="stat-container"><div class="stat-label">{label}</div><div class="bar-wrapper"><div class="val-text" style="text-align:right;">{hd}</div><div class="bar-bg"><div class="bar-fill-home" style="width:{hf}%;"></div></div><div class="bar-bg"><div class="bar-fill-guest" style="width:{gf}%;"></div></div><div class="val-text" style="text-align:left;">{gd}</div></div></div>""", unsafe_allow_html=True)
 
-        st.markdown(f"""
-            <div class="stat-container">
-                <div class="stat-label">{label}</div>
-                <div class="bar-wrapper">
-                    <div class="val-text" style="text-align:right;">{h_d}</div>
-                    <div class="bar-bg"><div class="bar-fill-home" style="width:{h_fill}%;"></div></div>
-                    <div class="bar-bg"><div class="bar-fill-guest" style="width:{g_fill}%;"></div></div>
-                    <div class="val-text" style="text-align:left;">{g_d}</div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-# --- ANALYSIS FUNKTIONEN ---
+# --- REINE ANALYSIS-FUNKTIONEN ---
 
 def render_game_header(details):
     h_data, g_data = details.get("homeTeam", {}), details.get("guestTeam", {})
@@ -214,44 +177,55 @@ def run_openai_generation(api_key, prompt):
 def render_full_play_by_play(box, height=600):
     actions = box.get("actions", [])
     if not actions: st.info("Keine Play-by-Play Daten verfügbar."); return
-    player_map = get_player_lookup(box)
     
-    # Team IDs Sammeln für den Abgleich
-    h_ids = [str(box.get("homeTeam",{}).get("seasonTeamId")), str(box.get("homeTeam",{}).get("teamId"))]
-    g_ids = [str(box.get("guestTeam",{}).get("seasonTeamId")), str(box.get("guestTeam",{}).get("teamId"))]
-    h_name, g_name = get_team_name(box.get("homeTeam")), get_team_name(box.get("guestTeam"))
+    player_map = get_player_lookup(box)
+    player_team_map = get_player_team_map(box)
+    
+    h_name = get_team_name(box.get("homeTeam", {}))
+    g_name = get_team_name(box.get("guestTeam", {}))
     
     data = []
     run_h, run_g = 0, 0
     actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
+    
     for act in actions_sorted:
+        # Score Carry-Over: Letzten Stand behalten, wenn API 0:0 oder null schickt
         hr, gr = act.get("homeTeamPoints"), act.get("guestTeamPoints")
         if hr is not None and gr is not None:
             nh, ng = safe_int(hr), safe_int(gr)
-            if (nh + ng) >= (run_h + run_g): run_h, run_g = nh, ng
+            if (nh + ng) >= (run_h + run_g): 
+                run_h, run_g = nh, ng
         
         p = act.get("period", "")
-        # Hier die Logik: Countdown groß, Original klein
-        t_rem, t_orig = get_time_info(act.get("gameTime") or act.get("timeInGame"), p)
+        # Zeit Logik: Original und Restzeit
+        t_orig, t_rem = get_time_info(act.get("gameTime") or act.get("timeInGame"), p)
         
-        tid = str(act.get("seasonTeamId"))
-        team = "-"
-        if tid in h_ids: team = h_name
-        elif tid in g_ids: team = g_name
+        # Team Zuordnung über Spieler-Map
+        pid = str(act.get("seasonPlayerId"))
+        team = player_team_map.get(pid, "-")
         
-        actor = player_map.get(str(act.get("seasonPlayerId")), "")
+        # Falls Spieler ID fehlt (z.B. bei Timeouts), versuche über seasonTeamId
+        if team == "-":
+            tid = str(act.get("seasonTeamId"))
+            h_sid = str(box.get("homeTeam",{}).get("seasonTeamId"))
+            g_sid = str(box.get("guestTeam",{}).get("seasonTeamId"))
+            if tid == h_sid: team = h_name
+            elif tid == g_sid: team = g_name
+
+        actor = player_map.get(pid, "")
         desc = translate_text(act.get("type", ""))
         if act.get("points"): desc += f" (+{act.get('points')})"
         
         data.append({
-            "Zeit": f"Q{p} | {t_rem} ({t_orig})", 
+            "Zeit": f"Q{p} | {t_orig} (noch {t_rem})", 
             "Score": f"{run_h}:{run_g}", 
             "Team": team, 
             "Spieler": actor, 
             "Aktion": desc
         })
+    
     df = pd.DataFrame(data)
-    if not df.empty: df = df.iloc[::-1]
+    # Chronologisch lassen ("normal laufen lassen"), Ende ist unten
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def create_live_boxscore_df(team_data):
@@ -268,8 +242,7 @@ def create_live_boxscore_df(team_data):
             "FG": f"{m2+m3}/{a2+a3}", "3P": f"{m3}/{a3}",
             "TR": safe_int(p.get("totalRebounds")), "AS": safe_int(p.get("assists")),
             "TO": safe_int(p.get("turnovers")), "PF": safe_int(p.get("foulsCommitted")),
-            "+/-": safe_int(p.get("plusMinus")),
-            "OnCourt": p.get("onCourt", False) or p.get("isOnCourt", False)
+            "+/-": safe_int(p.get("plusMinus"))
         })
     df = pd.DataFrame(stats)
     return df.sort_values(by=["PTS", "Min"], ascending=[False, False]) if not df.empty else df
@@ -291,11 +264,8 @@ def render_live_view(box):
         for act in reversed(actions):
             if act.get('period'): period = act.get('period'); break
     p_str = (f"OT{safe_int(period)-4}" if safe_int(period) > 4 else p_map.get(safe_int(period), f"Q{period}")) if period else "-"
-    
     gt = box.get('gameTime') or (actions[-1].get('gameTime') if actions else None)
-    # Tausch: Countdown ist primär, Originalzeit ist sekundär
-    t_rem, t_orig = get_time_info(gt, period)
-    
+    t_orig, t_rem = get_time_info(gt, period)
     h_hc = h_data.get("headCoachName") or h_data.get("headCoach",{}).get("lastName","-")
     g_hc = g_data.get("headCoachName") or g_data.get("headCoach",{}).get("lastName","-")
 
@@ -304,7 +274,7 @@ def render_live_view(box):
             <div style='font-size:1.4em; font-weight:bold;'>{h_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {h_hc})</span></div>
             <div style='font-size:3.5em; font-weight:bold; line-height:1;'>{sh} : {sg}</div>
             <div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div>
-            <div style='color:#ffcc00; font-weight:bold; font-size:2em; margin-top:10px;'>{p_str} | {t_rem} <span style='font-size:0.5em; color:#fff;'> (gespielt {t_orig})</span></div>
+            <div style='color:#ffcc00; font-weight:bold; font-size:1.4em; margin-top:10px;'>{p_str} | {t_orig} <span style='font-size:0.8em; color:#fff;'> (noch {t_rem} Min.)</span></div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -314,11 +284,11 @@ def render_live_view(box):
         with c1:
             st.markdown(f"### {h_name}")
             dfh = create_live_boxscore_df(h_data)
-            if not dfh.empty: st.dataframe(dfh.style.apply(lambda r: ['background-color:#d4edda' if r.OnCourt else '' for _ in r], axis=1), hide_index=True, use_container_width=True, height=(len(dfh)+1)*35+3)
+            if not dfh.empty: st.dataframe(dfh, hide_index=True, use_container_width=True, height=(len(dfh)+1)*35+3)
         with c2:
             st.markdown(f"### {g_name}")
             dfg = create_live_boxscore_df(g_data)
-            if not dfg.empty: st.dataframe(dfg.style.apply(lambda r: ['background-color:#d4edda' if r.OnCourt else '' for _ in r], axis=1), hide_index=True, use_container_width=True, height=(len(dfg)+1)*35+3)
+            if not dfg.empty: st.dataframe(dfg, hide_index=True, use_container_width=True, height=(len(dfg)+1)*35+3)
     with t2: render_live_comparison_bars(box)
     with t3: render_full_play_by_play(box)
 
