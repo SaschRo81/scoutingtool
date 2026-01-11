@@ -219,7 +219,7 @@ def render_full_play_by_play(box, height=600):
         if act.get("points"): desc += f" (+{act.get('points')})"
         
         data.append({
-            "Zeit": f"Q{p} | {t_rem} (noch zu spielen: {t_elap})", 
+            "Zeit": f"Q{p} | {t_rem}", 
             "Score": f"{run_h}:{run_g}", 
             "Team": team, 
             "Spieler": actor, 
