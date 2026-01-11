@@ -74,7 +74,6 @@ def get_player_team_map(box):
     return player_team
 
 def get_time_info(time_str, period):
-    """Berechnet (Restzeit, Originalzeit)."""
     if not time_str: return "10:00", "00:00"
     p_int = safe_int(period)
     base_min = 5 if p_int > 4 else 10
@@ -97,6 +96,8 @@ def get_time_info(time_str, period):
         return f"{rem_sec // 60:02d}:{rem_sec % 60:02d}", f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}"
     except: return "10:00", str(time_str)
 
+# --- CORE LOGIC ---
+
 def analyze_game_flow(actions, home_name, guest_name):
     if not actions: return "Keine Play-by-Play Daten verfügbar."
     lead_changes, ties = 0, 0
@@ -114,17 +115,21 @@ def analyze_game_flow(actions, home_name, guest_name):
         last_leader = current_leader
         act['_score'] = f"{run_h}:{run_g}"
         enriched.append(act)
-    rel_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TURNOVER", "FOUL", "TIMEOUT"]
-    filtered = [a for a in enriched if a.get("type") in rel_types]
+    
+    # Filter für Prompt: Nur wichtige Aktionen (Treffer, Timeouts, Wechsel in Crunchtime)
+    rel_types = ["TWO_POINT_SHOT_MADE", "THREE_POINT_SHOT_MADE", "FREE_THROW_MADE", "TIMEOUT"]
+    # Falls wir in der Schlussphase sind, nehmen wir alles für das Drama, sonst nur Punkte
+    filtered = [a for a in enriched if a.get("type") in rel_types or a.get("actionNumber") > (len(sorted_actions)-15)]
+    
     last_events = filtered[-20:] 
-    crunch = "\n**⏱️ Die Schlussphase (PBP):**"
+    crunch = "\n**⏱️ Die entscheidende Phase (Chronologie):**"
     for ev in last_events:
         desc = translate_text(ev.get("type", ""))
         if ev.get("points"): desc += f" (+{ev.get('points')})"
         crunch += f"\n- {ev.get('_score')}: {desc}"
     return f"Führungswechsel: {lead_changes}, Unentschieden: {ties}.{crunch}"
 
-# --- EXPORTS FÜR APP.PY ---
+# --- ANALYSIS FUNKTIONEN ---
 
 def generate_complex_ai_prompt(box):
     if not box: return "Keine Daten."
@@ -135,10 +140,11 @@ def generate_complex_ai_prompt(box):
     is_home_jena = "Jena" in h_name or "VIMODROM" in h_name
     opponent = g_name if is_home_jena else h_name
     location = "Heimspiel" if is_home_jena else "Auswärtsspiel"
+    
     def get_stats_str(td):
         s = td.get("gameStat", {})
         top_p = sorted([p for p in td.get("playerStats", [])], key=lambda x: safe_int(x.get("points")), reverse=True)[:3]
-        top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')})" for p in top_p])
+        top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')} Pkt)" for p in top_p])
         return f"Wurfquote: {safe_int(s.get('fieldGoalsSuccessPercent'))}%, Reb: {safe_int(s.get('totalRebounds'))}. Top: {top_str}"
 
     return f"""Du agierst als erfahrener Sportjournalist für VIMODROM Baskets Jena. Erstelle 3 SEO-Artikel (Website, Liga, Magazin) & Storytelling-Bericht gegen {opponent}.
@@ -181,16 +187,6 @@ def run_openai_generation(api_key, prompt):
 
 # --- LIVE VIEW & TICKER ---
 
-def render_live_comparison_bars(box):
-    h_stat, g_stat = box.get("homeTeam",{}).get("gameStat",{}), box.get("guestTeam",{}).get("gameStat",{})
-    h_name, g_name = get_team_name(box.get("homeTeam")), get_team_name(box.get("guestTeam"))
-    st.markdown("""<style>.stat-container { margin-bottom: 10px; width: 100%; }.stat-label { text-align: center; font-weight: bold; font-size: 0.8em; }.bar-wrapper { display: flex; align-items: center; justify-content: center; gap: 5px; height: 10px; }.bar-bg { background-color: #eee; flex-grow: 1; height: 100%; position: relative; }.bar-fill-home { background-color: #e35b00; height: 100%; position: absolute; right: 0; }.bar-fill-guest { background-color: #333; height: 100%; position: absolute; left: 0; }.val-text { width: 60px; font-weight: bold; font-size: 0.8em; }</style>""", unsafe_allow_html=True)
-    metrics = [("2 PUNKTE", "twoPointShotsMade"), ("3 PUNKTE", "threePointShotsMade"), ("FIELDGOALS", "fieldGoalsMade"), ("REBOUNDS", "totalRebounds"), ("ASSISTS", "assists"), ("STEALS", "steals")]
-    for label, key in metrics:
-        hv, gv = safe_int(h_stat.get(key)), safe_int(g_stat.get(key))
-        max_v = max(hv, gv, 1)
-        st.markdown(f'<div class="stat-container"><div class="stat-label">{label}</div><div class="bar-wrapper"><div class="val-text" style="text-align:right;">{hv}</div><div class="bar-bg"><div class="bar-fill-home" style="width:{(hv/max_v)*100}%;"></div></div><div class="bar-bg"><div class="bar-fill-guest" style="width:{(gv/max_v)*100}%;"></div></div><div class="val-text" style="text-align:left;">{gv}</div></div></div>', unsafe_allow_html=True)
-
 def render_full_play_by_play(box, height=600):
     actions = box.get("actions", [])
     if not actions: return
@@ -216,18 +212,61 @@ def render_live_view(box):
     res = box.get("result", {}); sh, sg = safe_int(res.get('homeTeamFinalScore')), safe_int(res.get('guestTeamFinalScore'))
     period = res.get('period') or box.get('period', 1)
     t_rem, t_orig = get_time_info(box.get('gameTime'), period)
+    
     st.markdown(f"<div style='text-align:center;background:#222;color:#fff;padding:15px;border-radius:10px;'><h3>{h_name} {sh} : {sg} {g_name}</h3><h4 style='color:#ffcc00;'>Q{period} | {t_rem} <span style='font-size:0.6em;color:#fff;'>(gespielt {t_orig})</span></h4></div>", unsafe_allow_html=True)
+    
     t1, t2, t3 = st.tabs(["📋 Boxscore", "📊 Team-Vergleich", "📜 Play-by-Play"])
+    
+    # Wer spielt gerade? (Heuristik basierend auf letzten Aktionen)
+    actions = box.get("actions", [])
+    active_pids = set()
+    # Scanne die letzten 20 Aktionen. Jeder der auftaucht, ist "on court"
+    for a in sorted(actions, key=lambda x: x.get('actionNumber', 0))[-20:]:
+        pid = str(a.get("seasonPlayerId"))
+        if pid and pid != "None": active_pids.add(pid)
+
     with t1:
         c1, c2 = st.columns(2)
-        with c1: st.write(f"**{h_name}**"); st.dataframe(create_live_boxscore_df(h_data), hide_index=True, use_container_width=True)
-        with c2: st.write(f"**{g_name}**"); st.dataframe(create_live_boxscore_df(g_data), hide_index=True, use_container_width=True)
+        with c1:
+            st.write(f"**{h_name}**")
+            dfh = create_live_boxscore_df(h_data, active_pids)
+            if not dfh.empty:
+                st.dataframe(dfh.style.apply(lambda r: ['background-color: #d4edda; color: #155724' if r.Status == 'Spielt' else '' for _ in r], axis=1), hide_index=True, use_container_width=True, height=(len(dfh)+1)*35+3)
+        with c2:
+            st.write(f"**{g_name}**")
+            dfg = create_live_boxscore_df(g_data, active_pids)
+            if not dfg.empty:
+                st.dataframe(dfg.style.apply(lambda r: ['background-color: #d4edda; color: #155724' if r.Status == 'Spielt' else '' for _ in r], axis=1), hide_index=True, use_container_width=True, height=(len(dfg)+1)*35+3)
     with t2: render_live_comparison_bars(box)
     with t3: render_full_play_by_play(box)
 
-def create_live_boxscore_df(team_data):
-    data = [{"#": p.get("seasonPlayer",{}).get("shirtNumber"), "Name": p.get("seasonPlayer",{}).get("lastName"), "PTS": safe_int(p.get("points")), "REB": safe_int(p.get("totalRebounds"))} for p in team_data.get("playerStats", [])]
-    return pd.DataFrame(data).sort_values(by="PTS", ascending=False) if data else pd.DataFrame()
+def create_live_boxscore_df(team_data, active_pids):
+    stats = []
+    for p in team_data.get("playerStats", []):
+        pid = str(p.get("seasonPlayer", {}).get("id"))
+        status = "Spielt" if pid in active_pids else "-"
+        # Wenn die API ein explizites onCourt Flag hat, nutzen wir das als Vorrang
+        if p.get("onCourt") is True: status = "Spielt"
+        
+        stats.append({
+            "#": p.get("seasonPlayer",{}).get("shirtNumber"),
+            "Name": p.get("seasonPlayer",{}).get("lastName"),
+            "PTS": safe_int(p.get("points")),
+            "REB": safe_int(p.get("totalRebounds")),
+            "Status": status
+        })
+    df = pd.DataFrame(stats)
+    return df.sort_values(by=["Status", "PTS"], ascending=[False, False]) if not df.empty else df
+
+def render_live_comparison_bars(box):
+    h_stat, g_stat = box.get("homeTeam",{}).get("gameStat",{}), box.get("guestTeam",{}).get("gameStat",{})
+    h_name, g_name = get_team_name(box.get("homeTeam")), get_team_name(box.get("guestTeam"))
+    st.markdown("""<style>.stat-container { margin-bottom: 10px; width: 100%; }.stat-label { text-align: center; font-weight: bold; font-size: 0.8em; }.bar-wrapper { display: flex; align-items: center; justify-content: center; gap: 5px; height: 10px; }.bar-bg { background-color: #eee; flex-grow: 1; height: 100%; position: relative; }.bar-fill-home { background-color: #e35b00; height: 100%; position: absolute; right: 0; }.bar-fill-guest { background-color: #333; height: 100%; position: absolute; left: 0; }.val-text { width: 60px; font-weight: bold; font-size: 0.8em; }</style>""", unsafe_allow_html=True)
+    metrics = [("2 PUNKTE", "twoPointShotsMade"), ("3 PUNKTE", "threePointShotsMade"), ("FIELDGOALS", "fieldGoalsMade"), ("REBOUNDS", "totalRebounds"), ("ASSISTS", "assists"), ("STEALS", "steals")]
+    for label, key in metrics:
+        hv, gv = safe_int(h_stat.get(key)), safe_int(g_stat.get(key))
+        max_v = max(hv, gv, 1)
+        st.markdown(f'<div class="stat-container"><div class="stat-label">{label}</div><div class="bar-wrapper"><div class="val-text" style="text-align:right;">{hv}</div><div class="bar-bg"><div class="bar-fill-home" style="width:{(hv/max_v)*100}%;"></div></div><div class="bar-bg"><div class="bar-fill-guest" style="width:{(gv/max_v)*100}%;"></div></div><div class="val-text" style="text-align:left;">{gv}</div></div></div>', unsafe_allow_html=True)
 
 # --- SCOUTING ---
 
