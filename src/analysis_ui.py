@@ -377,20 +377,29 @@ def prepare_ai_scouting_context(team_name, detailed_games, team_id):
     return ctx
 
 def render_team_analysis_dashboard(team_id, team_name):
-    logo = get_best_team_logo(team_id); c1, c2 = st.columns([1, 4])
-    if logo: c1.image(logo, width=100)
-    c2.title(f"Scouting Report: {team_name}")
-    with st.spinner("Analysiere..."):
-        games = fetch_last_n_games_complete(team_id, "2025", n=50)
-        if not games: st.warning("Keine Daten."); return
-        scout = analyze_scouting_data(team_id, games)
-    k1, k2, k3, k4 = st.columns(4); k1.metric("Spiele", scout["games_count"], f"{scout['wins']} Siege"); k2.metric("Start Q1", f"{scout['start_stats']['avg_diff']:+.1f}"); k3.metric("Rotation", scout["rotation_depth"])
-    st.divider(); col_l, col_r = st.columns([1, 1])
-    with col_l:
+    from src.api import fetch_last_n_games_complete, get_best_team_logo
+    logo = get_best_team_logo(team_id)
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        if logo: st.image(logo, width=100)
+    with c2:
+        st.title(f"Scouting Report: {team_name}"); st.caption("Basierend auf der Play-by-Play Analyse der gesamten Saison")
+    with st.spinner(f"Lade ALLE Spiele von {team_name} (das kann kurz dauern)..."):
+        games_data = fetch_last_n_games_complete(team_id, "2025", n=50)
+        if not games_data: st.warning("Keine Spieldaten verfügbar."); return
+        scout = analyze_scouting_data(team_id, games_data)
+    k1, k2, k3, k4 = st.columns(4); k1.metric("Analysierte Spiele", scout["games_count"], f"{scout['wins']} Siege"); k2.metric("Start-Qualität (Q1)", f"{scout['start_stats']['avg_diff']:+.1f}"); k3.metric("Rotation", scout["rotation_depth"]); ato_ppp = round(scout["ato_stats"]["points"] / scout["ato_stats"]["possessions"], 2) if scout["ato_stats"]["possessions"] > 0 else 0.0; k4.metric("ATO Effizienz", f"{ato_ppp} PPP", f"{scout['ato_stats']['possessions']} TOs")
+    st.divider(); col_left, col_right = st.columns([1, 1])
+    with col_left:
         st.subheader("🔑 Schlüsselspieler")
         if scout["top_scorers_list"]: st.dataframe(pd.DataFrame(scout["top_scorers_list"]), hide_index=True, use_container_width=True)
-        st.markdown("---"); st.subheader("🤖 KI-Prompt"); st.code(f"Du bist ein professioneller Basketball-Scout. Analysiere {team_name}...\n\n{prepare_ai_scouting_context(team_name, games, team_id)}", language="text")
-    with col_r:
-        st.subheader("📅 Spiele")
-        for g in games:
-            with st.expander(f"{g.get('meta_date')} vs {g.get('meta_opponent')} ({g.get('meta_result')})"): st.caption(analyze_game_flow(g.get("actions", []), "Heim", "Gast"))
+        st.markdown("---"); st.subheader("🤖 KI-Prompt Generator"); st.info("Kopiere diesen Text in ChatGPT, um eine detaillierte Taktik-Analyse zu erhalten.")
+        context_text = prepare_ai_scouting_context(team_name, games_data, team_id)
+        prompt_full = f"""Du bist ein professioneller Basketball-Scout für die DBBL. Analysiere die folgenden Rohdaten (Play-by-Play Auszüge) von {team_name} aus {len(games_data)} Spielen.\nErstelle einen prägnanten Scouting-Bericht mit diesen 4 Punkten:\n1. Reaktionen nach Auszeiten (ATO): Gibt es Muster? Wer schließt ab? Punkten sie oft direkt?\n2. Spielstarts: Wie kommen sie ins 1. Viertel? (Aggressiv, Turnover-anfällig?) Wer scort zuerst?\n3. Schlüsselspieler & Rotation: Wer steht in der Starting 5? Wer beendet knappe Spiele (Closing Lineup)?\n4. Empfehlung für die Defense: Wie kann man ihre Plays stoppen?\nHier sind die Daten:\n{context_text}"""
+        st.code(prompt_full, language="text")
+    with col_right:
+        st.subheader("📅 Analysierte Spiele")
+        for g in games_data:
+            opp = g.get('meta_opponent', 'Gegner'); res = g.get('meta_result', '-:-')
+            with st.expander(f"{g.get('meta_date')} vs {opp} ({res})"):
+                st.caption(analyze_game_flow(g.get("actions", []), get_team_name(g.get("homeTeam",{})), get_team_name(g.get("guestTeam",{}))))
