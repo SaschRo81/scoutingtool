@@ -4,7 +4,6 @@ import pandas as pd
 import altair as alt
 from datetime import datetime
 import pytz
-import openai
 from src.api import get_player_metadata_cached, get_best_team_logo, fetch_last_n_games_complete
 
 # --- KONSTANTEN & HELPERS ---
@@ -62,49 +61,57 @@ def get_player_lookup(box):
             lookup[pid] = f"#{nr} {name}"
     return lookup
 
-def get_time_display_values(api_time_str, period):
+def get_player_team_map(box):
+    """Erstellt eine Map: PlayerID -> TeamName."""
+    player_team = {}
+    h_name = get_team_name(box.get("homeTeam", {}), "Heim")
+    g_name = get_team_name(box.get("guestTeam", {}), "Gast")
+    for p in box.get("homeTeam", {}).get('playerStats', []):
+        player_team[str(p.get('seasonPlayer', {}).get('id'))] = h_name
+    for p in box.get("guestTeam", {}).get('playerStats', []):
+        player_team[str(p.get('seasonPlayer', {}).get('id'))] = g_name
+    return player_team
+
+def get_time_info(time_str, period):
     """
-    Berechnet die korrekten Zeitwerte für die Anzeige.
-    Gibt (Restzeit, Gespielte Zeit) zurück.
+    Berechnet die Restzeit basierend auf der API-Zeit (meist Elapsed).
+    Rückgabe: (Restzeit-String, Gespielt-String)
     """
-    if not api_time_str: return "10:00", "00:00"
-    
+    if not time_str: return "10:00", "00:00"
+    p_int = safe_int(period)
+    base_min = 5 if p_int > 4 else 10
+    total_sec = base_min * 60
+    elapsed_sec = 0
     try:
-        # API Zeit in Sekunden umwandeln
-        if "PT" in str(api_time_str):
-            t = str(api_time_str).replace("PT", "").replace("S", "")
+        if "PT" in str(time_str):
+            t = str(time_str).replace("PT", "").replace("S", "")
             if "M" in t:
                 parts = t.split("M")
-                api_seconds = int(float(parts[0])) * 60 + int(float(parts[1] or 0))
-            else: api_seconds = int(float(t))
-        elif ":" in str(api_time_str):
-            parts = str(api_time_str).split(":")
-            if len(parts) == 3: api_seconds = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
-            elif len(parts) == 2: api_seconds = int(parts[0])*60 + int(parts[1])
-        else: api_seconds = int(float(api_time_str))
-
-        base_min = 5 if safe_int(period) > 4 else 10
-        total_sec = base_min * 60
+                elapsed_sec = int(float(parts[0])) * 60 + int(float(parts[1] or 0))
+            else: elapsed_sec = int(float(t))
+        elif ":" in str(time_str):
+            parts = str(time_str).split(":")
+            if len(parts) == 3: elapsed_sec = int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
+            elif len(parts) == 2: elapsed_sec = int(parts[0])*60 + int(parts[1])
+        else: elapsed_sec = int(float(time_str))
         
-        # Falls die API-Zeit > 10 Min ist, ist es vermutlich die Gesamtspielzeit (unwahrscheinlich)
-        # Wir nehmen an: API liefert 'Elapsed' (Gespielt)
-        remaining_sec = total_sec - api_seconds
-        if remaining_sec < 0: remaining_sec = 0
+        rem_sec = total_sec - elapsed_sec
+        if rem_sec < 0: rem_sec = 0
         
         # Formatieren
-        remaining_form = f"{remaining_sec // 60:02d}:{remaining_sec % 60:02d}"
-        elapsed_form = f"{api_seconds // 60:02d}:{api_seconds % 60:02d}"
-        
-        return remaining_form, elapsed_form
+        remaining = f"{rem_sec // 60:02d}:{rem_sec % 60:02d}"
+        elapsed = f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}"
+        return remaining, elapsed
     except:
-        return "10:00", str(api_time_str)
+        return "10:00", str(time_str)
 
 # --- VISUELLE KOMPONENTEN ---
 
 def render_live_comparison_bars(box):
     h_stat = box.get("homeTeam", {}).get("gameStat", {})
     g_stat = box.get("guestTeam", {}).get("gameStat", {})
-    h_name, g_name = get_team_name(box.get("homeTeam", {})), get_team_name(box.get("guestTeam", {}))
+    h_name = get_team_name(box.get("homeTeam", {}))
+    g_name = get_team_name(box.get("guestTeam", {}))
     def get_pct(made, att):
         m, a = safe_int(made), safe_int(att)
         return round((m / a * 100), 1) if a > 0 else 0.0
@@ -177,25 +184,22 @@ def generate_complex_ai_prompt(box):
     return f"KI-Prompt für Game ID {box.get('id','-')}"
 
 def run_openai_generation(api_key, prompt):
-    return "KI Dienst momentan über Prompt-Generator verfügbar."
+    return "KI-Dienst momentan über Prompt-Generator verfügbar."
 
 # --- LIVE VIEW & TICKER ---
 
 def render_full_play_by_play(box, height=600):
     actions = box.get("actions", [])
     if not actions: st.info("Keine Play-by-Play Daten verfügbar."); return
+    
     player_map = get_player_lookup(box)
+    player_team_map = get_player_team_map(box)
     
-    # Umfangreiche Team-ID Map erstellen für saubere Zuordnung
-    h_data, g_data = box.get("homeTeam", {}), box.get("guestTeam", {})
-    h_name, g_name = get_team_name(h_data), get_team_name(g_data)
+    # IDs sammeln für Fallback
+    h_ids = [str(box.get("homeTeam",{}).get("seasonTeamId")), str(box.get("homeTeam",{}).get("teamId"))]
+    g_ids = [str(box.get("guestTeam",{}).get("seasonTeamId")), str(box.get("guestTeam",{}).get("teamId"))]
+    h_name, g_name = get_team_name(box.get("homeTeam")), get_team_name(box.get("guestTeam"))
     
-    team_id_map = {}
-    for team_obj, name in [(h_data, h_name), (g_data, g_name)]:
-        team_id_map[str(team_obj.get("seasonTeamId"))] = name
-        team_id_map[str(team_obj.get("teamId"))] = name
-        team_id_map[str(team_obj.get("seasonTeam", {}).get("id"))] = name
-
     data = []
     run_h, run_g = 0, 0
     actions_sorted = sorted(actions, key=lambda x: x.get('actionNumber', 0))
@@ -205,21 +209,29 @@ def render_full_play_by_play(box, height=600):
         hr, gr = act.get("homeTeamPoints"), act.get("guestTeamPoints")
         if hr is not None and gr is not None:
             nh, ng = safe_int(hr), safe_int(gr)
-            if (nh + ng) >= (run_h + run_g): run_h, run_g = nh, ng
+            if (nh + ng) >= (run_h + run_g): 
+                run_h, run_g = nh, ng
         
         p = act.get("period", "")
-        # Tausch der Logik: Restzeit (Countdown) nach vorn
-        t_rem, t_elap = get_time_display_values(act.get("gameTime") or act.get("timeInGame"), p)
+        t_rem, t_elap = get_time_info(act.get("gameTime") or act.get("timeInGame"), p)
         
-        tid = str(act.get("seasonTeamId"))
-        team = team_id_map.get(tid, "-")
+        # 1. Versuch: Team über Spieler ermitteln (sehr zuverlässig)
+        pid = str(act.get("seasonPlayerId"))
+        team = player_team_map.get(pid)
         
-        actor = player_map.get(str(act.get("seasonPlayerId")), "")
+        # 2. Versuch: Team über Team-ID ermitteln (Fallback)
+        if not team:
+            tid = str(act.get("seasonTeamId"))
+            if tid in h_ids: team = h_name
+            elif tid in g_ids: team = g_name
+            else: team = "-"
+
+        actor = player_map.get(pid, "")
         desc = translate_text(act.get("type", ""))
         if act.get("points"): desc += f" (+{act.get('points')})"
         
         data.append({
-            "Zeit": f"Q{p} | {t_rem}", 
+            "Zeit": f"Q{p} | {t_rem} (gespielt {t_elap})", 
             "Score": f"{run_h}:{run_g}", 
             "Team": team, 
             "Spieler": actor, 
@@ -227,7 +239,7 @@ def render_full_play_by_play(box, height=600):
         })
     
     df = pd.DataFrame(data)
-    if not df.empty: df = df.iloc[::-1] # Neueste oben
+    if not df.empty: df = df.iloc[::-1]
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
 
 def create_live_boxscore_df(team_data):
@@ -244,8 +256,7 @@ def create_live_boxscore_df(team_data):
             "FG": f"{m2+m3}/{a2+a3}", "3P": f"{m3}/{a3}",
             "TR": safe_int(p.get("totalRebounds")), "AS": safe_int(p.get("assists")),
             "TO": safe_int(p.get("turnovers")), "PF": safe_int(p.get("foulsCommitted")),
-            "+/-": safe_int(p.get("plusMinus")),
-            "OnCourt": p.get("onCourt", False) or p.get("isOnCourt", False)
+            "+/-": safe_int(p.get("plusMinus"))
         })
     df = pd.DataFrame(stats)
     return df.sort_values(by=["PTS", "Min"], ascending=[False, False]) if not df.empty else df
@@ -258,45 +269,31 @@ def render_live_view(box):
     sh, sg = safe_int(res.get('homeTeamFinalScore')), safe_int(res.get('guestTeamFinalScore'))
     period = res.get('period') or box.get('period')
     actions = box.get("actions", [])
-    
     if sh == 0 and sg == 0 and actions:
         last = sorted(actions, key=lambda x: x.get('actionNumber', 0))[-1]
         sh, sg = safe_int(last.get('homeTeamPoints')), safe_int(last.get('guestTeamPoints'))
         if not period: period = last.get('period')
-        
     p_map = {1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4"}
     if not period or period == 0:
         for act in reversed(actions):
             if act.get('period'): period = act.get('period'); break
     p_str = (f"OT{safe_int(period)-4}" if safe_int(period) > 4 else p_map.get(safe_int(period), f"Q{period}")) if period else "-"
-    
     gt = box.get('gameTime') or (actions[-1].get('gameTime') if actions else None)
-    # Tausch: Countdown (t_rem) ist primär, Originalzeit (t_elap) ist sekundär
-    t_rem, t_elap = get_time_display_values(gt, period)
-    
+    t_rem, t_elap = get_time_info(gt, period)
     h_hc = h_data.get("headCoachName") or h_data.get("headCoach",{}).get("lastName","-")
     g_hc = g_data.get("headCoachName") or g_data.get("headCoach",{}).get("lastName","-")
-
-    st.markdown(f"""
-        <div style='text-align:center;background:#222;color:#fff;padding:15px;border-radius:10px;margin-bottom:20px;box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
-            <div style='font-size:1.4em; font-weight:bold;'>{h_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {h_hc})</span></div>
-            <div style='font-size:3.5em; font-weight:bold; line-height:1;'>{sh} : {sg}</div>
-            <div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div>
-            <div style='color:#ffcc00; font-weight:bold; font-size:2em; margin-top:10px;'>{p_str} | {t_rem} <span style='font-size:0.5em; color:#fff;'> (noch zu spielen: {t_elap})</span></div>
-        </div>
-    """, unsafe_allow_html=True)
-    
+    st.markdown(f"<div style='text-align:center;background:#222;color:#fff;padding:15px;border-radius:10px;margin-bottom:20px;'><div style='font-size:1.4em; font-weight:bold;'>{h_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {h_hc})</span></div><div style='font-size:3.5em; font-weight:bold; line-height:1;'>{sh} : {sg}</div><div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div><div style='color:#ffcc00; font-weight:bold; font-size:2em; margin-top:10px;'>{p_str} | {t_rem} <span style='font-size:0.5em; color:#fff;'> (gespielt {t_elap})</span></div></div>", unsafe_allow_html=True)
     t1, t2, t3 = st.tabs(["📋 Boxscore", "📊 Team-Vergleich", "📜 Play-by-Play"])
     with t1:
         c1, c2 = st.columns(2)
         with c1:
             st.markdown(f"### {h_name}")
             dfh = create_live_boxscore_df(h_data)
-            if not dfh.empty: st.dataframe(dfh.style.apply(lambda r: ['background-color:#d4edda' if r.OnCourt else '' for _ in r], axis=1), hide_index=True, use_container_width=True, height=(len(dfh)+1)*35+3)
+            if not dfh.empty: st.dataframe(dfh, hide_index=True, use_container_width=True, height=(len(dfh)+1)*35+3)
         with c2:
             st.markdown(f"### {g_name}")
             dfg = create_live_boxscore_df(g_data)
-            if not dfg.empty: st.dataframe(dfg.style.apply(lambda r: ['background-color:#d4edda' if r.OnCourt else '' for _ in r], axis=1), hide_index=True, use_container_width=True, height=(len(dfg)+1)*35+3)
+            if not dfg.empty: st.dataframe(dfg, hide_index=True, use_container_width=True, height=(len(dfg)+1)*35+3)
     with t2: render_live_comparison_bars(box)
     with t3: render_full_play_by_play(box)
 
@@ -342,12 +339,12 @@ def analyze_scouting_data(team_id, detailed_games):
                 stats["top_scorers"][pid]["pts"] += pts; stats["top_scorers"][pid]["games"] += 1
             stats["rotation_depth"] += act_p
         actions = sorted(box.get("actions", []), key=lambda x: x.get('actionNumber', 0))
-        h_s, g_s = 0, 0
+        sh, sg = 0, 0
         for act in actions:
             if act.get("period") != 1: break
-            if act.get("homeTeamPoints") is not None: h_s, g_s = safe_int(act.get("homeTeamPoints")), safe_int(act.get("guestTeamPoints"))
+            if act.get("homeTeamPoints") is not None: sh, sg = safe_int(act.get("homeTeamPoints")), safe_int(act.get("guestTeamPoints"))
             if safe_int(act.get("actionNumber")) > 25: break 
-        stats["start_stats"]["pts_diff_first_5min"] += (h_s - g_s if is_h else g_s - h_s)
+        stats["start_stats"]["pts_diff_first_5min"] += (sh - sg if is_h else sg - sh)
     cnt = stats["games_count"] or 1
     stats["rotation_depth"] = round(stats["rotation_depth"]/cnt, 1); stats["start_stats"]["avg_diff"] = round(stats["start_stats"]["pts_diff_first_5min"]/cnt, 1)
     scorer = [{"name": d["name"], "ppg": round(d["pts"]/d["games"], 1)} for d in stats["top_scorers"].values() if d["games"] > 0]
@@ -390,8 +387,7 @@ def render_team_analysis_dashboard(team_id, team_name):
     with col_l:
         st.subheader("🔑 Schlüsselspieler")
         if scout["top_scorers_list"]: st.dataframe(pd.DataFrame(scout["top_scorers_list"]), hide_index=True, use_container_width=True)
-        st.markdown("---"); st.subheader("🤖 KI-Prompt")
-        st.code(f"Du bist ein professioneller Basketball-Scout. Analysiere {team_name}...\n\n{prepare_ai_scouting_context(team_name, games, team_id)}", language="text")
+        st.markdown("---"); st.subheader("🤖 KI-Prompt"); st.code(f"Du bist ein professioneller Basketball-Scout. Analysiere {team_name}...\n\n{prepare_ai_scouting_context(team_name, games, team_id)}", language="text")
     with col_r:
         st.subheader("📅 Spiele")
         for g in games:
