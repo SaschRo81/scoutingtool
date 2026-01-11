@@ -38,6 +38,7 @@ def safe_int(val):
     except: return 0
 
 def get_team_name(team_data, default_name="Team"):
+    if not team_data: return default_name
     name = team_data.get("gameStat", {}).get("seasonTeam", {}).get("name")
     if name: return name
     name = team_data.get("seasonTeam", {}).get("name")
@@ -95,6 +96,8 @@ def get_time_info(time_str, period):
         return f"{rem_sec // 60:02d}:{rem_sec % 60:02d}", f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}"
     except: return "10:00", str(time_str)
 
+# --- CORE LOGIC ---
+
 def analyze_game_flow(actions, home_name, guest_name):
     if not actions: return "Keine Play-by-Play Daten verfügbar."
     lead_changes, ties = 0, 0
@@ -125,86 +128,31 @@ def generate_complex_ai_prompt(box):
     h_name, g_name = get_team_name(h_data), get_team_name(g_data)
     res = box.get("result", {})
     pbp_summary = analyze_game_flow(box.get("actions", []), h_name, g_name)
-    
-    # Jena Identifikation
     is_home_jena = "Jena" in h_name or "VIMODROM" in h_name
     opponent = g_name if is_home_jena else h_name
     location = "Heimspiel" if is_home_jena else "Auswärtsspiel"
-    
     def get_stats_str(td):
         s = td.get("gameStat", {})
         p_list = td.get("playerStats", [])
         top_p = sorted([p for p in p_list if p.get("points", 0) is not None], key=lambda x: x.get("points", 0), reverse=True)[:3]
         top_str = ", ".join([f"{p.get('seasonPlayer', {}).get('lastName')} ({p.get('points')} Pkt)" for p in top_p])
-        return f"Wurfquote: {safe_int(s.get('fieldGoalsSuccessPercent'))}%, Rebounds: {safe_int(s.get('totalRebounds'))}, Assists: {safe_int(s.get('assists'))}, Ballverluste: {safe_int(s.get('turnovers'))}. Top-Performer: {top_str}"
+        return f"Wurfquote: {safe_int(s.get('fieldGoalsSuccessPercent'))}%, Reb: {safe_int(s.get('totalRebounds'))}, Top: {top_str}"
 
-    prompt = f"""Du agierst als erfahrener Sportjournalist und SEO-Experte für den Basketballverein VIMODROM Baskets Jena (2. DBBL). Deine Aufgabe ist es, hochwertige, emotionale und suchmaschinenoptimierte Texte basierend auf den bereitgestellten [SPIELDATEN] zu erstellen.
+    return f"""Du agierst als Sportjournalist für VIMODROM Baskets Jena. Erstelle 3 Artikel (Website, Liga, Magazin) & Storytelling-Bericht gegen {opponent}.
+Ergebnis: {h_name} {res.get('homeTeamFinalScore')} : {res.get('guestTeamFinalScore')} {g_name}.
+Ort: {location} in {box.get('venue', {}).get('name', 'Halle')}.
+Stats {h_name}: {get_stats_str(h_data)}.
+Stats {g_name}: {get_stats_str(g_data)}.
+PBP-Analyse: {pbp_summary}"""
 
-### ALLGEMEINE STILVORGABEN & TONALITÄT
-- Sprache: Deutsch.
-- Formatierung: Keine Zwischenüberschriften in den Fließtexten. 
-- Absätze: Kurz und prägnant (max. 3 Sätze pro Absatz).
-- Wortwahl: Vermeide das Wort "beeindruckend". Nutze präzisere, bildhaftere Formulierungen.
-- Emotionen: Flechte subtil Spannung (Ungewissheit), Begeisterung (Spektakel), Teamgeist, Stolz (Heimat), Adrenalin (Tempo), Hoffnung und Identifikation ein.
+def run_openai_generation(api_key, prompt):
+    client = openai.OpenAI(api_key=api_key)
+    try:
+        response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
+        return response.choices[0].message.content
+    except Exception as e: return str(e)
 
----
-
-### AUFGABE 1: DREI DYNAMISCHE SPIELBERICHTE
-Erstelle drei separate Artikel (mind. 3000 Zeichen für Artikel A und B).
-
-**Artikel A: Für die VIMODROM-Website**
-- Perspektive: Subjektiv, parteiisch ("Wir"-Gefühl), aus Sicht der VIMODROM Baskets Jena.
-- Ziel: Fans emotional binden, Stolz vermitteln.
-
-**Artikel B: Für die 2. DBBL-Website**
-- Perspektive: Streng neutral, journalistisch ausgewogen.
-
-**Artikel C: Für das Spieltagsmagazin (Heutige Perspektive)**
-- Perspektive: Rückblickend-analytisch, Fokus auf Atmosphäre und Dramatik.
-
-**Output-Format für jeden Artikel:**
-1. Der Text (ohne Zwischenüberschriften).
-2. 3 aussagekräftige Headlines zur Auswahl.
-3. 10 Keywords (kommagetrennt).
-4. Eine Meta-Beschreibung (max. 150 Zeichen).
-
----
-
-### AUFGABE 2: SEO-OPTIMIERTER VEREINSTEXT (ZEITLOS)
-Erstelle einen Text (600–1.000 Wörter) zum Thema "Basketball, VIMODROM Baskets Jena".
-- Keywords: VIMODROM Baskets Jena, Basketball in Jena, Basketball Training Jena, Basketballspiele Thüringen.
-- Inhalt: Team-Vorstellung, Trainingstipps, Tryouts, Ticketkauf (fiktiv), Community-Aspekt.
-- Multimedia: Füge Platzhalter für Bilder/Videos mit SEO-Alt-Tags ein (z.B. [BILD: Action-Shot Jena - Alt: Basketball in Jena]).
-- Meta: Max 150 Zeichen, spannend.
-
----
-
-### AUFGABE 3: KREATIVER MATCH-REPORT (STORYTELLING)
-Schreibe einen zusätzlichen Bericht über das Spiel gegen {opponent} mit Fokus auf Storytelling.
-- Einstieg: Überraschender Moment oder besonderes Zitat.
-- Fokus: Unerwartete Wendungen, taktische Feinheiten, "Hidden Heroes" (unauffällige Spielerinnen).
-- Stil: Variiere den Satzbau, erzähle die Geschichte hinter den Zahlen.
-
----
-
-### ABSCHLUSS
-Erstelle ganz am Ende eine Zusammenfassung aller Inhalte mit 10 globalen Meta-Tags (kommagetrennt) und einer globalen Meta-Beschreibung.
-
----
-
-### [SPIELDATEN]
-Gegner: {opponent}
-Ergebnis: {h_name} {res.get('homeTeamFinalScore')} : {res.get('guestTeamFinalScore')} {g_name}
-Ort: {location} in {box.get('venue', {}).get('name', 'Halle')}
-Viertelergebnisse: Q1 {res.get('homeTeamQ1Score')}:{res.get('guestTeamQ1Score')}, Q2 {res.get('homeTeamQ2Score')}:{res.get('guestTeamQ2Score')}, Q3 {res.get('homeTeamQ3Score')}:{res.get('guestTeamQ3Score')}, Q4 {res.get('homeTeamQ4Score')}:{res.get('guestTeamQ4Score')}
-Stats {h_name}: {get_stats_str(h_data)}
-Stats {g_name}: {get_stats_str(g_data)}
-
-{pbp_summary}
-"""
-    return prompt
-
-# --- RENDERING FUNKTIONEN ---
+# --- VISUELLE KOMPONENTEN ---
 
 def render_live_comparison_bars(box):
     h_stat = box.get("homeTeam", {}).get("gameStat", {})
@@ -230,6 +178,22 @@ def render_live_comparison_bars(box):
             hf, gf = (hv/mv)*100, (gv/mv)*100
         st.markdown(f"""<div class="stat-container"><div class="stat-label">{label}</div><div class="bar-wrapper"><div class="val-text" style="text-align:right;">{hd}</div><div class="bar-bg"><div class="bar-fill-home" style="width:{hf}%;"></div></div><div class="bar-bg"><div class="bar-fill-guest" style="width:{gf}%;"></div></div><div class="val-text" style="text-align:left;">{gd}</div></div></div>""", unsafe_allow_html=True)
 
+# --- REINE ANALYSIS SEITE FUNKTIONEN ---
+
+def render_game_header(details):
+    h_data, g_data = details.get("homeTeam", {}), details.get("guestTeam", {})
+    h_name, g_name = get_team_name(h_data, "Heim"), get_team_name(g_data, "Gast")
+    res = details.get("result", {})
+    sh, sg = res.get("homeTeamFinalScore", 0), res.get("guestTeamFinalScore", 0)
+    time_str = format_date_time(details.get("scheduledTime"))
+    venue = details.get("venue", {})
+    vs = f"{venue.get('name', '-')}, {venue.get('address', '').split(',')[-1].strip()}"
+    st.markdown(f"<div style='text-align: center; color: #666;'>📍 {vs} | 🕒 {time_str}</div>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([2, 1, 2])
+    c1.markdown(f"<h2 style='text-align:right;'>{h_name}</h2>", unsafe_allow_html=True)
+    c2.markdown(f"<h1 style='text-align:center;'>{sh}:{sg}</h1>", unsafe_allow_html=True)
+    c3.markdown(f"<h2 style='text-align:left;'>{g_name}</h2>", unsafe_allow_html=True)
+
 def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coach_name="-"):
     if not player_stats: return
     data = []
@@ -242,6 +206,27 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
     df = pd.DataFrame(data)
     st.markdown(f"#### {team_name} (HC: {coach_name})")
     st.dataframe(df, hide_index=True, use_container_width=True, height=(len(df)+1)*35+3)
+
+def render_game_top_performers(box):
+    st.markdown("### Top Performer")
+    c1, c2 = st.columns(2)
+    for i, tkey in enumerate(["homeTeam", "guestTeam"]):
+        td = box.get(tkey, {})
+        players = sorted([p for p in td.get("playerStats", [])], key=lambda x: safe_int(x.get("points")), reverse=True)[:3]
+        with [c1, c2][i]:
+            st.write(f"**{get_team_name(td)}**")
+            for p in players: st.write(f"{p.get('seasonPlayer',{}).get('lastName')}: {p.get('points')} Pkt")
+
+def render_charts_and_stats(box):
+    st.markdown("### Team Statistik")
+    render_live_comparison_bars(box)
+
+def generate_game_summary(box):
+    h, g = get_team_name(box.get("homeTeam")), get_team_name(box.get("guestTeam"))
+    res = box.get("result", {})
+    return f"Spiel zwischen {h} und {g}. Endstand {res.get('homeTeamFinalScore',0)}:{res.get('guestTeamFinalScore',0)}."
+
+# --- TICKER ---
 
 def render_full_play_by_play(box, height=600):
     actions = box.get("actions", [])
@@ -258,15 +243,17 @@ def render_full_play_by_play(box, height=600):
             nh, ng = safe_int(hr), safe_int(gr)
             if (nh + ng) >= (run_h + run_g): run_h, run_g = nh, ng
         p = act.get("period", "")
-        t_rem, t_elap = get_time_info(act.get("gameTime") or act.get("timeInGame"), p)
+        t_rem, t_orig = get_time_info(act.get("gameTime") or act.get("timeInGame"), p)
         pid = str(act.get("seasonPlayerId"))
         team = player_team_map.get(pid) or team_ids.get(str(act.get("seasonTeamId")), "-")
         actor = player_map.get(pid, ""); desc = translate_text(act.get("type", ""))
         if act.get("points"): desc += f" (+{act.get('points')})"
-        data.append({"Zeit": f"Q{p} | {t_rem} ({t_elap})", "Score": f"{run_h}:{run_g}", "Team": team, "Spieler": actor, "Aktion": desc})
+        data.append({"Zeit": f"Q{p} | {t_rem} ({t_orig})", "Score": f"{run_h}:{run_g}", "Team": team, "Spieler": actor, "Aktion": desc})
     df = pd.DataFrame(data)
     if not df.empty: df = df.iloc[::-1]
     st.dataframe(df, use_container_width=True, hide_index=True, height=height)
+
+# --- LIVE VIEW ---
 
 def render_live_view(box):
     if not box: return
@@ -284,21 +271,21 @@ def render_live_view(box):
         for act in reversed(actions):
             if act.get('period'): period = act.get('period'); break
     p_str = (f"OT{safe_int(period)-4}" if safe_int(period) > 4 else p_map.get(safe_int(period), f"Q{period}")) if period else "-"
-    t_rem, t_elap = get_time_info(box.get('gameTime') or (actions[-1].get('gameTime') if actions else None), period)
+    t_rem, t_orig = get_time_info(box.get('gameTime') or (actions[-1].get('gameTime') if actions else None), period)
     h_hc = h_data.get("headCoachName") or h_data.get("headCoach",{}).get("lastName","-")
     g_hc = g_data.get("headCoachName") or g_data.get("headCoach",{}).get("lastName","-")
-    st.markdown(f"<div style='text-align:center;background:#222;color:#fff;padding:15px;border-radius:10px;margin-bottom:20px;'><div style='font-size:1.4em; font-weight:bold;'>{h_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {h_hc})</span></div><div style='font-size:3.5em; font-weight:bold; line-height:1;'>{sh} : {sg}</div><div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div><div style='color:#ffcc00; font-weight:bold; font-size:2em; margin-top:10px;'>{p_str} | {t_rem} <span style='font-size:0.5em; color:#fff;'> (gespielt {t_elap})</span></div></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center;background:#222;color:#fff;padding:15px;border-radius:10px;margin-bottom:20px;'><div style='font-size:1.4em; font-weight:bold;'>{h_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {h_hc})</span></div><div style='font-size:3.5em; font-weight:bold; line-height:1;'>{sh} : {sg}</div><div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div><div style='color:#ffcc00; font-weight:bold; font-size:2em; margin-top:10px;'>{p_str} | {t_rem} <span style='font-size:0.5em; color:#fff;'> (gespielt {t_orig})</span></div></div>", unsafe_allow_html=True)
     t1, t2, t3 = st.tabs(["📋 Boxscore", "📊 Team-Vergleich", "📜 Play-by-Play"])
     with t1:
         c1, c2 = st.columns(2)
         with c1:
             st.markdown(f"### {h_name}")
             dfh = create_live_boxscore_df(h_data)
-            if not dfh.empty: st.dataframe(dfh.style.apply(lambda r: ['background-color:#d4edda' if r.OnCourt else '' for _ in r], axis=1), hide_index=True, use_container_width=True, height=(len(dfh)+1)*35+3)
+            if not dfh.empty: st.dataframe(dfh, hide_index=True, use_container_width=True, height=(len(dfh)+1)*35+3)
         with c2:
             st.markdown(f"### {g_name}")
             dfg = create_live_boxscore_df(g_data)
-            if not dfg.empty: st.dataframe(dfg.style.apply(lambda r: ['background-color:#d4edda' if r.OnCourt else '' for _ in r], axis=1), hide_index=True, use_container_width=True, height=(len(dfg)+1)*35+3)
+            if not dfg.empty: st.dataframe(dfg, hide_index=True, use_container_width=True, height=(len(dfg)+1)*35+3)
     with t2: render_live_comparison_bars(box)
     with t3: render_full_play_by_play(box)
 
@@ -311,13 +298,6 @@ def create_live_boxscore_df(team_data):
         stats.append({"#": p.get("seasonPlayer",{}).get("shirtNumber","-"), "Name": p.get("seasonPlayer",{}).get("lastName","Unk"), "Min": f"{sec // 60:02d}:{sec % 60:02d}", "PTS": safe_int(p.get("points")), "FG": f"{m2+m3}/{a2+a3}", "3P": f"{m3}/{a3}", "TR": safe_int(p.get("totalRebounds")), "AS": safe_int(p.get("assists")), "TO": safe_int(p.get("turnovers")), "PF": safe_int(p.get("foulsCommitted")), "+/-": safe_int(p.get("plusMinus")), "OnCourt": p.get("onCourt", False) or p.get("isOnCourt", False)})
     df = pd.DataFrame(stats)
     return df.sort_values(by=["PTS", "Min"], ascending=[False, False]) if not df.empty else df
-
-def run_openai_generation(api_key, prompt):
-    client = openai.OpenAI(api_key=api_key)
-    try:
-        response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
-        return response.choices[0].message.content
-    except Exception as e: return str(e)
 
 # --- PREP & SCOUTING ---
 
