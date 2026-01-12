@@ -144,12 +144,10 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
     s_pts=0; s_m2=0; s_a2=0; s_m3=0; s_a3=0; s_mf=0; s_af=0; s_mfg=0; s_afg=0
     s_or=0; s_dr=0; s_tr=0; s_as=0; s_st=0; s_to=0; s_bs=0; s_pf=0; s_eff=0; s_pm=0; s_sec=0
 
-    # Helper für Prozentstring
     def fmt_stat(made, att):
         pct = int((made/att)*100) if att > 0 else 0
         return f"{made}/{att} ({pct}%)"
 
-    # 1. Spieler durchgehen
     for p in player_stats:
         info = p.get("seasonPlayer", {})
         sec = safe_int(p.get("secondsPlayed")); s_sec += sec
@@ -157,13 +155,10 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         
         m2, a2 = safe_int(p.get("twoPointShotsMade")), safe_int(p.get("twoPointShotsAttempted"))
         s_m2 += m2; s_a2 += a2
-        
         m3, a3 = safe_int(p.get("threePointShotsMade")), safe_int(p.get("threePointShotsAttempted"))
         s_m3 += m3; s_a3 += a3
-        
         mf, af = safe_int(p.get("freeThrowsMade")), safe_int(p.get("freeThrowsAttempted"))
         s_mf += mf; s_af += af
-        
         fgm, fga = safe_int(p.get("fieldGoalsMade")), safe_int(p.get("fieldGoalsAttempted"))
         if fga == 0: fgm = m2+m3; fga = a2+a3
         s_mfg += fgm; s_afg += fga
@@ -171,7 +166,6 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         oreb = safe_int(p.get("offensiveRebounds")); s_or += oreb
         dreb = safe_int(p.get("defensiveRebounds")); s_dr += dreb
         treb = safe_int(p.get("totalRebounds")); s_tr += treb
-        
         ast = safe_int(p.get("assists")); s_as += ast
         stl = safe_int(p.get("steals")); s_st += stl
         tov = safe_int(p.get("turnovers")); s_to += tov
@@ -184,17 +178,10 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
             "#": info.get('shirtNumber','-'), 
             "Name": f"{info.get('lastName','-')}, {info.get('firstName','')}", 
             "Min": f"{sec//60:02d}:{sec%60:02d}", 
-            "PTS": pts, 
-            "2P": fmt_stat(m2, a2), 
-            "3P": fmt_stat(m3, a3), 
-            "FG": fmt_stat(fgm, fga), 
-            "FT": fmt_stat(mf, af),
-            "OR": oreb, "DR": dreb, "TR": treb, 
-            "AS": ast, "ST": stl, "TO": tov, "BS": blk, "PF": pf, 
-            "EFF": eff, "+/-": pm
+            "PTS": pts, "2P": fmt_stat(m2, a2), "3P": fmt_stat(m3, a3), "FG": fmt_stat(fgm, fga), "FT": fmt_stat(mf, af),
+            "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "ST": stl, "TO": tov, "BS": blk, "PF": pf, "EFF": eff, "+/-": pm
         })
     
-    # 2. Team / Coach Zeile (Differenzen)
     t = team_stats_official or {}
     tm_pts = safe_int(t.get("points")) - s_pts
     tm_or = safe_int(t.get("offensiveRebounds")) - s_or
@@ -207,18 +194,13 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
     tm_pf = safe_int(t.get("foulsCommitted")) - s_pf
     tm_eff = safe_int(t.get("efficiency")) - s_eff
     
-    # Zeige Team-Zeile nur wenn es Abweichungen gibt
     if any([tm_pts, tm_or, tm_dr, tm_tr, tm_as, tm_to, tm_st, tm_bs, tm_pf, tm_eff]):
         data.append({
             "#": "", "Name": "Team / Coach", "Min": "", 
-            "PTS": tm_pts if tm_pts else "", 
-            "2P": "", "3P": "", "FG": "", "FT": "",
-            "OR": tm_or, "DR": tm_dr, "TR": tm_tr, 
-            "AS": tm_as, "ST": tm_st, "TO": tm_to, "BS": tm_bs, "PF": tm_pf, 
-            "EFF": tm_eff, "+/-": ""
+            "PTS": tm_pts if tm_pts else "", "2P": "", "3P": "", "FG": "", "FT": "",
+            "OR": tm_or, "DR": tm_dr, "TR": tm_tr, "AS": tm_as, "ST": tm_st, "TO": tm_to, "BS": tm_bs, "PF": tm_pf, "EFF": tm_eff, "+/-": ""
         })
 
-    # 3. TOTALS Zeile (Offizielle Werte)
     totals_row = {
         "#": "", "Name": "TOTALS", 
         "Min": "200:00", 
@@ -230,19 +212,13 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         "OR": safe_int(t.get("offensiveRebounds", s_or)), 
         "DR": safe_int(t.get("defensiveRebounds", s_dr)), 
         "TR": safe_int(t.get("totalRebounds", s_tr)),
-        "AS": safe_int(t.get("assists", s_as)), 
-        "ST": safe_int(t.get("steals", s_st)), 
-        "TO": safe_int(t.get("turnovers", s_to)), 
-        "BS": safe_int(t.get("blocks", s_bs)), 
-        "PF": safe_int(t.get("foulsCommitted", s_pf)), 
-        "EFF": safe_int(t.get("efficiency", s_eff)), 
-        "+/-": ""
+        "AS": safe_int(t.get("assists", s_as)), "ST": safe_int(t.get("steals", s_st)), 
+        "TO": safe_int(t.get("turnovers", s_to)), "BS": safe_int(t.get("blocks", s_bs)), 
+        "PF": safe_int(t.get("foulsCommitted", s_pf)), "EFF": safe_int(t.get("efficiency", s_eff)), "+/-": ""
     }
     data.append(totals_row)
 
     df = pd.DataFrame(data)
-    
-    # Styling
     def style_rows(row):
         if row["Name"] == "TOTALS": return ['font-weight: bold; background-color: #e0e0e0; border-top: 2px solid #999'] * len(row)
         elif row["Name"] == "Team / Coach": return ['font-style: italic; color: #666; background-color: #f9f9f9'] * len(row)
@@ -305,11 +281,10 @@ def render_full_play_by_play(box, height=600):
 
 def create_live_boxscore_df(team_data):
     stats = []
-    # Summen-Variablen (Live View)
+    # Summen für Live-Totals
     s_pts=0; s_m2=0; s_a2=0; s_m3=0; s_a3=0; s_mf=0; s_af=0; s_mfg=0; s_afg=0
     s_or=0; s_dr=0; s_tr=0; s_as=0; s_st=0; s_to=0; s_bs=0; s_pf=0; s_sec=0
-
-    # Helper für Prozentstring
+    
     def fmt(m, a): return f"{m}/{a} ({int(m/a*100) if a>0 else 0}%)"
 
     for p in team_data.get("playerStats", []):
@@ -333,8 +308,7 @@ def create_live_boxscore_df(team_data):
             "Name": p.get("seasonPlayer",{}).get("lastName","Unk"),
             "Min": f"{sec // 60:02d}:{sec % 60:02d}",
             "PTS": pts, "FG": fmt(fgm, fga), "2P": fmt(m2, a2), "3P": fmt(m3, a3), "FT": fmt(mf, af),
-            "OR": oreb, "DR": dreb, "TR": treb,
-            "AS": ast, "TO": tov, "ST": stl, "BS": blk, "PF": pf,
+            "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "TO": tov, "ST": stl, "BS": blk, "PF": pf,
             "+/-": safe_int(p.get("plusMinus")),
             "OnCourt": p.get("onCourt", False) or p.get("isOnCourt", False)
         })
@@ -343,8 +317,7 @@ def create_live_boxscore_df(team_data):
     if not df.empty:
         df = df.sort_values(by=["PTS", "Min"], ascending=[False, False])
         
-    # Team / Coach Differenz Berechnung für Live View
-    # Wir holen die offiziellen Werte aus dem top-level team_data (falls vorhanden)
+    # Team / Coach Zeile für Live View
     tm_pts = safe_int(team_data.get("points")) - s_pts
     tm_or = safe_int(team_data.get("offensiveRebounds")) - s_or
     tm_dr = safe_int(team_data.get("defensiveRebounds")) - s_dr
@@ -355,7 +328,6 @@ def create_live_boxscore_df(team_data):
     tm_bs = safe_int(team_data.get("blocks")) - s_bs
     tm_pf = safe_int(team_data.get("foulsCommitted")) - s_pf
 
-    # Team Zeile einfügen
     if any([tm_pts, tm_or, tm_dr, tm_tr, tm_as, tm_to, tm_st, tm_bs, tm_pf]):
          df_team = pd.DataFrame([{
             "#": "", "Name": "Team / Coach", "Min": "", "PTS": tm_pts if tm_pts else "",
@@ -364,23 +336,17 @@ def create_live_boxscore_df(team_data):
             "+/-": "", "OnCourt": False
          }])
          df = pd.concat([df, df_team], ignore_index=True)
-         # Summen anpassen für Totals
          s_pts += tm_pts; s_or += tm_or; s_dr += tm_dr; s_tr += tm_tr
          s_as += tm_as; s_to += tm_to; s_st += tm_st; s_bs += tm_bs; s_pf += tm_pf
 
-    # TOTALS Zeile
+    # TOTALS
     totals = {
-        "#": "", "Name": "TOTALS",
-        "Min": f"{s_sec//60:02d}:{s_sec%60:02d}",
-        "PTS": s_pts,
-        "FG": fmt(s_mfg, s_afg), "2P": fmt(s_m2, s_a2), "3P": fmt(s_m3, s_a3), "FT": fmt(s_mf, s_af),
-        "OR": s_or, "DR": s_dr, "TR": s_tr,
-        "AS": s_as, "TO": s_to, "ST": s_st, "BS": s_bs, "PF": s_pf,
+        "#": "", "Name": "TOTALS", "Min": f"{s_sec//60:02d}:{s_sec%60:02d}",
+        "PTS": s_pts, "FG": fmt(s_mfg, s_afg), "2P": fmt(s_m2, s_a2), "3P": fmt(s_m3, s_a3), "FT": fmt(s_mf, s_af),
+        "OR": s_or, "DR": s_dr, "TR": s_tr, "AS": s_as, "TO": s_to, "ST": s_st, "BS": s_bs, "PF": s_pf,
         "+/-": "", "OnCourt": False
     }
-    
-    df_totals = pd.DataFrame([totals])
-    return pd.concat([df, df_totals], ignore_index=True)
+    return pd.concat([df, pd.DataFrame([totals])], ignore_index=True)
 
 def render_live_view(box):
     if not box: return
