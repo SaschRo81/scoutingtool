@@ -173,8 +173,8 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         pf = safe_int(p.get("foulsCommitted")); s_pf += pf
         eff = safe_int(p.get("efficiency")); s_eff += eff
         pm = safe_int(p.get("plusMinus")); s_pm += pm
-        
-        # WICHTIG: Shirt Number als String erzwingen!
+
+        # NR muss string sein
         nr = str(info.get('shirtNumber', '-'))
 
         data.append({
@@ -186,6 +186,7 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
             "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "ST": stl, "TO": tov, "BS": blk, "PF": pf, "EFF": eff, "+/-": pm
         })
     
+    # Team / Coach Zeile
     t = team_stats_official or {}
     tm_pts = safe_int(t.get("points")) - s_pts
     tm_or = safe_int(t.get("offensiveRebounds")) - s_or
@@ -201,10 +202,12 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
     if any([tm_pts, tm_or, tm_dr, tm_tr, tm_as, tm_to, tm_st, tm_bs, tm_pf, tm_eff]):
         data.append({
             "#": "-", "Name": "Team / Coach", "Min": "", 
-            "PTS": tm_pts if tm_pts else "", "2P": "", "3P": "", "FG": "", "FT": "",
+            "PTS": tm_pts, # WICHTIG: Kein String "", sondern int (0 ist ok)
+            "2P": "", "3P": "", "FG": "", "FT": "",
             "OR": tm_or, "DR": tm_dr, "TR": tm_tr, "AS": tm_as, "ST": tm_st, "TO": tm_to, "BS": tm_bs, "PF": tm_pf, "EFF": tm_eff, "+/-": ""
         })
 
+    # TOTALS
     totals_row = {
         "#": "-", "Name": "TOTALS", 
         "Min": "200:00", 
@@ -307,8 +310,7 @@ def create_live_boxscore_df(team_data):
         blk = safe_int(p.get("blocks")); s_bs+=blk
         pf = safe_int(p.get("foulsCommitted")); s_pf+=pf
         
-        # WICHTIG: Shirt Number als String für PyArrow
-        nr = str(p.get("seasonPlayer",{}).get("shirtNumber", "-"))
+        nr = str(p.get("seasonPlayer",{}).get("shirtNumber","-"))
 
         stats.append({
             "#": nr,
@@ -343,7 +345,7 @@ def create_live_boxscore_df(team_data):
 
     if any([d_pts, d_or, d_dr, d_tr, d_as, d_to, d_st, d_bs, d_pf]) and t_pts > 0:
          df_team = pd.DataFrame([{
-            "#": "-", "Name": "Team / Coach", "Min": "", "PTS": d_pts if d_pts else "",
+            "#": "-", "Name": "Team / Coach", "Min": "", "PTS": d_pts,
             "FG": "", "2P": "", "3P": "", "FT": "",
             "OR": d_or, "DR": d_dr, "TR": d_tr, "AS": d_as, "TO": d_to, "ST": d_st, "BS": d_bs, "PF": d_pf,
             "+/-": "", "OnCourt": False
