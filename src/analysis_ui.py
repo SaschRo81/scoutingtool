@@ -95,25 +95,6 @@ def get_time_info(time_str, period):
         return f"{rem_sec // 60:02d}:{rem_sec % 60:02d}", f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}"
     except: return "10:00", str(time_str)
 
-def get_live_team_fouls(actions, period, h_ids, g_ids):
-    """Zählt Fouls im aktuellen Viertel für die TV-Anzeige."""
-    h_f, g_f = 0, 0
-    current_p = safe_int(period)
-    
-    # IDs vorbereiten (alles Strings)
-    h_ids = [str(x) for x in h_ids if x]
-    g_ids = [str(x) for x in g_ids if x]
-
-    for act in actions:
-        if safe_int(act.get("period")) == current_p:
-            t = str(act.get("type", "")).upper()
-            # Nur echte Fouls zählen (kein 'received' oder 'drawn')
-            if "FOUL" in t and "RECEIVED" not in t and "DRAWN" not in t:
-                tid = str(act.get("seasonTeamId"))
-                if tid in h_ids: h_f += 1
-                elif tid in g_ids: g_f += 1
-    return min(h_f, 5), min(g_f, 5)
-
 # --- VISUELLE KOMPONENTEN ---
 
 def render_live_comparison_bars(box):
@@ -192,9 +173,12 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         pf = safe_int(p.get("foulsCommitted")); s_pf += pf
         eff = safe_int(p.get("efficiency")); s_eff += eff
         pm = safe_int(p.get("plusMinus")); s_pm += pm
+        
+        # WICHTIG: Shirt Number als String erzwingen!
+        nr = str(info.get('shirtNumber', '-'))
 
         data.append({
-            "#": info.get('shirtNumber','-'), 
+            "#": nr, 
             "Name": f"{info.get('lastName','-')}, {info.get('firstName','')}", 
             "Min": f"{sec//60:02d}:{sec%60:02d}", 
             "PTS": pts, 
@@ -216,13 +200,13 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
     
     if any([tm_pts, tm_or, tm_dr, tm_tr, tm_as, tm_to, tm_st, tm_bs, tm_pf, tm_eff]):
         data.append({
-            "#": "", "Name": "Team / Coach", "Min": "", 
+            "#": "-", "Name": "Team / Coach", "Min": "", 
             "PTS": tm_pts if tm_pts else "", "2P": "", "3P": "", "FG": "", "FT": "",
             "OR": tm_or, "DR": tm_dr, "TR": tm_tr, "AS": tm_as, "ST": tm_st, "TO": tm_to, "BS": tm_bs, "PF": tm_pf, "EFF": tm_eff, "+/-": ""
         })
 
     totals_row = {
-        "#": "", "Name": "TOTALS", 
+        "#": "-", "Name": "TOTALS", 
         "Min": "200:00", 
         "PTS": safe_int(t.get("points", s_pts)),
         "2P": fmt_stat(safe_int(t.get("twoPointShotsMade", s_m2)), safe_int(t.get("twoPointShotsAttempted", s_a2))),
@@ -323,12 +307,16 @@ def create_live_boxscore_df(team_data):
         blk = safe_int(p.get("blocks")); s_bs+=blk
         pf = safe_int(p.get("foulsCommitted")); s_pf+=pf
         
+        # WICHTIG: Shirt Number als String für PyArrow
+        nr = str(p.get("seasonPlayer",{}).get("shirtNumber", "-"))
+
         stats.append({
-            "#": p.get("seasonPlayer",{}).get("shirtNumber","-"),
+            "#": nr,
             "Name": p.get("seasonPlayer",{}).get("lastName","Unk"),
             "Min": f"{sec // 60:02d}:{sec % 60:02d}",
             "PTS": pts, "FG": fmt(fgm, fga), "2P": fmt(m2, a2), "3P": fmt(m3, a3), "FT": fmt(mf, af),
-            "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "TO": tov, "ST": stl, "BS": blk, "PF": pf,
+            "OR": oreb, "DR": dreb, "TR": treb,
+            "AS": ast, "TO": tov, "ST": stl, "BS": blk, "PF": pf,
             "+/-": safe_int(p.get("plusMinus")),
             "OnCourt": p.get("onCourt", False) or p.get("isOnCourt", False)
         })
@@ -388,17 +376,25 @@ def render_live_view(box):
         last = sorted(actions, key=lambda x: x.get('actionNumber', 0))[-1]
         sh, sg = safe_int(last.get('homeTeamPoints')), safe_int(last.get('guestTeamPoints'))
         if not period: period = last.get('period')
+    
+    if not period or period == 0:
+        for act in reversed(actions):
+            if act.get('period'): period = act.get('period'); break
+    
     t_rem, t_orig = get_time_info(box.get('gameTime') or (actions[-1].get('gameTime') if actions else None), period)
     p_str = (f"OT{safe_int(period)-4}" if safe_int(period) > 4 else f"Q{period}")
+    h_hc = h_data.get("headCoachName") or h_data.get("headCoach",{}).get("lastName","-")
+    g_hc = g_data.get("headCoachName") or g_data.get("headCoach",{}).get("lastName","-")
     
-    # TV Scoreboard Data Preparation
+    # IDs für Fouls
     h_ids = [str(h_data.get("seasonTeamId")), str(h_data.get("teamId"))]
     g_ids = [str(g_data.get("seasonTeamId")), str(g_data.get("teamId"))]
     h_fouls, g_fouls = get_live_team_fouls(actions, period, h_ids, g_ids)
     
+    # Logos
     h_logo = get_best_team_logo(str(h_data.get("seasonTeamId")))
     g_logo = get_best_team_logo(str(g_data.get("seasonTeamId")))
-    
+
     def get_foul_dots(count):
         dots = ""
         for i in range(1, 6):
@@ -447,11 +443,11 @@ def render_live_view(box):
         with c1:
             st.markdown(f"### {h_name}")
             dfh = create_live_boxscore_df(h_data)
-            if not dfh.empty: st.dataframe(dfh.style.apply(style_live, axis=1), hide_index=True, use_container_width=True, height=(len(dfh)+1)*35+3)
+            if not dfh.empty: st.dataframe(dfh.style.apply(style_live, axis=1), hide_index=True, use_container_width=True)
         with c2:
             st.markdown(f"### {g_name}")
             dfg = create_live_boxscore_df(g_data)
-            if not dfg.empty: st.dataframe(dfg.style.apply(style_live, axis=1), hide_index=True, use_container_width=True, height=(len(dfg)+1)*35+3)
+            if not dfg.empty: st.dataframe(dfg.style.apply(style_live, axis=1), hide_index=True, use_container_width=True)
     with t2: render_live_comparison_bars(box)
     with t3: render_full_play_by_play(box)
 
