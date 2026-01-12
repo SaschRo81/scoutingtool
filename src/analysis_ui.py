@@ -392,7 +392,7 @@ def render_live_view(box):
             <div style='font-size:4.5em; font-weight:bold; line-height:1; margin: 10px 0;'>{sh} : {sg}</div>
             <div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div>
             <div style='color:#ffcc00; font-weight:bold; font-size:1.8em; margin-top:15px; border-top: 1px solid #444; padding-top: 10px;'>
-                {p_str} | {t_rem} <span style='font-size:0.6em;color:#fff;'> (gespielt {t_orig})</span>
+                {p_str} | {t_rem} <span style='font-size:0.6em;color:#fff;'> (noch zu spielen: {t_orig})</span>
             </div>
         </div>
     """, unsafe_allow_html=True)
