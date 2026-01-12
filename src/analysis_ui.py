@@ -15,14 +15,21 @@ ACTION_TRANSLATION = {
     "ASSIST": "Assist", "STEAL": "Steal", "BLOCK": "Block",
     "SUBSTITUTION": "Wechsel", "TIMEOUT": "Auszeit",
     "JUMP_BALL": "Sprungball", "START": "Start", "END": "Ende",
-    "offensive": "Off", "defensive": "Def"
+    "TWO_POINT_THROW": "2P Wurf", "THREE_POINT_THROW": "3P Wurf",
+    "FREE_THROW": "Freiwurf", "layup": "Korbleger", "jump_shot": "Sprung",
+    "dunk": "Dunk", "offensive": "Off", "defensive": "Def",
+    "personal_foul": "Persönlich", "technical_foul": "Technisch",
+    "unsportsmanlike_foul": "Unsportlich"
 }
 
 def translate_text(text):
     if not text: return ""
     text_upper = str(text).upper()
     if text_upper in ACTION_TRANSLATION: return ACTION_TRANSLATION[text_upper]
-    return text.replace("_", " ").title()
+    clean_text = text.replace("_", " ").lower()
+    for eng, ger in ACTION_TRANSLATION.items():
+        if eng.lower() in clean_text: clean_text = clean_text.replace(eng.lower(), ger)
+    return clean_text.capitalize()
 
 def safe_int(val):
     if val is None: return 0
@@ -133,7 +140,6 @@ def render_game_header(details):
 def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coach_name="-"):
     if not player_stats: return
     data = []
-    
     # Summen-Variablen (Player Sums)
     s_pts=0; s_m2=0; s_a2=0; s_m3=0; s_a3=0; s_mf=0; s_af=0; s_mfg=0; s_afg=0
     s_or=0; s_dr=0; s_tr=0; s_as=0; s_st=0; s_to=0; s_bs=0; s_pf=0; s_eff=0; s_pm=0; s_sec=0
@@ -299,7 +305,7 @@ def render_full_play_by_play(box, height=600):
 
 def create_live_boxscore_df(team_data):
     stats = []
-    # Summen für Live-Totals
+    # Summen-Variablen (Live View)
     s_pts=0; s_m2=0; s_a2=0; s_m3=0; s_a3=0; s_mf=0; s_af=0; s_mfg=0; s_afg=0
     s_or=0; s_dr=0; s_tr=0; s_as=0; s_st=0; s_to=0; s_bs=0; s_pf=0; s_sec=0
 
@@ -309,16 +315,13 @@ def create_live_boxscore_df(team_data):
     for p in team_data.get("playerStats", []):
         sec = safe_int(p.get("secondsPlayed")); s_sec += sec
         pts = safe_int(p.get("points")); s_pts += pts
-        
         m2, a2 = safe_int(p.get("twoPointShotsMade")), safe_int(p.get("twoPointShotsAttempted")); s_m2+=m2; s_a2+=a2
         m3, a3 = safe_int(p.get("threePointShotsMade")), safe_int(p.get("threePointShotsAttempted")); s_m3+=m3; s_a3+=a3
         mf, af = safe_int(p.get("freeThrowsMade")), safe_int(p.get("freeThrowsAttempted")); s_mf+=mf; s_af+=af
         fgm, fga = safe_int(p.get("fieldGoalsMade")), safe_int(p.get("fieldGoalsAttempted")); s_mfg+=fgm; s_afg+=fga
-        
         oreb = safe_int(p.get("offensiveRebounds")); s_or+=oreb
         dreb = safe_int(p.get("defensiveRebounds")); s_dr+=dreb
         treb = safe_int(p.get("totalRebounds")); s_tr+=treb
-        
         ast = safe_int(p.get("assists")); s_as+=ast
         stl = safe_int(p.get("steals")); s_st+=stl
         tov = safe_int(p.get("turnovers")); s_to+=tov
@@ -340,7 +343,32 @@ def create_live_boxscore_df(team_data):
     if not df.empty:
         df = df.sort_values(by=["PTS", "Min"], ascending=[False, False])
         
-    # TOTALS Zeile (Live)
+    # Team / Coach Differenz Berechnung für Live View
+    # Wir holen die offiziellen Werte aus dem top-level team_data (falls vorhanden)
+    tm_pts = safe_int(team_data.get("points")) - s_pts
+    tm_or = safe_int(team_data.get("offensiveRebounds")) - s_or
+    tm_dr = safe_int(team_data.get("defensiveRebounds")) - s_dr
+    tm_tr = safe_int(team_data.get("totalRebounds")) - s_tr
+    tm_as = safe_int(team_data.get("assists")) - s_as
+    tm_to = safe_int(team_data.get("turnovers")) - s_to
+    tm_st = safe_int(team_data.get("steals")) - s_st
+    tm_bs = safe_int(team_data.get("blocks")) - s_bs
+    tm_pf = safe_int(team_data.get("foulsCommitted")) - s_pf
+
+    # Team Zeile einfügen
+    if any([tm_pts, tm_or, tm_dr, tm_tr, tm_as, tm_to, tm_st, tm_bs, tm_pf]):
+         df_team = pd.DataFrame([{
+            "#": "", "Name": "Team / Coach", "Min": "", "PTS": tm_pts if tm_pts else "",
+            "FG": "", "2P": "", "3P": "", "FT": "",
+            "OR": tm_or, "DR": tm_dr, "TR": tm_tr, "AS": tm_as, "TO": tm_to, "ST": tm_st, "BS": tm_bs, "PF": tm_pf,
+            "+/-": "", "OnCourt": False
+         }])
+         df = pd.concat([df, df_team], ignore_index=True)
+         # Summen anpassen für Totals
+         s_pts += tm_pts; s_or += tm_or; s_dr += tm_dr; s_tr += tm_tr
+         s_as += tm_as; s_to += tm_to; s_st += tm_st; s_bs += tm_bs; s_pf += tm_pf
+
+    # TOTALS Zeile
     totals = {
         "#": "", "Name": "TOTALS",
         "Min": f"{s_sec//60:02d}:{s_sec%60:02d}",
@@ -365,32 +393,16 @@ def render_live_view(box):
         last = sorted(actions, key=lambda x: x.get('actionNumber', 0))[-1]
         sh, sg = safe_int(last.get('homeTeamPoints')), safe_int(last.get('guestTeamPoints'))
         if not period: period = last.get('period')
-    
-    if not period or period == 0:
-        for act in reversed(actions):
-            if act.get('period'): period = act.get('period'); break
-    
     t_rem, t_orig = get_time_info(box.get('gameTime') or (actions[-1].get('gameTime') if actions else None), period)
     p_str = (f"OT{safe_int(period)-4}" if safe_int(period) > 4 else f"Q{period}")
-    
     h_hc = h_data.get("headCoachName") or h_data.get("headCoach",{}).get("lastName","-")
     g_hc = g_data.get("headCoachName") or g_data.get("headCoach",{}).get("lastName","-")
-    
-    st.markdown(f"""
-        <div style='text-align:center;background:#222;color:#fff;padding:20px;border-radius:15px;margin-bottom:25px;box-shadow: 0 4px 15px rgba(0,0,0,0.3);'>
-            <div style='font-size:1.4em; font-weight:bold;'>{h_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {h_hc})</span></div>
-            <div style='font-size:4.5em; font-weight:bold; line-height:1; margin: 10px 0;'>{sh} : {sg}</div>
-            <div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div>
-            <div style='color:#ffcc00; font-weight:bold; font-size:1.8em; margin-top:15px; border-top: 1px solid #444; padding-top: 10px;'>
-                {p_str} | {t_rem} <span style='font-size:0.6em;color:#fff;'> (gespielt {t_orig})</span>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-    
+    st.markdown(f"<div style='text-align:center;background:#222;color:#fff;padding:15px;border-radius:10px;margin-bottom:20px;'><div style='font-size:1.4em; font-weight:bold;'>{h_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {h_hc})</span></div><div style='font-size:3.5em; font-weight:bold; line-height:1;'>{sh} : {sg}</div><div style='font-size:1.4em; font-weight:bold;'>{g_name} <span style='font-size:0.6em; color:#aaa;'>(HC: {g_hc})</span></div><div style='color:#ffcc00; font-weight:bold; font-size:2em; margin-top:10px;'>{p_str} | {t_rem} <span style='font-size:0.5em; color:#fff;'> (gespielt {t_orig})</span></div></div>", unsafe_allow_html=True)
     t1, t2, t3 = st.tabs(["📋 Boxscore", "📊 Team-Vergleich", "📜 Play-by-Play"])
     
     def style_live(row):
         if row.get("Name") == "TOTALS": return ['font-weight: bold; background-color: #e0e0e0; border-top: 2px solid #999'] * len(row)
+        elif row.get("Name") == "Team / Coach": return ['font-style: italic; color: #666; background-color: #f9f9f9'] * len(row)
         if row.get("OnCourt"): return ['background-color: #d4edda; color: #155724'] * len(row)
         return [''] * len(row)
 
