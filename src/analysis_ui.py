@@ -328,7 +328,7 @@ def create_live_boxscore_df(team_data):
             "Name": p.get("seasonPlayer",{}).get("lastName","Unk"),
             "Min": f"{sec // 60:02d}:{sec % 60:02d}",
             "PTS": pts, "FG": fmt(fgm, fga), "2P": fmt(m2, a2), "3P": fmt(m3, a3), "FT": fmt(mf, af),
-            "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "ST": stl, "BS": blk, "TO": tov, "PF": pf,
+            "OR": oreb, "DR": dreb, "TR": treb, "AS": ast, "TO": tov, "ST": stl, "BS": blk, "PF": pf,
             "+/-": safe_int(p.get("plusMinus")),
             "OnCourt": p.get("onCourt", False) or p.get("isOnCourt", False)
         })
@@ -357,7 +357,7 @@ def create_live_boxscore_df(team_data):
          df_team = pd.DataFrame([{
             "#": "-", "Name": "Team / Coach", "Min": "", "PTS": d_pts if d_pts else "",
             "FG": "", "2P": "", "3P": "", "FT": "",
-            "OR": d_or, "DR": d_dr, "TR": d_tr, "AS": d_as, "ST": d_st, "BS": d_bs, "TO": d_to, "PF": d_pf,
+            "OR": d_or, "DR": d_dr, "TR": d_tr, "AS": d_as, "TO": d_to, "ST": d_st, "BS": d_bs, "PF": d_pf,
             "+/-": "", "OnCourt": False
          }])
          df = pd.concat([df, df_team], ignore_index=True)
@@ -370,7 +370,7 @@ def create_live_boxscore_df(team_data):
         "PTS": s_pts,
         "FG": fmt(s_mfg, s_afg), "2P": fmt(s_m2, s_a2), "3P": fmt(s_m3, s_a3), "FT": fmt(s_mf, s_af),
         "OR": s_or, "DR": s_dr, "TR": s_tr,
-        "AS": s_as, "ST": s_st, "BS": s_bs, "TO": s_to, "PF": s_pf,
+        "AS": s_as, "TO": s_to, "ST": s_st, "BS": s_bs, "PF": s_pf,
         "+/-": "", "OnCourt": False
     }
     
@@ -388,11 +388,6 @@ def render_live_view(box):
         last = sorted(actions, key=lambda x: x.get('actionNumber', 0))[-1]
         sh, sg = safe_int(last.get('homeTeamPoints')), safe_int(last.get('guestTeamPoints'))
         if not period: period = last.get('period')
-    
-    if not period or period == 0:
-        for act in reversed(actions):
-            if act.get('period'): period = act.get('period'); break
-    
     t_rem, t_orig = get_time_info(box.get('gameTime') or (actions[-1].get('gameTime') if actions else None), period)
     p_str = (f"OT{safe_int(period)-4}" if safe_int(period) > 4 else f"Q{period}")
     
@@ -444,6 +439,7 @@ def render_live_view(box):
     def style_live(row):
         if row.get("Name") == "TOTALS": return ['font-weight: bold; background-color: #e0e0e0; border-top: 2px solid #999'] * len(row)
         elif row.get("Name") == "Team / Coach": return ['font-style: italic; color: #666; background-color: #f9f9f9'] * len(row)
+        if row.get("OnCourt"): return ['background-color: #d4edda; color: #155724'] * len(row)
         return [''] * len(row)
 
     with t1:
@@ -451,11 +447,11 @@ def render_live_view(box):
         with c1:
             st.markdown(f"### {h_name}")
             dfh = create_live_boxscore_df(h_data)
-            if not dfh.empty: st.dataframe(dfh.style.apply(style_live, axis=1), hide_index=True, use_container_width=True)
+            if not dfh.empty: st.dataframe(dfh.style.apply(style_live, axis=1), hide_index=True, use_container_width=True, height=(len(dfh)+1)*35+3)
         with c2:
             st.markdown(f"### {g_name}")
             dfg = create_live_boxscore_df(g_data)
-            if not dfg.empty: st.dataframe(dfg.style.apply(style_live, axis=1), hide_index=True, use_container_width=True)
+            if not dfg.empty: st.dataframe(dfg.style.apply(style_live, axis=1), hide_index=True, use_container_width=True, height=(len(dfg)+1)*35+3)
     with t2: render_live_comparison_bars(box)
     with t3: render_full_play_by_play(box)
 
