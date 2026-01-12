@@ -5,6 +5,7 @@ import altair as alt
 from datetime import datetime
 import pytz
 from src.api import get_player_metadata_cached, get_best_team_logo, fetch_last_n_games_complete
+import base64
 
 # --- KONSTANTEN & HELPERS ---
 ACTION_TRANSLATION = {
@@ -91,6 +92,47 @@ def get_time_info(time_str, period):
         if rem_sec < 0: rem_sec = 0
         return f"{rem_sec // 60:02d}:{rem_sec % 60:02d}", f"{elapsed_sec // 60:02d}:{elapsed_sec % 60:02d}"
     except: return "10:00", str(time_str)
+
+def _logo_to_src(logo):
+    """
+    Unterstützt:
+    - URL (str) -> direkt als src
+    - bytes -> data URL
+    - anything else -> None
+    """
+    if not logo:
+        return None
+    if isinstance(logo, str):
+        return logo  # URL oder Pfad, Streamlit kann i.d.R. http(s) sauber laden
+    if isinstance(logo, (bytes, bytearray)):
+        b64 = base64.b64encode(logo).decode("utf-8")
+        return f"data:image/png;base64,{b64}"
+    return None
+
+def get_team_fouls_in_period(actions, period, home_ids, guest_ids):
+    """
+    Zählt Teamfouls im aktuellen Viertel (max 5 angezeigt).
+    Als Teamfoul zählen wir alle Aktionen, deren type "FOUL" enthält
+    (personal/technical/unsportsmanlike etc.).
+    """
+    h_fouls = 0
+    g_fouls = 0
+    p = safe_int(period)
+
+    for a in actions or []:
+        if safe_int(a.get("period")) != p:
+            continue
+        t = str(a.get("type") or "").upper()
+        if "FOUL" not in t:
+            continue
+
+        sid = str(a.get("seasonTeamId"))
+        if sid in home_ids:
+            h_fouls += 1
+        elif sid in guest_ids:
+            g_fouls += 1
+
+    return min(h_fouls, 5), min(g_fouls, 5)
 
 # --- VISUELLE KOMPONENTEN ---
 
