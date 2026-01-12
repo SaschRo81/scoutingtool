@@ -101,7 +101,20 @@ def render_live_comparison_bars(box):
     def get_pct(made, att):
         m, a = safe_int(made), safe_int(att)
         return round((m / a * 100), 1) if a > 0 else 0.0
-    stats_to_show = [("2 PUNKTE", "twoPointShotsMade", "twoPointShotsAttempted", True), ("3 PUNKTE", "threePointShotsMade", "threePointShotsAttempted", True), ("FIELDGOALS", "fieldGoalsMade", "fieldGoalsAttempted", True), ("FREIWÜRFE", "freeThrowsMade", "freeThrowsAttempted", True), ("DEF. REBOUNDS", "defensiveRebounds", None, False), ("OFF. REBOUNDS", "offensiveRebounds", None, False), ("ASSISTS", "assists", None, False), ("STEALS", "steals", None, False), ("BLOCKS", "blocks", None, False), ("TURNOVERS", "turnovers", None, False), ("FOULS", "foulsCommitted", None, False)]
+    stats_to_show = [
+        ("2 PUNKTE", "twoPointShotsMade", "twoPointShotsAttempted", True),
+        ("3 PUNKTE", "threePointShotsMade", "threePointShotsAttempted", True),
+        ("FIELDGOALS", "fieldGoalsMade", "fieldGoalsAttempted", True),
+        ("FREIWÜRFE", "freeThrowsMade", "freeThrowsAttempted", True),
+        ("DEF. REBOUNDS", "defensiveRebounds", None, False),
+        ("OFF. REBOUNDS", "offensiveRebounds", None, False),
+        ("REBOUNDS (GESAMT)", "totalRebounds", None, False),
+        ("ASSISTS", "assists", None, False),
+        ("STEALS", "steals", None, False),
+        ("BLOCKS", "blocks", None, False),
+        ("TURNOVERS", "turnovers", None, False),
+        ("FOULS", "foulsCommitted", None, False),
+    ]
     st.markdown("""<style>.stat-container { margin-bottom: 12px; width: 100%; }.stat-label { text-align: center; font-weight: bold; font-style: italic; color: #555; font-size: 0.85em; }.bar-wrapper { display: flex; align-items: center; justify-content: center; gap: 8px; height: 10px; }.bar-bg { background-color: #eee; flex-grow: 1; height: 100%; border-radius: 2px; position: relative; }.bar-fill-home { background-color: #e35b00; height: 100%; position: absolute; right: 0; }.bar-fill-guest { background-color: #333; height: 100%; position: absolute; left: 0; }.val-text { width: 85px; font-weight: bold; font-size: 0.85em; }</style>""", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 1])
     c1.markdown(f"<h4 style='text-align:right; color:#e35b00;'>{h_name}</h4>", unsafe_allow_html=True)
