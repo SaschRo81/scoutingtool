@@ -137,211 +137,73 @@ def get_team_fouls_in_period(actions, period, home_ids, guest_ids):
 # --- VISUELLE KOMPONENTEN ---
 
 def render_live_comparison_bars(box):
-    h_stat = box.get("homeTeam", {}).get("gameStat", {})
-    g_stat = box.get("guestTeam", {}).get("gameStat", {})
-    h_name, g_name = get_team_name(box.get("homeTeam", {})), get_team_name(box.get("guestTeam", {}))
+    h_stat = box.get("homeTeam", {}).get("gameStat", {}) or {}
+    g_stat = box.get("guestTeam", {}).get("gameStat", {}) or {}
+    h_name = get_team_name(box.get("homeTeam", {}))
+    g_name = get_team_name(box.get("guestTeam", {}))
+
     def get_pct(made, att):
         m, a = safe_int(made), safe_int(att)
         return round((m / a * 100), 1) if a > 0 else 0.0
- 
-    h_data, g_data = box.get("homeTeam", {}), box.get("guestTeam", {})
-    h_name, g_name = get_team_name(h_data), get_team_name(g_data)
 
-    res = box.get("result", {})
-    sh, sg = safe_int(res.get('homeTeamFinalScore')), safe_int(res.get('guestTeamFinalScore'))
-
-    period = res.get('period') or box.get('period', 1)
-    actions = box.get("actions", [])
-
-    # fallback score/period aus letzter Action
-    if sh == 0 and sg == 0 and actions:
-        last = sorted(actions, key=lambda x: x.get('actionNumber', 0))[-1]
-        sh, sg = safe_int(last.get('homeTeamPoints')), safe_int(last.get('guestTeamPoints'))
-        if not period:
-            period = last.get('period')
-
-    if not period or period == 0:
-        for act in reversed(actions):
-            if act.get('period'):
-                period = act.get('period')
-                break
-
-    t_rem, t_orig = get_time_info(box.get('gameTime') or (actions[-1].get('gameTime') if actions else None), period)
-    p_int = safe_int(period)
-    p_str = (f"OT{p_int-4}" if p_int > 4 else f"{p_int}Q")  # Anzeige wie Grafik 2: 1Q/2Q/...
-
-    # Team-IDs zum Zuordnen
-    home_ids = set([
-        str(h_data.get("seasonTeamId")),
-        str(h_data.get("teamId")),
-        str(h_data.get("seasonTeam", {}).get("id")),
-        str(h_data.get("gameStat", {}).get("seasonTeam", {}).get("id")),
-    ])
-    guest_ids = set([
-        str(g_data.get("seasonTeamId")),
-        str(g_data.get("teamId")),
-        str(g_data.get("seasonTeam", {}).get("id")),
-        str(g_data.get("gameStat", {}).get("seasonTeam", {}).get("id")),
-    ])
-
-    # Teamfouls im aktuellen Viertel
-    h_fouls, g_fouls = get_team_fouls_in_period(actions, period, home_ids, guest_ids)
-
-    # Logos
-    h_logo = _logo_to_src(get_best_team_logo(h_data.get("seasonTeamId") or h_data.get("teamId")))
-    g_logo = _logo_to_src(get_best_team_logo(g_data.get("seasonTeamId") or g_data.get("teamId")))
-
-    # Dots rendern (5 Stück)
-    def dots_html(n):
-        out = []
-        for i in range(5):
-            cls = "dot dot-on" if i < n else "dot dot-off"
-            out.append(f"<span class='{cls}'></span>")
-        return "".join(out)
+    stats_to_show = [
+        ("2 PUNKTE", "twoPointShotsMade", "twoPointShotsAttempted", True),
+        ("3 PUNKTE", "threePointShotsMade", "threePointShotsAttempted", True),
+        ("FIELDGOALS", "fieldGoalsMade", "fieldGoalsAttempted", True),
+        ("FREIWÜRFE", "freeThrowsMade", "freeThrowsAttempted", True),
+        ("DEF. REBOUNDS", "defensiveRebounds", None, False),
+        ("OFF. REBOUNDS", "offensiveRebounds", None, False),
+        ("ASSISTS", "assists", None, False),
+        ("STEALS", "steals", None, False),
+        ("BLOCKS", "blocks", None, False),
+        ("TURNOVERS", "turnovers", None, False),
+        ("FOULS", "foulsCommitted", None, False),
+    ]
 
     st.markdown("""
     <style>
-      .scorebug-wrap{
-        width:100%;
-        background:#0f1a2a;
-        border-radius:14px;
-        padding:14px 16px;
-        box-shadow: 0 6px 18px rgba(0,0,0,.28);
-        color:#fff;
-      }
-      .scorebug{
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:14px;
-      }
-      .team{
-        display:flex;
-        align-items:center;
-        gap:12px;
-        min-width: 260px;
-      }
-      .team.right{ justify-content:flex-end; }
-      .logo{
-        width:46px; height:46px;
-        object-fit:contain;
-        border-radius:10px;
-        background: rgba(255,255,255,.08);
-        padding:6px;
-      }
-      .team-name{
-        font-weight:800;
-        letter-spacing:.4px;
-        font-size: 22px;
-        line-height: 1.05;
-      }
-      .fouls{
-        margin-top:6px;
-        display:flex;
-        gap:6px;
-        align-items:center;
-      }
-      .dot{
-        width:9px; height:9px;
-        border-radius:50%;
-        display:inline-block;
-        border:1px solid rgba(255,255,255,.7);
-      }
-      .dot-off{
-        background: rgba(255,255,255,.18);   /* “weiß/leer” */
-      }
-      .dot-on{
-        background: #ff2d2d;                  /* rot bei Foul */
-        border-color:#ff2d2d;
-      }
-
-      .center{
-        display:flex;
-        align-items:center;
-        gap:10px;
-      }
-      .scorebox{
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        width:64px;
-        height:52px;
-        background:#f6c43b;
-        border-radius:10px;
-        color:#111;
-        font-weight:900;
-        font-size:34px;
-      }
-      .dash{
-        color: rgba(255,255,255,.6);
-        font-weight:900;
-        font-size:28px;
-        margin: 0 2px;
-      }
-
-      .rightinfo{
-        display:flex;
-        flex-direction:column;
-        align-items:flex-end;
-        gap:6px;
-        min-width: 110px;
-      }
-      .clock{
-        font-weight:900;
-        font-size: 26px;
-        letter-spacing:.5px;
-        color:#fff;
-      }
-      .quarter{
-        font-weight:900;
-        font-size: 18px;
-        color:#f6c43b;
-      }
-
-      @media (max-width: 900px){
-        .team{ min-width: 180px; }
-        .team-name{ font-size:18px; }
-        .scorebox{ width:56px; height:48px; font-size:30px; }
-      }
+      .stat-container { margin-bottom: 12px; width: 100%; }
+      .stat-label { text-align: center; font-weight: bold; font-style: italic; color: #555; font-size: 0.85em; }
+      .bar-wrapper { display: flex; align-items: center; justify-content: center; gap: 8px; height: 10px; }
+      .bar-bg { background-color: #eee; flex-grow: 1; height: 100%; border-radius: 2px; position: relative; }
+      .bar-fill-home { background-color: #e35b00; height: 100%; position: absolute; right: 0; }
+      .bar-fill-guest { background-color: #333; height: 100%; position: absolute; left: 0; }
+      .val-text { width: 85px; font-weight: bold; font-size: 0.85em; }
     </style>
     """, unsafe_allow_html=True)
 
-    # Fallback, falls Logo fehlt
-    h_logo_tag = f"<img class='logo' src='{h_logo}'/>" if h_logo else "<div class='logo'></div>"
-    g_logo_tag = f"<img class='logo' src='{g_logo}'/>" if g_logo else "<div class='logo'></div>"
+    c1, c2, c3 = st.columns([1, 1, 1])
+    c1.markdown(f"<h4 style='text-align:right; color:#e35b00;'>{h_name}</h4>", unsafe_allow_html=True)
+    c3.markdown(f"<h4 style='text-align:left; color:#333;'>{g_name}</h4>", unsafe_allow_html=True)
 
-    st.markdown(f"""
-      <div class="scorebug-wrap">
-        <div class="scorebug">
-          <div class="team left">
-            {h_logo_tag}
-            <div>
-              <div class="team-name">{h_name}</div>
-              <div class="fouls">{dots_html(h_fouls)}</div>
+    for label, km, ka, is_p in stats_to_show:
+        hv, gv = safe_int(h_stat.get(km)), safe_int(g_stat.get(km))
+
+        if is_p:
+            ha, ga = safe_int(h_stat.get(ka)), safe_int(g_stat.get(ka))
+            hp, gp = get_pct(hv, ha), get_pct(gv, ga)
+            hd, gd = f"{hp}%", f"{gp}%"
+            hf, gf = hp, gp
+        else:
+            hd, gd = str(hv), str(gv)
+            mv = max(hv, gv, 1)
+            hf, gf = (hv / mv) * 100, (gv / mv) * 100
+
+        st.markdown(
+            f"""
+            <div class="stat-container">
+              <div class="stat-label">{label}</div>
+              <div class="bar-wrapper">
+                <div class="val-text" style="text-align:right;">{hd}</div>
+                <div class="bar-bg"><div class="bar-fill-home" style="width:{hf}%;"></div></div>
+                <div class="bar-bg"><div class="bar-fill-guest" style="width:{gf}%;"></div></div>
+                <div class="val-text" style="text-align:left;">{gd}</div>
+              </div>
             </div>
-          </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-          <div class="center">
-            <div class="scorebox">{sh}</div>
-            <div class="dash">|</div>
-            <div class="scorebox">{sg}</div>
-          </div>
-
-          <div class="team right">
-            <div style="text-align:right;">
-              <div class="team-name">{g_name}</div>
-              <div class="fouls" style="justify-content:flex-end;">{dots_html(g_fouls)}</div>
-            </div>
-            {g_logo_tag}
-          </div>
-
-          <div class="rightinfo">
-            <div class="clock">{t_rem}</div>
-            <div class="quarter">{p_str}</div>
-          </div>
-        </div>
-      </div>
-    """, unsafe_allow_html=True)
 
     # danach deine Tabs wie gehabt
     t1, t2, t3 = st.tabs(["📋 Boxscore", "📊 Team-Vergleich", "📜 Play-by-Play"])
@@ -583,12 +445,18 @@ def create_live_boxscore_df(team_data):
 
     # Team Zeile einfügen wenn Differenzen da sind (und offizielle Stats nicht 0 sind)
     if any([d_pts, d_or, d_dr, d_tr, d_as, d_to, d_st, d_bs, d_pf]) and t_pts > 0:
-         df_team = pd.DataFrame([{
-            "#": "", "Name": "Team / Coach", "Min": "", "PTS": d_pts if d_pts else "",
-            "FG": "", "2P": "", "3P": "", "FT": "",
-            "OR": d_or, "DR": d_dr, "TR": d_tr, "AS": d_as, "TO": d_to, "ST": d_st, "BS": d_bs, "PF": d_pf,
-            "+/-": "", "OnCourt": False
-         }])
+        df_team = pd.DataFrame([{
+    "#": "", "Name": "Team / Coach", "Min": None,
+    "PTS": d_pts if d_pts else None,
+    "FG": None, "2P": None, "3P": None, "FT": None,
+    "OR": d_or if d_or else 0, "DR": d_dr if d_dr else 0, "TR": d_tr if d_tr else 0,
+    "AS": d_as if d_as else 0, "TO": d_to if d_to else 0, "ST": d_st if d_st else 0,
+    "BS": d_bs if d_bs else 0, "PF": d_pf if d_pf else 0,
+    "+/-": None, "OnCourt": False
+}])
+if not df.empty:
+    df["#"] = df["#"].astype(str)
+
          df = pd.concat([df, df_team], ignore_index=True)
          
          # Summen für TOTALS anpassen (damit TOTALS = Offizielle Werte)
