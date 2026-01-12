@@ -204,14 +204,7 @@ def render_live_comparison_bars(box):
             unsafe_allow_html=True
         )
 
-
-    # danach deine Tabs wie gehabt
-    t1, t2, t3 = st.tabs(["📋 Boxscore", "📊 Team-Vergleich", "📜 Play-by-Play"])
-    
-    c1, c2, c3 = st.columns([1, 1, 1])
-    c1.markdown(f"<h4 style='text-align:right; color:#e35b00;'>{h_name}</h4>", unsafe_allow_html=True)
-    c3.markdown(f"<h4 style='text-align:left; color:#333;'>{g_name}</h4>", unsafe_allow_html=True)
-    for label, km, ka, is_p in stats_to_show:
+       for label, km, ka, is_p in stats_to_show:
         hv, gv = safe_int(h_stat.get(km)), safe_int(g_stat.get(km))
         if is_p:
             ha, ga = safe_int(h_stat.get(ka)), safe_int(g_stat.get(ka))
@@ -444,24 +437,31 @@ def create_live_boxscore_df(team_data):
     d_as = t_as - s_as; d_to = t_to - s_to; d_st = t_st - s_st; d_bs = t_bs - s_bs; d_pf = t_pf - s_pf
 
     # Team Zeile einfügen wenn Differenzen da sind (und offizielle Stats nicht 0 sind)
+       # Team Zeile einfügen wenn Differenzen da sind (und offizielle Stats nicht 0 sind)
     if any([d_pts, d_or, d_dr, d_tr, d_as, d_to, d_st, d_bs, d_pf]) and t_pts > 0:
         df_team = pd.DataFrame([{
-    "#": "", "Name": "Team / Coach", "Min": None,
-    "PTS": d_pts if d_pts else None,
-    "FG": None, "2P": None, "3P": None, "FT": None,
-    "OR": d_or if d_or else 0, "DR": d_dr if d_dr else 0, "TR": d_tr if d_tr else 0,
-    "AS": d_as if d_as else 0, "TO": d_to if d_to else 0, "ST": d_st if d_st else 0,
-    "BS": d_bs if d_bs else 0, "PF": d_pf if d_pf else 0,
-    "+/-": None, "OnCourt": False
-}])
-if not df.empty:
-    df["#"] = df["#"].astype(str)
+            "#": "",
+            "Name": "Team / Coach",
+            "Min": None,
+            "PTS": d_pts if d_pts else None,
+            "FG": None, "2P": None, "3P": None, "FT": None,
+            "OR": d_or if d_or else 0,
+            "DR": d_dr if d_dr else 0,
+            "TR": d_tr if d_tr else 0,
+            "AS": d_as if d_as else 0,
+            "TO": d_to if d_to else 0,
+            "ST": d_st if d_st else 0,
+            "BS": d_bs if d_bs else 0,
+            "PF": d_pf if d_pf else 0,
+            "+/-": None,
+            "OnCourt": False
+        }])
 
-         df = pd.concat([df, df_team], ignore_index=True)
-         
-         # Summen für TOTALS anpassen (damit TOTALS = Offizielle Werte)
-         s_pts += d_pts; s_or += d_or; s_dr += d_dr; s_tr += d_tr
-         s_as += d_as; s_to += d_to; s_st += d_st; s_bs += d_bs; s_pf += d_pf
+        df = pd.concat([df, df_team], ignore_index=True)
+
+        # Summen für TOTALS anpassen (damit TOTALS = Offizielle Werte)
+        s_pts += d_pts; s_or += d_or; s_dr += d_dr; s_tr += d_tr
+        s_as += d_as; s_to += d_to; s_st += d_st; s_bs += d_bs; s_pf += d_pf
 
     # TOTALS Zeile
     totals = {
@@ -470,11 +470,18 @@ if not df.empty:
         "FG": fmt(s_mfg, s_afg), "2P": fmt(s_m2, s_a2), "3P": fmt(s_m3, s_a3), "FT": fmt(s_mf, s_af),
         "OR": s_or, "DR": s_dr, "TR": s_tr,
         "AS": s_as, "TO": s_to, "ST": s_st, "BS": s_bs, "PF": s_pf,
-        "+/-": "", "OnCourt": False
+        "+/-": None,
+        "OnCourt": False
     }
-    
+
     df_totals = pd.DataFrame([totals])
+
+    # Arrow-safe: Trikotnummer immer string
+    if not df.empty:
+        df["#"] = df["#"].astype(str)
+
     return pd.concat([df, df_totals], ignore_index=True)
+
 
 def render_live_view(box):
     if not box:
