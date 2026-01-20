@@ -474,30 +474,49 @@ def render_live_view(box):
     h_img = f"<img src='{h_logo}' style='height:60px; margin-bottom:5px;'>" if h_logo else ""
     g_img = f"<img src='{g_logo}' style='height:60px; margin-bottom:5px;'>" if g_logo else ""
 
-    # Alternative: Streamlit-native Ansatz ohne HTML
-    col1, col2, col3, col4 = st.columns([2, 1, 2, 1])
+    # Scoreboard mit farbigem Hintergrund
+    st.markdown("""
+        <style>
+        .scoreboard-bg {
+            background: linear-gradient(135deg, #1e3a5f 0%, #2d5a7b 100%);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
-    with col1:
-        if h_logo:
-            st.image(h_logo, width=80)
-        st.markdown(f"### {h_name}")
-        st.caption(f"HC: {h_hc}")
-        st.markdown(get_foul_dots_simple(h_fouls), unsafe_allow_html=True)
+    with st.container():
+        st.markdown('<div class="scoreboard-bg">', unsafe_allow_html=True)
+        col1, col2, col3, col4 = st.columns([2, 1, 2, 1])
+        
+        with col1:
+            if h_logo:
+                st.image(h_logo, width=80)
+            st.markdown(f"<h3 style='color: white; margin: 5px 0;'>{h_name}</h3>", unsafe_allow_html=True)
+            st.markdown(f"<p style='color: #aaa; font-size: 0.9em;'>HC: {h_hc}</p>", unsafe_allow_html=True)
+            st.markdown(f"<div style='margin-top: 10px;'>{get_foul_dots_simple(h_fouls)}</div>", unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"<h1 style='text-align:center; margin:20px 0; color: white; font-size: 3em;'>{sh}:{sg}</h1>", unsafe_allow_html=True)
+        
+        with col3:
+            if g_logo:
+                st.image(g_logo, width=80)
+            st.markdown(f"<h3 style='color: white; margin: 5px 0;'>{g_name}</h3>", unsafe_allow_html=True)
+            st.markdown(f"<p style='color: #aaa; font-size: 0.9em;'>HC: {g_hc}</p>", unsafe_allow_html=True)
+            st.markdown(f"<div style='margin-top: 10px;'>{get_foul_dots_simple(g_fouls)}</div>", unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown(f"""<div style='text-align:center; color: white;'>
+                <div style='font-size:2.5em; font-weight:bold; color:#fca311;'>{t_rem}</div>
+                <div style='font-size:1.1em; margin-top: 5px;'>{p_str}</div>
+            </div>""", unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
-    with col2:
-        st.markdown(f"<h1 style='text-align:center; margin:20px 0;'>{sh}:{sg}</h1>", unsafe_allow_html=True)
-    
-    with col3:
-        if g_logo:
-            st.image(g_logo, width=80)
-        st.markdown(f"### {g_name}")
-        st.caption(f"HC: {g_hc}")
-        st.markdown(get_foul_dots_simple(g_fouls), unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown(f"<div style='text-align:center;'><div style='font-size:2em; font-weight:bold; color:#fca311;'>{t_rem}</div><div style='font-size:0.9em;'>{p_str}</div></div>", unsafe_allow_html=True)
-    
-    st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # CONTENT
     # Diese Zeilen löschen - werden nicht mehr benötigt
