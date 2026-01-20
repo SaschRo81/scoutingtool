@@ -465,66 +465,42 @@ def render_live_view(box):
     h_logo = get_best_team_logo(str(h_data.get("seasonTeamId")))
     g_logo = get_best_team_logo(str(g_data.get("seasonTeamId")))
     
-    def get_foul_dots(count):
-        dots = ""
-        for i in range(1, 6):
-            color = "#444"
-            if i <= count: color = "#ff3333" if count >= 5 else "#fff"
-            dots += f"<div style='width:10px;height:10px;border-radius:50%;background-color:{color};margin:0 2px;display:inline-block;'></div>"
-        return dots
+    def get_foul_dots_simple(count):
+        """Einfache Textdarstellung der Fouls"""
+        filled = "🔴" * min(count, 5)
+        empty = "⚪" * (5 - min(count, 5))
+        return filled + empty
 
     h_img = f"<img src='{h_logo}' style='height:60px; margin-bottom:5px;'>" if h_logo else ""
     g_img = f"<img src='{g_logo}' style='height:60px; margin-bottom:5px;'>" if g_logo else ""
 
-    # SEPARATE CSS FROM CONTENT
-    st.markdown("""
-        <style>
-            .scoreboard-container {
-                display: flex; align-items: center; justify-content: space-between;
-                background: linear-gradient(90deg, #0d1b2a 0%, #1b263b 100%);
-                padding: 15px 20px; border-radius: 10px; border-bottom: 4px solid #fca311;
-                color: white; font-family: sans-serif; margin-bottom: 20px;
-            }
-            .team-box { text-align: center; width: 30%; }
-            .score-box { 
-                text-align: center; background-color: #fca311; color: black; 
-                padding: 5px 30px; border-radius: 5px; transform: skewX(-10deg);
-            }
-            .score-text { font-size: 3em; font-weight: 900; line-height: 1; transform: skewX(10deg); }
-            .time-box { 
-                border-left: 1px solid #555; padding-left: 20px; text-align: center; 
-            }
-            .time-text { font-size: 1.8em; font-weight: bold; color: #fca311; }
-        </style>
-    """, unsafe_allow_html=True)
+    # Alternative: Streamlit-native Ansatz ohne HTML
+    col1, col2, col3, col4 = st.columns([2, 1, 2, 1])
+    
+    with col1:
+        if h_logo:
+            st.image(h_logo, width=80)
+        st.markdown(f"### {h_name}")
+        st.caption(f"HC: {h_hc}")
+        st.markdown(get_foul_dots_simple(h_fouls), unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"<h1 style='text-align:center; margin:20px 0;'>{sh}:{sg}</h1>", unsafe_allow_html=True)
+    
+    with col3:
+        if g_logo:
+            st.image(g_logo, width=80)
+        st.markdown(f"### {g_name}")
+        st.caption(f"HC: {g_hc}")
+        st.markdown(get_foul_dots_simple(g_fouls), unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(f"<div style='text-align:center;'><div style='font-size:2em; font-weight:bold; color:#fca311;'>{t_rem}</div><div style='font-size:0.9em;'>{p_str}</div></div>", unsafe_allow_html=True)
+    
+    st.divider()
 
     # CONTENT
-    st.markdown(f"""
-        <div class="scoreboard-container">
-            <div class="team-box">
-                {h_img}
-                <div style='font-size:1.2em; font-weight:bold; text-transform:uppercase;'>{h_name}</div>
-                <div style='font-size:0.8em; color:#bbb;'>HC: {h_hc}</div>
-                <div style='margin-top:5px;'>{get_foul_dots(h_fouls)}</div>
-            </div>
-            
-            <div class="score-box">
-                <div class="score-text">{sh} : {sg}</div>
-            </div>
-            
-            <div class="team-box">
-                {g_img}
-                <div style='font-size:1.2em; font-weight:bold; text-transform:uppercase;'>{g_name}</div>
-                <div style='font-size:0.8em; color:#bbb;'>HC: {g_hc}</div>
-                <div style='margin-top:5px;'>{get_foul_dots(g_fouls)}</div>
-            </div>
-
-            <div class="time-box">
-                <div class="time-text">{t_rem}</div>
-                <div style='font-size:0.9em; text-transform:uppercase; color:#ccc;'>{p_str}</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    # Diese Zeilen löschen - werden nicht mehr benötigt
     
     t1, t2, t3 = st.tabs(["📋 Boxscore", "📊 Team-Vergleich", "📜 Play-by-Play"])
     
