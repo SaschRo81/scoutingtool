@@ -7,87 +7,103 @@ from src.api import (
     fetch_league_standings, 
     fetch_team_data
 )
+
 from src.html_gen import generate_comparison_html
 
-# --- ZENTRALES CSS FÜR OBS (TV LOOK) ---
-OBS_CSS = """
+OBS_CLEAN_CSS = """
 <style>
-header, footer, [data-testid="stSidebar"] {display: none !important;}
-.stApp {background: transparent !important;}
-.block-container {padding: 0 !important; max-width: 100% !important;}
-body { font-family: 'Arial', sans-serif; overflow: hidden; margin: 0; padding: 0; }
+    /* Verstecke alle Streamlit-Standardelemente */
+    header, footer, [data-testid="stSidebar"], [data-testid="stHeader"] {
+        display: none !important;
+    }
+    
+    /* Mache die App und alle Container komplett transparent */
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"], .block-container {
+        background-color: transparent !important;
+        background-image: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
 
-.overlay-container {
-position: fixed;
-bottom: 40px;
-left: 50%;
-transform: translateX(-50%);
-width: 1550px;
-display: flex;
-flex-direction: column;
-}
+    /* Entferne weiße Ränder um das Hauptfenster */
+    body {
+        background-color: transparent !important;
+        overflow: hidden;
+    }
 
-.header-bar {
-background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
-color: white;
-padding: 12px 35px;
-display: flex;
-align-items: center;
-justify-content: space-between;
-border-top: 5px solid #ff6600;
-border-radius: 10px 10px 0 0;
-box-shadow: 0 -5px 15px rgba(0,0,0,0.5);
-}
+    /* Container für das Lower Third */
+    .overlay-container {
+        position: fixed;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 1550px;
+        display: flex;
+        flex-direction: column;
+        z-index: 9999;
+    }
 
-.team-info { display: flex; align-items: center; gap: 20px; }
-.team-logo { height: 65px; object-fit: contain; }
-.team-name { font-size: 34px; font-weight: 900; text-transform: uppercase; }
+    .header-bar {
+        background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
+        color: white;
+        padding: 12px 35px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-top: 5px solid #ff6600;
+        border-radius: 10px 10px 0 0;
+        box-shadow: 0 -5px 15px rgba(0,0,0,0.5);
+    }
 
-.coach-info { text-align: right; font-size: 16px; color: #ddd; text-transform: uppercase; }
-.coach-name { font-weight: bold; color: white; display: block; font-size: 22px; }
+    .team-info { display: flex; align-items: center; gap: 20px; }
+    .team-logo { height: 65px; object-fit: contain; }
+    .team-name { font-size: 34px; font-weight: 900; text-transform: uppercase; font-family: sans-serif; }
 
-.players-row {
-display: flex;
-justify-content: space-between;
-background: rgba(0, 20, 60, 0.85);
-padding: 20px;
-border-radius: 0 0 10px 10px;
-}
+    .coach-info { text-align: right; font-size: 16px; color: #ddd; text-transform: uppercase; font-family: sans-serif; }
+    .coach-name { font-weight: bold; color: white; display: block; font-size: 22px; }
 
-.player-card {
-width: 19%;
-text-align: center;
-position: relative;
-display: flex;
-flex-direction: column;
-align-items: center;
-}
+    .players-row {
+        display: flex;
+        justify-content: space-between;
+        background: rgba(0, 20, 60, 0.9);
+        padding: 20px;
+        border-radius: 0 0 10px 10px;
+    }
 
-.img-wrapper { position: relative; width: 150px; height: 150px; margin-bottom: 10px; }
-.p-img {
-width: 100%; height: 100%; object-fit: cover;
-border-radius: 8px; border: 3px solid white; background: #555;
-}
+    .player-card {
+        width: 19%;
+        text-align: center;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
 
-.p-nr {
-position: absolute; bottom: -8px; left: -8px;
-background: #ff6600; color: white; font-weight: 900;
-width: 42px; height: 42px; display: flex;
-align-items: center; justify-content: center;
-font-size: 22px; border: 2px solid white; border-radius: 5px;
-}
+    .img-wrapper { position: relative; width: 150px; height: 150px; margin-bottom: 10px; }
+    .p-img {
+        width: 100%; height: 100%; object-fit: cover;
+        border-radius: 8px; border: 3px solid white; background: #555;
+    }
 
-.p-name {
-font-size: 20px; font-weight: bold; color: white;
-text-transform: uppercase; text-shadow: 2px 2px 4px black;
-}
+    .p-nr {
+        position: absolute; bottom: -8px; left: -8px;
+        background: #ff6600; color: white; font-weight: 900;
+        width: 42px; height: 42px; display: flex;
+        align-items: center; justify-content: center;
+        font-size: 22px; border: 2px solid white; border-radius: 5px;
+    }
 
-.obs-table-container { width: 90%; margin: 20px auto; background: rgba(0,0,0,0.85); border-radius: 15px; overflow: hidden; border: 2px solid #444; }
-.obs-table { width: 100%; font-size: 24px; border-collapse: collapse; color: white; text-align: center; }
-.obs-table th { background: #ff6600; padding: 15px; text-transform: uppercase; font-size: 20px;}
-.obs-table td { padding: 12px; border-bottom: 1px solid #444; font-weight: bold;}
+    .p-name {
+        font-size: 20px; font-weight: bold; color: white; font-family: sans-serif;
+        text-transform: uppercase; text-shadow: 2px 2px 4px black;
+    }
 
-.potg-container { width: 500px; margin: 40px auto; background: linear-gradient(135deg, #001f5b 0%, #000000 100%); border: 4px solid #ff6600; border-radius: 20px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 0 30px rgba(0,0,0,0.8); color: white; padding: 30px; }
+    /* Player of the Game Card */
+    .potg-card {
+        width: 450px; margin: 100px auto; background: linear-gradient(180deg, #001f5b 0%, #000 100%);
+        border: 4px solid #ff6600; border-radius: 20px; padding: 30px; text-align: center;
+        color: white; box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    }
 </style>
 """
 
@@ -95,7 +111,8 @@ def inject_obs_css():
     st.markdown(OBS_CSS, unsafe_allow_html=True)
 
 def render_obs_starting5():
-    inject_obs_css()
+    # CSS zuerst laden
+    st.markdown(OBS_CLEAN_CSS, unsafe_allow_html=True)
     try:
         ids_str = st.query_params.get("ids", "")
         team_name = st.query_params.get("name", "TEAM")
@@ -105,6 +122,7 @@ def render_obs_starting5():
         ids = [x for x in ids_str.split(",") if x]
         if not ids: return
 
+        # HTML flach bauen (WICHTIG: Keine Einrückung!)
         html = f"<div class='overlay-container'><div class='header-bar'><div class='team-info'>"
         if logo_url: html += f"<img src='{logo_url}' class='team-logo'>"
         html += f"<div class='team-name'>{team_name}</div></div><div class='coach-info'>Head Coach<span class='coach-name'>{coach_name}</span></div></div><div class='players-row'>"
@@ -118,50 +136,33 @@ def render_obs_starting5():
             html += f"<div class='player-card'><div class='img-wrapper'><img src='{img}' class='p-img'><div class='p-nr'>{p_nr}</div></div><div class='p-name'>{display_name}</div></div>"
         html += "</div></div>"
         st.markdown(html, unsafe_allow_html=True)
-    except Exception as e: st.error(f"Fehler: {e}")
-
-def render_obs_standings():
-    inject_obs_css()
-    region = st.query_params.get("region", "Süd")
-    season = st.query_params.get("season", "2025")
-    df = fetch_league_standings(season, region)
-    if not df.empty:
-        html = f"<div class='obs-table-container'><table class='obs-table'><thead><tr><th>#</th><th>Team</th><th>W</th><th>L</th></tr></thead><tbody>"
-        for _, row in df.iterrows():
-            html += f"<tr><td>{row['Platz']}</td><td>{row['Team']}</td><td>{row['W']}</td><td>{row['L']}</td></tr>"
-        html += "</tbody></table></div>"
-        st.markdown(html, unsafe_allow_html=True)
-
-def render_obs_comparison():
-    inject_obs_css()
-    try:
-        hid = st.query_params.get("hid"); gid = st.query_params.get("gid")
-        hname = st.query_params.get("hname"); gname = st.query_params.get("gname")
-        if hid and gid:
-            _, ts_h = fetch_team_data(hid, "2025")
-            _, ts_g = fetch_team_data(gid, "2025")
-            st.markdown("<div style='background:rgba(0,0,0,0.85); padding:30px; border-radius:15px; width:90%; margin:auto;'>", unsafe_allow_html=True)
-            st.markdown(generate_comparison_html(ts_h, ts_g, hname, gname), unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-    except: pass
+    except Exception as e:
+        st.error(f"Fehler: {e}")
 
 def render_obs_potg():
-    inject_obs_css()
-    st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
+    st.markdown(OBS_CLEAN_CSS, unsafe_allow_html=True)
+    # KEIN Refresh Tag hier! Seite bleibt statisch.
     gid = st.query_params.get("game_id")
     if not gid: return
     box = fetch_game_boxscore(gid)
     if not box: return
+    
     players = []
     for team_key in ["homeTeam", "guestTeam"]:
         for p in box.get(team_key, {}).get("playerStats", []):
             try:
                 eff = float(p.get("efficiency", 0))
-                players.append({"id": str(p.get("seasonPlayer", {}).get("id")), "name": f"{p.get('seasonPlayer', {}).get('firstName','')} {p.get('seasonPlayer', {}).get('lastName','')}", "nr": p.get('seasonPlayer', {}).get('shirtNumber', ''), "eff": eff, "pts": int(p.get("points", 0))})
+                players.append({
+                    "id": str(p.get("seasonPlayer", {}).get("id")),
+                    "name": f"{p.get('seasonPlayer', {}).get('firstName','')} {p.get('seasonPlayer', {}).get('lastName','')}",
+                    "nr": p.get('seasonPlayer', {}).get('shirtNumber', ''),
+                    "eff": eff,
+                    "pts": int(p.get("points", 0))
+                })
             except: pass
     if players:
         mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
-        html = f"<div class='potg-container'><h2 style='text-transform:uppercase; color:#ff6600; margin-bottom:20px;'>Player of the Game</h2><img src='{img}' style='width:280px; height:280px; object-fit:cover; border-radius:50%; border:6px solid white; box-shadow:0 0 20px rgba(0,0,0,0.5);'><br><h1 style='margin:20px 0 5px 0;'>{mvp['name']}</h1><h2 style='margin:0; color:#ccc;'>#{mvp['nr']}</h2><div style='display:flex; gap:30px; margin-top:25px; background:rgba(255,255,255,0.1); padding:15px 30px; border-radius:10px;'><div style='text-align:center;'><div style='font-size:14px; color:#aaa;'>PUNKTE</div><div style='font-size:32px; font-weight:bold; color:#ff6600;'>{mvp['pts']}</div></div><div style='text-align:center;'><div style='font-size:14px; color:#aaa;'>EFFIZIENZ</div><div style='font-size:32px; font-weight:bold; color:#ff6600;'>{mvp['eff']:.0f}</div></div></div></div>"
+        html = f"<div class='potg-card'><h2 style='color:#ff6600;'>PLAYER OF THE GAME</h2><img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid white;'><br><h1>{mvp['name']}</h1><h2>#{mvp['nr']}</h2><div style='display:flex; justify-content:center; gap:20px; margin-top:20px; background:rgba(255,255,255,0.1); padding:10px; border-radius:10px;'><div>PTS<br><b>{mvp['pts']}</b></div><div>EFF<br><b>{mvp['eff']:.0f}</b></div></div></div>"
         st.markdown(html, unsafe_allow_html=True)
