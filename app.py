@@ -3,20 +3,22 @@
 
 import streamlit as st
 import pandas as pd
-import requests  
-from datetime import datetime, date, time 
-import time as time_module 
-from urllib.parse import quote_plus 
-import base64 
+import requests
+from datetime import datetime, date, time
+import time as time_module
+from urllib.parse import quote_plus, urlencode
+import base64
 import pytz
-from src.stream_ui import render_obs_starting5, render_obs_standings, render_obs_comparison, render_obs_potg
-from urllib.parse import urlencode
 
+# --- NEU: STREAM UI IMPORTE & ROUTING ---
+from src.stream_ui import render_obs_starting5, render_obs_standings, render_obs_comparison, render_obs_potg
+
+# OBS Routing: Prüft sofort, ob eine OBS-Ansicht angefordert wird
 if "view" in st.query_params:
     view_mode = st.query_params["view"]
     if view_mode == "obs_starting5":
         render_obs_starting5()
-        st.stop() # Stoppt hier, lädt kein normales UI
+        st.stop()
     elif view_mode == "obs_standings":
         render_obs_standings()
         st.stop()
@@ -34,8 +36,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-from src.utils import get_logo_url 
-# WICHTIG: get_best_team_logo jetzt aus src.api importieren!
+from src.utils import get_logo_url
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
     fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
@@ -53,12 +54,11 @@ from src.analysis_ui import (
     generate_complex_ai_prompt, render_full_play_by_play, run_openai_generation,
     render_prep_dashboard, render_live_view, render_team_analysis_dashboard
 )
+
 # --- DIRECT LINKING LOGIC ---
-# Prüft, ob in der URL ein Parameter wie ?page=live steht
 if "page" in st.query_params:
     requested_page = st.query_params["page"]
-    # Liste der erlaubten Seiten (Sicherheitssperre)
-    if requested_page in ["live", "scouting", "comparison", "analysis", "team_analysis"]:
+    if requested_page in ["live", "scouting", "comparison", "analysis", "team_analysis", "streaminfos"]:
         st.session_state.current_page = requested_page
         
 # --- KONFIGURATION ---
@@ -130,6 +130,7 @@ def go_player_comparison(): st.session_state.current_page = "player_comparison"
 def go_game_venue(): st.session_state.current_page = "game_venue" 
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
+def go_streaminfos(): st.session_state.current_page = "streaminfos"
 def go_team_stats(): 
     st.session_state.current_page = "team_stats"
     st.session_state.stats_team_id = None
@@ -181,6 +182,10 @@ def render_home():
         with r5_c1:
              if st.button("🧠 Team Spielanalyse", use_container_width=True): 
                  go_team_analysis()
+                 st.rerun()
+        with r5_c2:
+             if st.button("📡 Stream Infos (OBS)", use_container_width=True):
+                 go_streaminfos()
                  st.rerun()
 
 def render_team_stats_page():
@@ -638,6 +643,106 @@ def render_team_analysis_page():
                         st.session_state.analysis_team_id = tid
                         st.rerun()
 
+def render_streaminfos_page():
+    render_page_header("📡 Stream Overlays (OBS)")
+    
+    st.info("Hier kannst du Links generieren, die du als 'Browser Source' in OBS einfügst. Die Links enthalten alle Konfigurationen.")
+
+    tab1, tab2, tab3, tab4 = st.tabs(["5️⃣ Starting 5", "🏆 Tabelle", "📊 Vergleich", "🔥 Player of the Game"])
+
+    # 1. STARTING 5
+    with tab1:
+        c1, c2 = st.columns(2)
+        # Teams wählen (Süd Filter)
+        south_teams = {k:v for k,v in TEAMS_DB.items() if v["staffel"] == "Süd"}
+        team_opts = {v["name"]: k for k,v in south_teams.items()}
+        
+        with c1:
+            h_name = st.selectbox("Heimteam", list(team_opts.keys()), key="obs_h_sel")
+            h_id = team_opts[h_name]
+            st.write("Wähle 5 Spieler (Heim):")
+            df_h, _ = fetch_team_data(h_id, CURRENT_SEASON_ID)
+            h_players = []
+            if df_h is not None and not df_h.empty:
+                # Map Name to ID and Nr
+                p_map_h = {f"#{r['NR']} {r['NAME_FULL']}": {"id": r["PLAYER_ID"], "nr": r["NR"], "name": r["NAME_FULL"]} for _, r in df_h.iterrows()}
+                sel_h = st.multiselect("Kader Heim", list(p_map_h.keys()), max_selections=5, key="obs_h_p")
+                for s in sel_h: h_players.append(p_map_h[s])
+        
+        with c2:
+            g_name = st.selectbox("Gastteam", list(team_opts.keys()), index=1, key="obs_g_sel")
+            g_id = team_opts[g_name]
+            st.write("Wähle 5 Spieler (Gast):")
+            df_g, _ = fetch_team_data(g_id, CURRENT_SEASON_ID)
+            g_players = []
+            if df_g is not None and not df_g.empty:
+                p_map_g = {f"#{r['NR']} {r['NAME_FULL']}": {"id": r["PLAYER_ID"], "nr": r["NR"], "name": r["NAME_FULL"]} for _, r in df_g.iterrows()}
+                sel_g = st.multiselect("Kader Gast", list(p_map_g.keys()), max_selections=5, key="obs_g_p")
+                for s in sel_g: g_players.append(p_map_g[s])
+
+        if st.button("🔗 Link für Starting 5 generieren"):
+            if len(h_players) < 1 or len(g_players) < 1:
+                st.warning("Bitte Spieler auswählen.")
+            else:
+                # Parameter bauen
+                params = {
+                    "view": "obs_starting5",
+                    "h_name": h_name, "g_name": g_name,
+                    "h_ids": ",".join([p["id"] for p in h_players]),
+                    "g_ids": ",".join([p["id"] for p in g_players])
+                }
+                # Namen und Nummern auch encoden, um API Calls in OBS zu sparen/zu fixen
+                for p in h_players: 
+                    params[f"n_{p['id']}"] = p["name"]
+                    params[f"nr_{p['id']}"] = p["nr"]
+                for p in g_players: 
+                    params[f"n_{p['id']}"] = p["name"]
+                    params[f"nr_{p['id']}"] = p["nr"]
+                
+                base = st.query_params.get("base_url", "http://localhost:8501") # Fallback, idealerweise die echte URL
+                # Da Streamlit die Base URL nicht einfach hergibt, nehmen wir an, der User kopiert den Pfad
+                qs = urlencode(params)
+                full_url = f"/?{qs}" # Relativer Pfad reicht oft, oder User ergänzt Domain
+                st.code(full_url, language="text")
+                st.success("Kopiere diesen Teil hinter deine App-Domain (z.B. https://deine-app.streamlit.app/...)")
+
+    # 2. TABELLE
+    with tab2:
+        st.write("Generiert eine Ansicht der Südstaffel-Tabelle.")
+        if st.button("🔗 Link Tabelle"):
+            st.code("/?view=obs_standings&region=Süd&season=2025", language="text")
+
+    # 3. VERGLEICH
+    with tab3:
+        h_c = st.selectbox("Team A", list(team_opts.keys()), key="obs_comp_h")
+        g_c = st.selectbox("Team B", list(team_opts.keys()), index=1, key="obs_comp_g")
+        if st.button("🔗 Link Vergleich"):
+            params = {
+                "view": "obs_comparison",
+                "hid": team_opts[h_c], "gid": team_opts[g_c],
+                "hname": h_c, "gname": g_c
+            }
+            st.code(f"/?{urlencode(params)}", language="text")
+
+    # 4. PLAYER OF THE GAME
+    with tab4:
+        st.write("Verbindet sich mit dem Live-Game und zeigt den MVP (basierend auf Effizienz) an.")
+        # Nutze die Recent Games Logik aus app.py, aber vereinfacht
+        from src.api import fetch_schedule
+        # Wir nehmen einfach ein Team, um an den Spielplan zu kommen, oder User gibt ID ein
+        st.caption("Suche Spiel über Team:")
+        sel_t = st.selectbox("Team wählen", list(team_opts.keys()), key="obs_potg_t")
+        sch = fetch_schedule(team_opts[sel_t], CURRENT_SEASON_ID)
+        
+        # Filtere auf heutige/zukünftige/gerade beendete
+        game_opts = {f"{g['date']} vs {g['guest'] if g['home']==sel_t else g['home']}": g['id'] for g in sch}
+        sel_g = st.selectbox("Spiel wählen", list(game_opts.keys()))
+        
+        if st.button("🔗 Link POTG"):
+            gid = game_opts[sel_g]
+            st.code(f"/?view=obs_potg&game_id={gid}", language="text")
+            st.caption("Dieser Link aktualisiert sich in OBS automatisch alle 30 Sekunden.")
+
 def render_scouting_page():
     render_page_header("📝 PreGame Report") 
     if st.session_state.print_mode:
@@ -758,3 +863,4 @@ elif st.session_state.current_page == "prep": render_prep_page()
 elif st.session_state.current_page == "live": render_live_page()
 elif st.session_state.current_page == "team_stats": render_team_stats_page()
 elif st.session_state.current_page == "team_analysis": render_team_analysis_page()
+elif st.session_state.current_page == "streaminfos": render_streaminfos_page()
