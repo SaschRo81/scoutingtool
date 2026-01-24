@@ -9,7 +9,7 @@ from src.api import (
 )
 from src.html_gen import generate_comparison_html
 
-# --- OBS CSS FÜR TV-LOOK ---
+# --- ZENTRALES CSS FÜR OBS (TV LOOK) ---
 OBS_CSS = """
 <style>
 header, footer, [data-testid="stSidebar"] {display: none !important;}
@@ -91,8 +91,11 @@ text-transform: uppercase; text-shadow: 2px 2px 4px black;
 </style>
 """
 
-def render_obs_starting5():
+def inject_obs_css():
     st.markdown(OBS_CSS, unsafe_allow_html=True)
+
+def render_obs_starting5():
+    inject_obs_css()
     try:
         ids_str = st.query_params.get("ids", "")
         team_name = st.query_params.get("name", "TEAM")
@@ -118,7 +121,7 @@ def render_obs_starting5():
     except Exception as e: st.error(f"Fehler: {e}")
 
 def render_obs_standings():
-    st.markdown(OBS_CSS, unsafe_allow_html=True)
+    inject_obs_css()
     region = st.query_params.get("region", "Süd")
     season = st.query_params.get("season", "2025")
     df = fetch_league_standings(season, region)
@@ -129,8 +132,21 @@ def render_obs_standings():
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
 
+def render_obs_comparison():
+    inject_obs_css()
+    try:
+        hid = st.query_params.get("hid"); gid = st.query_params.get("gid")
+        hname = st.query_params.get("hname"); gname = st.query_params.get("gname")
+        if hid and gid:
+            _, ts_h = fetch_team_data(hid, "2025")
+            _, ts_g = fetch_team_data(gid, "2025")
+            st.markdown("<div style='background:rgba(0,0,0,0.85); padding:30px; border-radius:15px; width:90%; margin:auto;'>", unsafe_allow_html=True)
+            st.markdown(generate_comparison_html(ts_h, ts_g, hname, gname), unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+    except: pass
+
 def render_obs_potg():
-    st.markdown(OBS_CSS, unsafe_allow_html=True)
+    inject_obs_css()
     st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
     gid = st.query_params.get("game_id")
     if not gid: return
@@ -147,5 +163,5 @@ def render_obs_potg():
         mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
-        html = f"<div class='potg-container'><h2>Player of the Game</h2><img src='{img}' style='width:250px; border-radius:50%; border:5px solid white;'><br><h3>{mvp['name']} (#{mvp['nr']})</h3><p>EFF: {mvp['eff']:.0f} | PTS: {mvp['pts']}</p></div>"
+        html = f"<div class='potg-container'><h2 style='text-transform:uppercase; color:#ff6600; margin-bottom:20px;'>Player of the Game</h2><img src='{img}' style='width:280px; height:280px; object-fit:cover; border-radius:50%; border:6px solid white; box-shadow:0 0 20px rgba(0,0,0,0.5);'><br><h1 style='margin:20px 0 5px 0;'>{mvp['name']}</h1><h2 style='margin:0; color:#ccc;'>#{mvp['nr']}</h2><div style='display:flex; gap:30px; margin-top:25px; background:rgba(255,255,255,0.1); padding:15px 30px; border-radius:10px;'><div style='text-align:center;'><div style='font-size:14px; color:#aaa;'>PUNKTE</div><div style='font-size:32px; font-weight:bold; color:#ff6600;'>{mvp['pts']}</div></div><div style='text-align:center;'><div style='font-size:14px; color:#aaa;'>EFFIZIENZ</div><div style='font-size:32px; font-weight:bold; color:#ff6600;'>{mvp['eff']:.0f}</div></div></div></div>"
         st.markdown(html, unsafe_allow_html=True)
