@@ -8,16 +8,18 @@ from src.api import (
     fetch_team_data
 )
 
-from src.html_gen import generate_comparison_html
-
-OBS_CLEAN_CSS = """
+# --- ABSOLUTER CLEAN-UP FÜR OBS (Kein Weiß, Keine Symbole, Statisch) ---
+OBS_ULTRA_CLEAN_CSS = """
 <style>
-    /* Verstecke alle Streamlit-Standardelemente */
-    header, footer, [data-testid="stSidebar"], [data-testid="stHeader"] {
+    /* Verstecke ALLES von Streamlit (Header, Footer, Sidebar, Krone/Status) */
+    header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], 
+    [data-testid="stStatusWidget"], .viewerBadge_container__1QSob, 
+    .stAppDeployButton {
         display: none !important;
+        visibility: hidden !important;
     }
     
-    /* Mache die App und alle Container komplett transparent */
+    /* Mache ALLES transparent */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"], .block-container {
         background-color: transparent !important;
         background-image: none !important;
@@ -25,13 +27,15 @@ OBS_CLEAN_CSS = """
         margin: 0 !important;
     }
 
-    /* Entferne weiße Ränder um das Hauptfenster */
+    /* Entferne weiße Ränder und Scrollbars */
     body {
         background-color: transparent !important;
-        overflow: hidden;
+        overflow: hidden !important;
+        margin: 0;
+        padding: 0;
     }
 
-    /* Container für das Lower Third */
+    /* Lower Third Design */
     .overlay-container {
         position: fixed;
         bottom: 40px;
@@ -107,12 +111,8 @@ OBS_CLEAN_CSS = """
 </style>
 """
 
-def inject_obs_css():
-    st.markdown(OBS_CSS, unsafe_allow_html=True)
-
 def render_obs_starting5():
-    # CSS zuerst laden
-    st.markdown(OBS_CLEAN_CSS, unsafe_allow_html=True)
+    st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
     try:
         ids_str = st.query_params.get("ids", "")
         team_name = st.query_params.get("name", "TEAM")
@@ -122,7 +122,7 @@ def render_obs_starting5():
         ids = [x for x in ids_str.split(",") if x]
         if not ids: return
 
-        # HTML flach bauen (WICHTIG: Keine Einrückung!)
+        # HTML flach ohne Einrückung am Zeilenanfang
         html = f"<div class='overlay-container'><div class='header-bar'><div class='team-info'>"
         if logo_url: html += f"<img src='{logo_url}' class='team-logo'>"
         html += f"<div class='team-name'>{team_name}</div></div><div class='coach-info'>Head Coach<span class='coach-name'>{coach_name}</span></div></div><div class='players-row'>"
@@ -140,8 +140,7 @@ def render_obs_starting5():
         st.error(f"Fehler: {e}")
 
 def render_obs_potg():
-    st.markdown(OBS_CLEAN_CSS, unsafe_allow_html=True)
-    # KEIN Refresh Tag hier! Seite bleibt statisch.
+    st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
     gid = st.query_params.get("game_id")
     if not gid: return
     box = fetch_game_boxscore(gid)
