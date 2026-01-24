@@ -645,34 +645,60 @@ def render_team_analysis_page():
 
 def render_streaminfos_page():
     render_page_header("📡 Stream Overlays (OBS)")
-    
-    st.info("Hier kannst du Links generieren, die du als 'Browser Source' in OBS einfügst. Die Links enthalten alle Konfigurationen.")
+    st.info("Hier kannst du Links generieren, die du als 'Browser Source' in OBS einfügst.")
 
     tab1, tab2, tab3, tab4 = st.tabs(["5️⃣ Starting 5", "🏆 Tabelle", "📊 Vergleich", "🔥 Player of the Game"])
 
-    # 1. STARTING 5
+    # 1. STARTING 5 (Getrennt für Heim/Gast)
     with tab1:
-        c1, c2 = st.columns(2)
+        st.markdown("### Teams & Starting 5 wählen")
         # Teams wählen (Süd Filter)
         south_teams = {k:v for k,v in TEAMS_DB.items() if v["staffel"] == "Süd"}
         team_opts = {v["name"]: k for k,v in south_teams.items()}
         
-        with c1:
-            h_name = st.selectbox("Heimteam", list(team_opts.keys()), key="obs_h_sel")
+        col_home, col_guest = st.columns(2)
+        
+        # --- HEIM TEAM CONFIG ---
+        with col_home:
+            st.markdown("#### 🏠 Heimteam")
+            h_name = st.selectbox("Team wählen", list(team_opts.keys()), key="obs_h_sel")
             h_id = team_opts[h_name]
-            st.write("Wähle 5 Spieler (Heim):")
+            h_coach = st.text_input("Head Coach Name", key="obs_h_coach") # Manuelles Feld für Coach
+            
+            st.write("Wähle 5 Spieler:")
             df_h, _ = fetch_team_data(h_id, CURRENT_SEASON_ID)
             h_players = []
             if df_h is not None and not df_h.empty:
-                # Map Name to ID and Nr
                 p_map_h = {f"#{r['NR']} {r['NAME_FULL']}": {"id": r["PLAYER_ID"], "nr": r["NR"], "name": r["NAME_FULL"]} for _, r in df_h.iterrows()}
                 sel_h = st.multiselect("Kader Heim", list(p_map_h.keys()), max_selections=5, key="obs_h_p")
                 for s in sel_h: h_players.append(p_map_h[s])
-        
-        with c2:
-            g_name = st.selectbox("Gastteam", list(team_opts.keys()), index=1, key="obs_g_sel")
+            
+            if st.button("🔗 Link HEIM generieren", type="primary"):
+                if len(h_players) < 1: st.warning("Wähle Spieler aus.")
+                else:
+                    params = {
+                        "view": "obs_starting5",
+                        "name": h_name,
+                        "logo_id": h_id,
+                        "coach": h_coach,
+                        "ids": ",".join([p["id"] for p in h_players])
+                    }
+                    for p in h_players: 
+                        params[f"n_{p['id']}"] = p["name"]
+                        params[f"nr_{p['id']}"] = p["nr"]
+                    
+                    qs = urlencode(params)
+                    st.code(f"/?{qs}", language="text")
+                    st.success("Kopiere diesen Link für die Heim-Szene in OBS.")
+
+        # --- GAST TEAM CONFIG ---
+        with col_guest:
+            st.markdown("#### 🚌 Gastteam")
+            g_name = st.selectbox("Team wählen", list(team_opts.keys()), index=1, key="obs_g_sel")
             g_id = team_opts[g_name]
-            st.write("Wähle 5 Spieler (Gast):")
+            g_coach = st.text_input("Head Coach Name", key="obs_g_coach")
+            
+            st.write("Wähle 5 Spieler:")
             df_g, _ = fetch_team_data(g_id, CURRENT_SEASON_ID)
             g_players = []
             if df_g is not None and not df_g.empty:
@@ -680,31 +706,23 @@ def render_streaminfos_page():
                 sel_g = st.multiselect("Kader Gast", list(p_map_g.keys()), max_selections=5, key="obs_g_p")
                 for s in sel_g: g_players.append(p_map_g[s])
 
-        if st.button("🔗 Link für Starting 5 generieren"):
-            if len(h_players) < 1 or len(g_players) < 1:
-                st.warning("Bitte Spieler auswählen.")
-            else:
-                # Parameter bauen
-                params = {
-                    "view": "obs_starting5",
-                    "h_name": h_name, "g_name": g_name,
-                    "h_ids": ",".join([p["id"] for p in h_players]),
-                    "g_ids": ",".join([p["id"] for p in g_players])
-                }
-                # Namen und Nummern auch encoden, um API Calls in OBS zu sparen/zu fixen
-                for p in h_players: 
-                    params[f"n_{p['id']}"] = p["name"]
-                    params[f"nr_{p['id']}"] = p["nr"]
-                for p in g_players: 
-                    params[f"n_{p['id']}"] = p["name"]
-                    params[f"nr_{p['id']}"] = p["nr"]
-                
-                base = st.query_params.get("base_url", "http://localhost:8501") # Fallback, idealerweise die echte URL
-                # Da Streamlit die Base URL nicht einfach hergibt, nehmen wir an, der User kopiert den Pfad
-                qs = urlencode(params)
-                full_url = f"/?{qs}" # Relativer Pfad reicht oft, oder User ergänzt Domain
-                st.code(full_url, language="text")
-                st.success("Kopiere diesen Teil hinter deine App-Domain (z.B. https://deine-app.streamlit.app/...)")
+            if st.button("🔗 Link GAST generieren", type="primary"):
+                if len(g_players) < 1: st.warning("Wähle Spieler aus.")
+                else:
+                    params = {
+                        "view": "obs_starting5",
+                        "name": g_name,
+                        "logo_id": g_id,
+                        "coach": g_coach,
+                        "ids": ",".join([p["id"] for p in g_players])
+                    }
+                    for p in g_players: 
+                        params[f"n_{p['id']}"] = p["name"]
+                        params[f"nr_{p['id']}"] = p["nr"]
+                    
+                    qs = urlencode(params)
+                    st.code(f"/?{qs}", language="text")
+                    st.success("Kopiere diesen Link für die Gast-Szene in OBS.")
 
     # 2. TABELLE
     with tab2:
