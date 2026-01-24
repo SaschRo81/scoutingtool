@@ -844,4 +844,3 @@ elif st.session_state.current_page == "live": render_live_page()
 elif st.session_state.current_page == "team_stats": render_team_stats_page()
 elif st.session_state.current_page == "team_analysis": render_team_analysis_page()
 elif st.session_state.current_page == "streaminfos": render_streaminfos_page()
-elif st.session_state.current_page == "live": render_live_view(None) # Platzhalter
