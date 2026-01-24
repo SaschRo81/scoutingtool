@@ -38,7 +38,7 @@ except ImportError:
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
 from src.api import fetch_team_data, get_player_metadata_cached, fetch_schedule, fetch_game_boxscore, get_best_team_logo, fetch_league_standings
 from src.html_gen import generate_comparison_html
-)
+
 from src.html_gen import (
     generate_header_html, generate_top3_html, generate_card_html, 
     generate_team_stats_html, generate_custom_sections_html,
