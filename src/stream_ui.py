@@ -1,9 +1,12 @@
-# --- START OF FILE src/stream_ui.py ---
 import streamlit as st
 import pandas as pd
-from src.api import get_player_metadata_cached, fetch_game_boxscore, get_best_team_logo, fetch_league_standings, fetch_team_data
-# Falls optimize_image_base64 in utils fehlt, nutzen wir einen Fallback oder entfernen den Import, 
-# aber hier gehen wir davon aus, dass er existiert.
+from src.api import (
+    get_player_metadata_cached, 
+    fetch_game_boxscore, 
+    get_best_team_logo, 
+    fetch_league_standings, 
+    fetch_team_data
+)
 from src.utils import optimize_image_base64
 from src.html_gen import generate_comparison_html
 
@@ -89,14 +92,13 @@ def inject_obs_css():
 
 def render_obs_starting5():
     inject_obs_css()
-    # IDs aus URL Parametern holen (Format: ?h_ids=1,2,3&g_ids=4,5,6&h_name=X&g_name=Y)
+    # IDs aus URL Parametern holen
     try:
         h_ids = st.query_params.get("h_ids", "").split(",")
         g_ids = st.query_params.get("g_ids", "").split(",")
         h_name = st.query_params.get("h_name", "HEIM")
         g_name = st.query_params.get("g_name", "GAST")
         
-        # Leere Strings filtern
         h_ids = [x for x in h_ids if x]
         g_ids = [x for x in g_ids if x]
 
@@ -134,7 +136,6 @@ def render_obs_standings():
     df = fetch_league_standings(season, region)
     
     if not df.empty:
-        # Custom HTML Table für OBS Style
         html = f"<h2 style='text-align:center; background:#112244; padding:10px; margin:0;'>Tabelle {region}</h2>"
         html += "<table class='obs-table'><thead><tr><th>#</th><th>Team</th><th>W</th><th>L</th></tr></thead><tbody>"
         for _, row in df.iterrows():
@@ -161,7 +162,7 @@ def render_obs_comparison():
                 table { color: white !important; font-size: 24px !important; background: rgba(0,0,0,0.8); }
                 th { background-color: #e35b00 !important; color: white !important; }
                 td { border-bottom: 1px solid #555 !important; color: white !important; }
-                h3 { color: white !important; display: none; } /* Titel ausblenden */
+                h3 { color: white !important; display: none; }
             </style>
             """, unsafe_allow_html=True)
             
@@ -171,7 +172,6 @@ def render_obs_comparison():
 
 def render_obs_potg():
     inject_obs_css()
-    # Auto-Refresh für OBS Browser Source
     st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
     
     gid = st.query_params.get("game_id")
@@ -181,7 +181,8 @@ def render_obs_potg():
     if not box: st.error("Lade..."); return
 
     players = []
-    # Helper Funktion um Namen zu holen (vermeidet Import-Kreis)
+    
+    # Lokaler Helper, um Import-Loop zu vermeiden
     def get_team_name_helper(t_obj):
         return t_obj.get("name", "Team") if t_obj else "Team"
 
@@ -204,7 +205,6 @@ def render_obs_potg():
             except: pass
             
     if players:
-        # Sortiere nach Effizienz
         mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
