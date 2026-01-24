@@ -11,6 +11,7 @@ import base64
 import pytz
 
 # --- NEU: STREAM UI IMPORTE & ROUTING ---
+from urllib.parse import urlencode
 from src.stream_ui import render_obs_starting5, render_obs_standings, render_obs_comparison, render_obs_potg
 
 # OBS Routing: Prüft sofort, ob eine OBS-Ansicht angefordert wird
@@ -663,7 +664,7 @@ def render_streaminfos_page():
             st.markdown("#### 🏠 Heimteam")
             h_name = st.selectbox("Team wählen", list(team_opts.keys()), key="obs_h_sel")
             h_id = team_opts[h_name]
-            h_coach = st.text_input("Head Coach Name", key="obs_h_coach") # Manuelles Feld für Coach
+            h_coach = st.text_input("Head Coach Name", key="obs_h_coach")
             
             st.write("Wähle 5 Spieler:")
             df_h, _ = fetch_team_data(h_id, CURRENT_SEASON_ID)
@@ -730,7 +731,6 @@ def render_streaminfos_page():
         if st.button("🔗 Link Tabelle"):
             st.code("/?view=obs_standings&region=Süd&season=2025", language="text")
 
-    # 3. VERGLEICH
     with tab3:
         h_c = st.selectbox("Team A", list(team_opts.keys()), key="obs_comp_h")
         g_c = st.selectbox("Team B", list(team_opts.keys()), index=1, key="obs_comp_g")
@@ -742,24 +742,16 @@ def render_streaminfos_page():
             }
             st.code(f"/?{urlencode(params)}", language="text")
 
-    # 4. PLAYER OF THE GAME
     with tab4:
-        st.write("Verbindet sich mit dem Live-Game und zeigt den MVP (basierend auf Effizienz) an.")
-        # Nutze die Recent Games Logik aus app.py, aber vereinfacht
-        from src.api import fetch_schedule
-        # Wir nehmen einfach ein Team, um an den Spielplan zu kommen, oder User gibt ID ein
+        st.write("Live-Game MVP (basierend auf Effizienz).")
         st.caption("Suche Spiel über Team:")
         sel_t = st.selectbox("Team wählen", list(team_opts.keys()), key="obs_potg_t")
         sch = fetch_schedule(team_opts[sel_t], CURRENT_SEASON_ID)
-        
-        # Filtere auf heutige/zukünftige/gerade beendete
         game_opts = {f"{g['date']} vs {g['guest'] if g['home']==sel_t else g['home']}": g['id'] for g in sch}
         sel_g = st.selectbox("Spiel wählen", list(game_opts.keys()))
-        
         if st.button("🔗 Link POTG"):
             gid = game_opts[sel_g]
             st.code(f"/?view=obs_potg&game_id={gid}", language="text")
-            st.caption("Dieser Link aktualisiert sich in OBS automatisch alle 30 Sekunden.")
 
 def render_scouting_page():
     render_page_header("📝 PreGame Report") 
