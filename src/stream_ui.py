@@ -1,8 +1,9 @@
 # --- START OF FILE src/stream_ui.py ---
 import streamlit as st
 import pandas as pd
-# Wir importieren get_team_name NICHT aus analysis_ui, um zyklische Importe zu vermeiden
 from src.api import get_player_metadata_cached, fetch_game_boxscore, get_best_team_logo, fetch_league_standings, fetch_team_data
+# Falls optimize_image_base64 in utils fehlt, nutzen wir einen Fallback oder entfernen den Import, 
+# aber hier gehen wir davon aus, dass er existiert.
 from src.utils import optimize_image_base64
 from src.html_gen import generate_comparison_html
 
@@ -104,7 +105,6 @@ def render_obs_starting5():
             for pid in ids:
                 meta = get_player_metadata_cached(pid)
                 img = meta.get("img") or "https://via.placeholder.com/150/555555/FFFFFF?text=No+Img"
-                # FIX: Wir nutzen den Namen aus dem URL Parameter P_NAMES oder Placeholder.
                 name = st.query_params.get(f"n_{pid}", "Player")
                 nr = st.query_params.get(f"nr_{pid}", "#")
                 
@@ -171,6 +171,7 @@ def render_obs_comparison():
 
 def render_obs_potg():
     inject_obs_css()
+    # Auto-Refresh für OBS Browser Source
     st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
     
     gid = st.query_params.get("game_id")
@@ -180,7 +181,7 @@ def render_obs_potg():
     if not box: st.error("Lade..."); return
 
     players = []
-    # Helper um Namen zu holen ohne circular imports
+    # Helper Funktion um Namen zu holen (vermeidet Import-Kreis)
     def get_team_name_helper(t_obj):
         return t_obj.get("name", "Team") if t_obj else "Team"
 
@@ -203,6 +204,7 @@ def render_obs_potg():
             except: pass
             
     if players:
+        # Sortiere nach Effizienz
         mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
