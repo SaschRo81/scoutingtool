@@ -12,6 +12,21 @@ import pytz
 from src.stream_ui import render_obs_starting5, render_obs_standings, render_obs_comparison, render_obs_potg
 from urllib.parse import urlencode
 
+if "view" in st.query_params:
+    view_mode = st.query_params["view"]
+    if view_mode == "obs_starting5":
+        render_obs_starting5()
+        st.stop() # Stoppt hier, lädt kein normales UI
+    elif view_mode == "obs_standings":
+        render_obs_standings()
+        st.stop()
+    elif view_mode == "obs_comparison":
+        render_obs_comparison()
+        st.stop()
+    elif view_mode == "obs_potg":
+        render_obs_potg()
+        st.stop()
+
 try:
     import pdfkit
     HAS_PDFKIT = True
