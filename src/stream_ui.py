@@ -9,7 +9,7 @@ from src.api import (
 )
 from src.html_gen import generate_comparison_html
 
-# --- OBS STYLE ---
+# --- OBS STYLE (TV Look) ---
 OBS_CSS = """
 <style>
     /* Streamlit UI Elemente ausblenden */
@@ -22,49 +22,50 @@ OBS_CSS = """
     /* Global Reset */
     body { font-family: 'Arial', sans-serif; overflow: hidden; margin: 0; padding: 0; }
 
-    /* --- STARTING 5 LAYOUT (TV Style) --- */
+    /* --- LOWER THIRD OVERLAY --- */
     .overlay-container {
         position: fixed;
         bottom: 50px;
         left: 50%;
         transform: translateX(-50%);
-        width: 1600px; /* Breite des Overlays */
+        width: 1600px; /* Breite des Overlays auf dem Screen */
         display: flex;
         flex-direction: column;
     }
 
     /* Blaue Kopfleiste (Team & Infos) */
     .header-bar {
-        background: linear-gradient(90deg, #001f5b 0%, #00338d 100%); /* Dunkelblau wie im Bild */
+        background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
         color: white;
-        padding: 10px 30px;
+        padding: 15px 40px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-top: 4px solid #ff6600; /* Orange Akzentlinie oben */
-        border-radius: 8px 8px 0 0;
-        box-shadow: 0 -4px 10px rgba(0,0,0,0.5);
+        border-top: 5px solid #ff6600; /* Orange Linie oben */
+        border-radius: 12px 12px 0 0;
+        box-shadow: 0 -5px 15px rgba(0,0,0,0.5);
     }
 
-    .team-info { display: flex; align-items: center; gap: 20px; }
-    .team-logo { height: 60px; object-fit: contain; filter: drop-shadow(0 0 5px rgba(255,255,255,0.5)); }
-    .team-name { font-size: 32px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; }
+    .team-info { display: flex; align-items: center; gap: 25px; }
+    .team-logo { height: 70px; object-fit: contain; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3)); }
+    .team-name { font-size: 36px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; line-height: 1; }
     
-    .coach-info { text-align: right; font-size: 18px; color: #ccc; }
-    .coach-name { font-weight: bold; color: white; display: block; font-size: 22px; text-transform: uppercase;}
+    .coach-info { text-align: right; font-size: 18px; color: #ddd; text-transform: uppercase; letter-spacing: 1px; }
+    .coach-name { font-weight: bold; color: white; display: block; font-size: 24px; margin-top: 4px; }
 
     /* Spieler Reihe */
     .players-row {
         display: flex;
         justify-content: space-between;
-        background: rgba(0, 31, 91, 0.85); /* Halbtransparenter Hintergrund für Spieler */
-        padding: 20px 10px;
-        border-radius: 0 0 8px 8px;
+        background: rgba(0, 31, 91, 0.9); /* Dunkelblau, leicht transparent */
+        padding: 25px 20px;
+        border-radius: 0 0 12px 12px;
+        backdrop-filter: blur(5px);
     }
 
     /* Einzelne Spieler Karte */
     .player-card {
-        width: 19%; /* 5 Spieler passen rein */
+        width: 19%;
         text-align: center;
         position: relative;
         display: flex;
@@ -75,50 +76,51 @@ OBS_CSS = """
     /* Bild Container */
     .img-wrapper {
         position: relative;
-        width: 140px;
-        height: 140px;
-        margin-bottom: 10px;
+        width: 150px;
+        height: 150px;
+        margin-bottom: 12px;
     }
 
     .p-img {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        border-radius: 10px;
+        border-radius: 12px;
         border: 3px solid white;
         background: #999;
+        box-shadow: 0 5px 10px rgba(0,0,0,0.4);
     }
 
-    /* Nummer Badge (Links unten am Bild im Beispiel) */
+    /* Nummer Badge */
     .p-nr {
         position: absolute;
-        bottom: -10px;
-        left: -10px;
+        bottom: -12px;
+        left: -12px;
         background: #ff6600;
         color: white;
-        font-weight: bold;
-        width: 40px;
-        height: 40px;
+        font-weight: 900;
+        width: 45px;
+        height: 45px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 20px;
+        font-size: 24px;
         border: 2px solid white;
-        border-radius: 5px;
+        border-radius: 8px;
         box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+        z-index: 10;
     }
 
     .p-name {
-        font-size: 20px;
-        font-weight: bold;
+        font-size: 22px;
+        font-weight: 800;
         color: white;
         text-transform: uppercase;
         line-height: 1.1;
-        margin-top: 5px;
-        text-shadow: 1px 1px 3px black;
+        text-shadow: 2px 2px 4px black;
     }
 
-    /* --- TABELLE & POTG (Styles behalten) --- */
+    /* --- ANDERE STYLES (TABELLE / POTG) --- */
     .obs-table-container { width: 90%; margin: 20px auto; background: rgba(0,0,0,0.85); border-radius: 15px; overflow: hidden; border: 2px solid #444; }
     .obs-table { width: 100%; font-size: 24px; border-collapse: collapse; color: white; text-align: center; }
     .obs-table th { background: #e35b00; padding: 15px; text-transform: uppercase; font-size: 20px;}
@@ -147,68 +149,48 @@ def inject_obs_css():
 def render_obs_starting5():
     inject_obs_css()
     try:
-        # Wir erwarten jetzt spezifische Parameter für EINE Mannschaft
-        # Format: ?ids=1,2,3,4,5&name=TeamName&logo_id=123&coach=Name
-        
+        # Parameter holen
         ids_str = st.query_params.get("ids", "")
         team_name = st.query_params.get("name", "TEAM")
         coach_name = st.query_params.get("coach", "")
         logo_id = st.query_params.get("logo_id", "")
         
-        # Logo URL holen
         logo_url = get_best_team_logo(logo_id) if logo_id else ""
-        
         ids = [x for x in ids_str.split(",") if x]
         
         if not ids:
             st.warning("Keine Spieler-IDs übergeben.")
             return
 
-        # HTML Aufbauen
-        html = f"""
-        <div class='overlay-container'>
-            <div class='header-bar'>
-                <div class='team-info'>
-                    {'<img src="' + logo_url + '" class="team-logo">' if logo_url else ''}
-                    <div class='team-name'>{team_name}</div>
-                </div>
-                <div class='coach-info'>
-                    Head Coach
-                    <span class='coach-name'>{coach_name}</span>
-                </div>
-            </div>
+        # HTML String OHNE jegliche Einrückung zusammenbauen
+        html = f"<div class='overlay-container'><div class='header-bar'><div class='team-info'>"
+        
+        if logo_url:
+            html += f"<img src='{logo_url}' class='team-logo'>"
             
-            <div class='players-row'>
-        """
+        html += f"<div class='team-name'>{team_name}</div></div><div class='coach-info'>Head Coach<span class='coach-name'>{coach_name}</span></div></div><div class='players-row'>"
         
         for pid in ids:
             meta = get_player_metadata_cached(pid)
             img = meta.get("img") or "https://via.placeholder.com/150/555555/FFFFFF?text=No+Img"
-            
-            # Name und Nummer aus URL Parametern holen (um API Calls zu minimieren/Backup)
             p_name = st.query_params.get(f"n_{pid}", "Player")
-            # Nachnamen extrahieren (alles nach dem ersten Leerzeichen, falls vorhanden)
+            
+            # Name formatieren (V. Nachname)
             parts = p_name.split(" ")
-            last_name = parts[-1] if len(parts) > 1 else p_name
-            full_name_disp = f"{parts[0][0]}. {last_name}" if len(parts) > 1 else p_name # Format: M. Mustermann
+            if len(parts) > 1:
+                # Nimm ersten Buchstaben vom Vorname + Nachname
+                full_name_disp = f"{parts[0][0]}. {parts[-1]}"
+            else:
+                full_name_disp = p_name
             
             p_nr = st.query_params.get(f"nr_{pid}", "#")
             
-            html += f"""
-                <div class='player-card'>
-                    <div class='img-wrapper'>
-                        <img src='{img}' class='p-img'>
-                        <div class='p-nr'>{p_nr}</div>
-                    </div>
-                    <div class='p-name'>{full_name_disp}</div>
-                </div>
-            """
+            # Karte hinzufügen
+            html += f"<div class='player-card'><div class='img-wrapper'><img src='{img}' class='p-img'><div class='p-nr'>{p_nr}</div></div><div class='p-name'>{full_name_disp}</div></div>"
             
-        html += """
-            </div>
-        </div>
-        """
+        html += "</div></div>"
         
+        # Rendern
         st.markdown(html, unsafe_allow_html=True)
 
     except Exception as e:
@@ -220,8 +202,7 @@ def render_obs_standings():
     season = st.query_params.get("season", "2025")
     df = fetch_league_standings(season, region)
     if not df.empty:
-        html = f"<div class='obs-table-container'><div class='obs-header'>Tabelle {region}</div>"
-        html += "<table class='obs-table'><thead><tr><th>#</th><th>Team</th><th>W</th><th>L</th></tr></thead><tbody>"
+        html = f"<div class='obs-table-container'><div class='obs-header'>Tabelle {region}</div><table class='obs-table'><thead><tr><th>#</th><th>Team</th><th>W</th><th>L</th></tr></thead><tbody>"
         for _, row in df.iterrows():
             html += f"<tr><td>{row['Platz']}</td><td>{row['Team']}</td><td>{row['W']}</td><td>{row['L']}</td></tr>"
         html += "</tbody></table></div>"
