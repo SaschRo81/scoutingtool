@@ -9,7 +9,7 @@ from src.api import (
 )
 from src.html_gen import generate_comparison_html
 
-# --- OBS DARK THEME FINAL CSS ---
+# --- OBS FINAL DARK THEME (FIXED CONTRAST) ---
 OBS_DARK_CSS = """
 <style>
 /* 1. Alles von Streamlit verstecken */
@@ -36,7 +36,7 @@ body {
     padding: 0;
 }
 
-/* --- COMPONENTS DESIGN (DARK BLUE THEME) --- */
+/* --- COMPONENTS DESIGN --- */
 
 /* Header Bar */
 .overlay-container {
@@ -55,14 +55,26 @@ body {
 .coach-info { text-align: right; font-size: 16px; color: #ccc; text-transform: uppercase; font-family: sans-serif; }
 .coach-name { font-weight: bold; color: white; display: block; font-size: 22px; }
 
-/* Starting 5 Container - IMMER DUNKELBLAU */
+/* Starting 5 Container - ALLES DUNKELBLAU */
 .players-row {
     display: flex; justify-content: space-between; 
-    background-color: #001a4d !important; /* HIER WURDE ES GEFIXT */
+    background-color: #001a4d !important; /* Hintergrund Row */
     padding: 20px; border-radius: 0 0 10px 10px;
     border-bottom: 5px solid #ff6600;
 }
-.player-card { width: 19%; text-align: center; position: relative; display: flex; flex-direction: column; align-items: center; }
+
+/* Karten transparent machen, damit sie die Farbe der Row annehmen */
+.player-card { 
+    width: 19%; 
+    text-align: center; 
+    position: relative; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center;
+    background-color: transparent !important; /* WICHTIG: Kein Weiß mehr */
+    background: transparent !important;
+}
+
 .img-wrapper { position: relative; width: 150px; height: 150px; margin-bottom: 10px; }
 .p-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 3px solid #ff6600; background: #eee; }
 .p-nr {
@@ -74,6 +86,7 @@ body {
     font-size: 20px; font-weight: bold; font-family: sans-serif; 
     color: white !important; /* Immer Weiß */
     text-transform: uppercase; text-shadow: 1px 1px 2px black;
+    background: transparent !important;
 }
 
 /* Content Wrapper (Standings & Comparison) */
@@ -83,7 +96,7 @@ body {
     left: 50%;
     transform: translate(-50%, -50%);
     width: 1400px; 
-    background: #001a4d; /* DUNKELBLAU */
+    background: #001a4d; 
     padding: 0;
     border-radius: 15px;
     border: 3px solid #ff6600; 
@@ -108,26 +121,47 @@ body {
     letter-spacing: 2px; color: white;
 }
 
-/* Tabellen Styles - VERGRÖSSERT & BESSERE LESBARKEIT */
+/* TABELLEN FIXES - LESBARKEIT */
 .obs-content-wrapper table {
     width: 100%; border-collapse: collapse; 
-    font-size: 28px !important; /* SCHRIFTGRÖSSE ERHÖHT */
+    font-size: 28px !important; 
     text-align: center; margin: 0;
+    color: white !important; /* Basis-Farbe Weiß */
 }
+
+/* Header */
 .obs-content-wrapper th { 
     background: #002661; 
-    color: #ff6600 !important; /* Orange Header */
+    color: #ff6600 !important; 
     padding: 15px; 
     text-transform: uppercase; font-size: 24px; border-bottom: 2px solid #ff6600; 
 }
+
+/* Zellen - ALLES AUF WEISS ZWINGEN */
 .obs-content-wrapper td { 
-    padding: 14px; /* Mehr Platz */
+    padding: 14px; 
     border-bottom: 1px solid #444; 
     font-weight: bold; 
     vertical-align: middle; 
-    color: #ffffff !important; /* ERZWINGT WEISSE SCHRIFT AUCH IN MITTELSPALTE */
+    color: white !important; /* Überschreibt dunkle Schrift */
+    background-color: transparent !important; /* Keine weißen Hintergründe */
 }
-/* Alternierende Zeilen */
+
+/* Inline Styles (z.B. style='color: black') überschreiben */
+.obs-content-wrapper td * {
+    color: inherit; /* Nimmt das Weiß vom td an */
+}
+
+/* Falls wir Grün/Rot behalten wollen, müssen wir sie HELLER machen, sonst sieht man sie nicht auf Blau */
+/* Diese Selektoren greifen nur, wenn im HTML style='color:green' steht */
+div[style*="color: green"], span[style*="color: green"], span[style*="color:green"] {
+    color: #00ff00 !important; /* Neon-Grün */
+}
+div[style*="color: red"], span[style*="color: red"], span[style*="color:red"] {
+    color: #ff4444 !important; /* Helles Rot */
+}
+
+/* Zeilen */
 .obs-content-wrapper tr:nth-child(even) { background-color: rgba(255,255,255,0.05); }
 
 /* POTG Card Style */
@@ -206,7 +240,7 @@ def render_obs_standings():
             elif rank_val <= 8: row_style = "border-left: 8px solid #6c757d;"
             else: row_style = "border-left: 8px solid #dc3545;"
 
-            diff_style = "color:#28a745 !important;" if (str(diff).startswith("+")) else ("color:#dc3545 !important;" if str(diff).startswith("-") else "color:#ccc !important;")
+            diff_style = "color:#00ff00 !important;" if (str(diff).startswith("+")) else ("color:#ff4444 !important;" if str(diff).startswith("-") else "color:#ccc !important;")
             html += f"<tr style='{row_style}'><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{sp}</td><td>{s}</td><td>{n}</td><td style='{diff_style}'>{diff}</td></tr>"
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
@@ -230,6 +264,7 @@ def render_obs_comparison():
             {content_html}
         </div>
         """
+        # Entferne Newlines, damit Markdown es nicht kaputt macht
         html = html.replace('\n', ' ')
         st.markdown(html, unsafe_allow_html=True)
 
