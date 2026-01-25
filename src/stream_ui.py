@@ -12,7 +12,7 @@ from src.html_gen import generate_comparison_html
 # --- OBS ULTRA CLEAN CSS (LIGHT MODE) ---
 OBS_ULTRA_CLEAN_CSS = """
 <style>
-/* Verstecke ALLES von Streamlit */
+/* 1. Alles von Streamlit verstecken */
 header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], 
 [data-testid="stStatusWidget"], .viewerBadge_container__1QSob, 
 .stAppDeployButton, [data-testid="stDecoration"], #MainMenu {
@@ -20,7 +20,7 @@ header, footer, [data-testid="stSidebar"], [data-testid="stHeader"],
     visibility: hidden !important;
 }
 
-/* Transparenz erzwingen */
+/* 2. Hintergrund transparent machen */
 .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"], .block-container {
     background-color: transparent !important;
     background-image: none !important;
@@ -36,7 +36,9 @@ body {
     padding: 0;
 }
 
-/* --- TV LOOK DESIGN (WHITE BACKGROUNDS) --- */
+/* --- COMPONENTS DESIGN --- */
+
+/* Header Bar & Player Overlay */
 .overlay-container {
     position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
     width: 1550px; display: flex; flex-direction: column; z-index: 9999;
@@ -53,7 +55,6 @@ body {
 .coach-info { text-align: right; font-size: 16px; color: #ddd; text-transform: uppercase; font-family: sans-serif; }
 .coach-name { font-weight: bold; color: white; display: block; font-size: 22px; }
 
-/* Starting 5 Container */
 .players-row {
     display: flex; justify-content: space-between; 
     background: white; 
@@ -70,12 +71,10 @@ body {
 }
 .p-name { 
     font-size: 20px; font-weight: bold; font-family: sans-serif; 
-    color: #001f5b; 
-    text-transform: uppercase; 
-    text-shadow: none;
+    color: #001f5b; text-transform: uppercase; text-shadow: none;
 }
 
-/* --- TABELLE & CONTENT WRAPPER --- */
+/* Content Wrapper (Standings & Comparison) */
 .obs-content-wrapper {
     position: fixed;
     top: 50%;
@@ -88,86 +87,54 @@ body {
     border: 3px solid #00338d;
     color: #333; 
     font-family: sans-serif;
-    /* overflow: hidden;  <-- ENTFERNT, damit nichts abgeschnitten wird */
     box-shadow: 0 0 40px rgba(0,0,0,0.5);
     z-index: 10000;
+    /* Wichtig: Kein Overflow Hidden, damit Schatten/Ränder sichtbar bleiben */
 }
 
 .obs-header-row {
     background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
     color: white; 
-    padding: 10px 30px; 
+    padding: 15px 30px; 
     display: flex;
     align-items: center;
     justify-content: center; 
     border-bottom: 5px solid #ff6600;
-    min-height: 100px; 
+    min-height: 80px;
 }
 .header-title {
-    font-size: 42px; 
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    color: white;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    font-size: 42px; font-weight: 900; text-transform: uppercase;
+    letter-spacing: 2px; color: white;
 }
 
-/* Styles für ALLE Tabellen im Wrapper (Standings UND Comparison) */
+/* Tabellen Styles */
 .obs-content-wrapper table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 24px;
-    text-align: center;
-    margin-bottom: 0; /* Kein Rand unten, damit es bündig ist */
+    width: 100%; border-collapse: collapse; font-size: 24px; text-align: center; margin: 0;
 }
 .obs-content-wrapper th { 
-    background: #eee; 
-    color: #001a4d; 
-    padding: 15px; text-transform: uppercase; font-size: 22px; 
-    border-bottom: 3px solid #001a4d; 
+    background: #eee; color: #001a4d; padding: 15px; 
+    text-transform: uppercase; font-size: 22px; border-bottom: 3px solid #001a4d; 
 }
 .obs-content-wrapper td { 
-    padding: 12px; border-bottom: 1px solid #ccc; font-weight: bold; vertical-align: middle; 
-    color: #333;
+    padding: 12px; border-bottom: 1px solid #ccc; font-weight: bold; vertical-align: middle; color: #333;
 }
 .obs-content-wrapper tr:nth-child(even) { background-color: #f9f9f9; }
-.obs-content-wrapper tr:last-child td { border-bottom: none; } /* Letzte Zeile ohne Strich */
 
-/* Spezifisch für Comparison Titles in generate_comparison_html falls vorhanden */
-.obs-content-wrapper h2, .obs-content-wrapper h3 {
-    text-align: center;
-    color: #00338d;
-    text-transform: uppercase;
-    margin-top: 20px;
-    font-size: 32px;
-}
-
-/* Trend Bubbles */
-.trend-w, .trend-l {
-    display: inline-block; width: 30px; height: 30px; line-height: 30px;
-    text-align: center; border-radius: 50%; font-size: 16px; font-weight: bold;
-    margin-right: 4px; color: white;
-}
-.trend-w { background-color: #28a745; }
-.trend-l { background-color: #dc3545; }
-
-/* POTG */
+/* POTG Card Style */
 .potg-card {
-    width: 450px; margin: 100px auto; 
-    background: white;
-    border: 4px solid #ff6600; border-radius: 20px; padding: 30px; text-align: center;
-    color: #333; 
-    box-shadow: 0 0 30px rgba(0,0,0,0.5); font-family: sans-serif;
+    width: 500px; margin: 80px auto; 
+    background: white; 
+    border: 4px solid #ff6600; border-radius: 20px; padding: 30px; 
+    text-align: center; color: #333; 
+    box-shadow: 0 0 40px rgba(0,0,0,0.6); font-family: sans-serif;
 }
 .potg-stat-box {
     display: flex; justify-content: center; gap: 15px; margin-top: 25px; 
-    background: #f0f0f0; 
-    padding: 15px; border-radius: 10px;
-    border: 1px solid #ddd;
+    background: #f4f4f4; padding: 15px; border-radius: 10px; border: 1px solid #ddd;
 }
-.potg-stat-item { text-align: center; min-width: 60px; }
-.potg-stat-label { font-size: 14px; color: #666; margin-bottom: 2px; }
-.potg-stat-val { font-size: 28px; font-weight: 900; color: #00338d; }
+.potg-stat-item { text-align: center; min-width: 70px; }
+.potg-stat-label { font-size: 16px; color: #666; margin-bottom: 4px; font-weight: bold; }
+.potg-stat-val { font-size: 32px; font-weight: 900; color: #00338d; }
 </style>
 """
 
@@ -205,41 +172,31 @@ def render_obs_standings():
     
     if not df.empty:
         region_display = region.capitalize()
-        title_text = f"2. Damen Basketball Bundesliga {region_display}"
+        title_text = f"2. DBBL {region_display}"
         
         html = f"""
         <div class='obs-content-wrapper'>
-            <div class='obs-header-row'>
-                <span class='header-title'>{title_text}</span>
-            </div>
-            <table>
-            <thead><tr><th style='width:60px;'>#</th><th style='text-align:left;'>Team</th><th>Sp</th><th>S</th><th>N</th><th>Diff</th></tr></thead><tbody>
+            <div class='obs-header-row'><span class='header-title'>{title_text}</span></div>
+            <table><thead><tr>
+                <th style='width:60px;'>#</th><th style='text-align:left;'>Team</th>
+                <th>Sp</th><th>S</th><th>N</th><th>Diff</th>
+            </tr></thead><tbody>
         """
-        
         for _, row in df.iterrows():
             platz = row.get('Platz', 0)
             team = row.get('Team', 'Unknown')
-            sp = row.get('Sp', 0)
-            s = row.get('S', 0)
-            n = row.get('N', 0)
+            sp = row.get('Sp', 0); s = row.get('S', 0); n = row.get('N', 0)
             diff = row.get('Diff', '0')
-            
             try: rank_val = int(platz)
             except: rank_val = 99
             
-            # Farb-Logik
             row_style = ""
-            if rank_val <= 4:
-                row_style = "background-color: #e8f5e9; border-left: 8px solid #28a745;"
-            elif rank_val <= 8:
-                row_style = "background-color: #f8f9fa; border-left: 8px solid #6c757d;"
-            else:
-                row_style = "background-color: #fce8e6; border-left: 8px solid #dc3545;"
+            if rank_val <= 4: row_style = "background-color: #e8f5e9; border-left: 8px solid #28a745;"
+            elif rank_val <= 8: row_style = "background-color: #f8f9fa; border-left: 8px solid #6c757d;"
+            else: row_style = "background-color: #fce8e6; border-left: 8px solid #dc3545;"
 
             diff_style = "color:#28a745;" if (str(diff).startswith("+")) else ("color:#dc3545;" if str(diff).startswith("-") else "color:#999;")
-            
             html += f"<tr style='{row_style}'><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{sp}</td><td>{s}</td><td>{n}</td><td style='{diff_style}'>{diff}</td></tr>"
-            
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
 
@@ -252,21 +209,19 @@ def render_obs_comparison():
         _, ts_h = fetch_team_data(hid, "2025")
         _, ts_g = fetch_team_data(gid, "2025")
         
-        # Hier generieren wir den HTML Content für den Vergleich
         content_html = generate_comparison_html(ts_h, ts_g, hname, gname)
         
-        # Wir fügen den Header manuell hinzu, falls generate_comparison_html keinen Header liefert
-        # Oder wir wrappen es einfach sauber, damit die Table Styles greifen
+        # Wrapper mit manuellem Header, damit es zum restlichen Design passt
         html = f"""
-        <div class='obs-content-wrapper' style='padding-bottom: 20px;'>
+        <div class='obs-content-wrapper' style='padding-bottom:10px;'>
              <div class='obs-header-row'>
-                <span class='header-title'>Head-to-Head (Saison-Schnitt)</span>
+                <span class='header-title'>Head-to-Head (Schnitt)</span>
             </div>
-            <div style='padding: 0;'>
-                {content_html}
-            </div>
+            {content_html}
         </div>
         """
+        # Hier entfernen wir Newlines, damit Markdown keine Code-Blöcke erkennt
+        html = html.replace('\n', ' ')
         st.markdown(html, unsafe_allow_html=True)
 
 def render_obs_potg():
@@ -284,15 +239,11 @@ def render_obs_potg():
                 sec = int(p.get("secondsPlayed") or 0)
                 min_str = f"{sec//60:02d}:{sec%60:02d}"
                 reb = int(p.get("totalRebounds") or 0)
-                
                 players.append({
                     "id": str(p.get("seasonPlayer", {}).get("id")),
                     "name": f"{p.get('seasonPlayer', {}).get('firstName','')} {p.get('seasonPlayer', {}).get('lastName','')}",
                     "nr": p.get('seasonPlayer', {}).get('shirtNumber', ''),
-                    "eff": eff,
-                    "pts": int(p.get("points", 0)),
-                    "reb": reb,
-                    "min": min_str
+                    "eff": eff, "pts": int(p.get("points", 0)), "reb": reb, "min": min_str
                 })
             except: pass
             
@@ -301,13 +252,13 @@ def render_obs_potg():
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
         
+        # HTML String ohne Einrückung am Zeilenanfang konstruieren
         html = f"""
         <div class='potg-card'>
             <h2 style='color:#ff6600; margin:0 0 15px 0; font-size:24px; text-transform:uppercase;'>Player of the Game</h2>
             <img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid #00338d; object-fit:cover;'>
-            <h1 style='margin:15px 0 5px 0; font-size:32px; color:#001f5b;'>{mvp['name']}</h1>
-            <h2 style='margin:0; color:#666;'>#{mvp['nr']}</h2>
-            
+            <h1 style='margin:15px 0 5px 0; font-size:36px; color:#001f5b; text-transform:uppercase;'>{mvp['name']}</h1>
+            <h2 style='margin:0; color:#666; font-size:28px;'>#{mvp['nr']}</h2>
             <div class='potg-stat-box'>
                 <div class='potg-stat-item'>
                     <div class='potg-stat-label'>MIN</div>
@@ -328,4 +279,7 @@ def render_obs_potg():
             </div>
         </div>
         """
-        st.markdown(html, unsafe_allow_html=True)
+        # SICHERHEITS-FIX: Alle Newlines entfernen, damit Markdown es als einen langen String behandelt
+        # und nicht als eingerückten Code-Block.
+        html_safe = html.replace("\n", " ")
+        st.markdown(html_safe, unsafe_allow_html=True)
