@@ -65,26 +65,52 @@ body {
 }
 .p-name { font-size: 20px; font-weight: bold; color: white; font-family: sans-serif; text-transform: uppercase; text-shadow: 2px 2px 4px black; }
 
-/* TABELLE */
+/* TABELLE DESIGN */
 .obs-content-wrapper {
-    width: 1500px; margin: 60px auto; background: rgba(0,0,0,0.9);
-    padding: 0; border-radius: 15px; border: 3px solid #00338d;
-    color: white; font-family: sans-serif; overflow: hidden; box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Exakte Zentrierung */
+    width: 1400px; 
+    background: rgba(0,0,0,0.9);
+    padding: 0;
+    border-radius: 15px;
+    border: 3px solid #00338d;
+    color: white;
+    font-family: sans-serif;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(0,0,0,0.9);
 }
 .obs-header-row {
     background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
-    color: white; padding: 15px; text-align: center; font-size: 36px; font-weight: 900;
-    border-bottom: 5px solid #ff6600; text-transform: uppercase;
+    color: white; 
+    padding: 15px; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 25px; /* Abstand Logo zu Text */
+    border-bottom: 5px solid #ff6600;
 }
-.obs-table { width: 100%; font-size: 24px; border-collapse: collapse; text-align: center; }
-.obs-table th { background: #001a4d; color: #ff6600; padding: 12px; text-transform: uppercase; font-size: 20px; border-bottom: 2px solid #555; }
-.obs-table td { padding: 10px; border-bottom: 1px solid #444; font-weight: bold; vertical-align: middle; }
-/* Entfernt: .obs-table tr:first-child td { color: #ffd700; }  da wir jetzt Farb-Coding nutzen */
+.header-title {
+    font-size: 42px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.header-logo-img {
+    height: 70px;
+    filter: drop-shadow(0 0 5px rgba(255,255,255,0.5)); /* Leichter Glow damit man es auf dunkel sieht */
+}
 
+.obs-table { width: 100%; font-size: 26px; border-collapse: collapse; text-align: center; }
+.obs-table th { background: #001a4d; color: #ff6600; padding: 15px; text-transform: uppercase; font-size: 22px; border-bottom: 2px solid #555; }
+.obs-table td { padding: 12px; border-bottom: 1px solid #444; font-weight: bold; vertical-align: middle; }
+
+/* Trend Bubbles */
 .trend-w, .trend-l {
-    display: inline-block; width: 28px; height: 28px; line-height: 28px;
+    display: inline-block; width: 30px; height: 30px; line-height: 30px;
     text-align: center; border-radius: 50%; font-size: 16px; font-weight: bold;
-    margin-right: 3px; color: white;
+    margin-right: 4px; color: white;
 }
 .trend-w { background-color: #28a745; }
 .trend-l { background-color: #dc3545; }
@@ -138,8 +164,22 @@ def render_obs_standings():
     df = fetch_league_standings(season, region)
     
     if not df.empty:
-        html = f"<div class='obs-content-wrapper'><div class='obs-header-row'>Tabelle {region.upper()}</div>"
-        html += "<table class='obs-table'><thead><tr><th style='width:50px;'>#</th><th style='text-align:left;'>Team</th><th>Sp</th><th>S</th><th>N</th><th>Diff</th></tr></thead><tbody>"
+        # Header mit Logo und korrektem Titel
+        dbbl_logo = "https://toyota-dbbl.de/app/themes/dbbl/src/assets/toyota-DBBL-logo.svg"
+        
+        # Region schön formatieren (Süd statt SÜD)
+        region_display = region.capitalize()
+        if region_display == "Süd": region_display = "Süd"
+        if region_display == "Nord": region_display = "Nord"
+        
+        html = f"""
+        <div class='obs-content-wrapper'>
+            <div class='obs-header-row'>
+                <img src='{dbbl_logo}' class='header-logo-img'>
+                <span class='header-title'>2. DBBL {region_display}</span>
+            </div>
+        """
+        html += "<table class='obs-table'><thead><tr><th style='width:60px;'>#</th><th style='text-align:left;'>Team</th><th>Sp</th><th>S</th><th>N</th><th>Diff</th></tr></thead><tbody>"
         
         for _, row in df.iterrows():
             platz = row.get('Platz', 0)
@@ -157,16 +197,16 @@ def render_obs_standings():
             
             row_style = ""
             if rank_val <= 4:
-                # Grün (Top 4) - Subtiler grüner Hintergrund + Grüner Rand links
-                row_style = "background-color: rgba(40, 167, 69, 0.15); border-left: 6px solid #28a745;"
+                # Grün (Top 4)
+                row_style = "background-color: rgba(40, 167, 69, 0.15); border-left: 8px solid #28a745;"
             elif rank_val <= 8:
                 # Grau (Mittelfeld)
-                row_style = "background-color: rgba(108, 117, 125, 0.15); border-left: 6px solid #6c757d;"
+                row_style = "background-color: rgba(108, 117, 125, 0.15); border-left: 8px solid #6c757d;"
             else:
                 # Rot (Abstieg)
-                row_style = "background-color: rgba(220, 53, 69, 0.15); border-left: 6px solid #dc3545;"
+                row_style = "background-color: rgba(220, 53, 69, 0.15); border-left: 8px solid #dc3545;"
 
-            # Diff Farbe (Positiv/Negativ)
+            # Diff Farbe
             diff_style = "color:#00ff00;" if (str(diff).startswith("+")) else ("color:#ff4444;" if str(diff).startswith("-") else "color:#aaa;")
             
             html += f"<tr style='{row_style}'><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{sp}</td><td>{s}</td><td>{n}</td><td style='{diff_style}'>{diff}</td></tr>"
