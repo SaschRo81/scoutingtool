@@ -29,13 +29,17 @@ except ImportError:
     HAS_PDFKIT = False
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-from src.api import fetch_team_data, get_player_metadata_cached, fetch_schedule, fetch_game_boxscore, get_best_team_logo, fetch_league_standings, fetch_team_info_basic, fetch_game_details, fetch_games_from_recent, fetch_season_games
+from src.api import (
+    fetch_team_data, get_player_metadata_cached, fetch_schedule, 
+    fetch_game_boxscore, get_best_team_logo, fetch_league_standings, 
+    fetch_team_info_basic, fetch_game_details, fetch_games_from_recent, 
+    fetch_season_games, fetch_last_n_games_complete
+)
 from src.html_gen import generate_header_html, generate_top3_html, generate_card_html, generate_team_stats_html, generate_custom_sections_html, generate_comparison_html
 from src.state_manager import export_session_state, load_session_state
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
-    get_team_name, render_game_top_performers, generate_game_summary,
-    generate_complex_ai_prompt, render_full_play_by_play, render_prep_dashboard, 
+    get_team_name, render_full_play_by_play, render_prep_dashboard, 
     render_live_view, render_team_analysis_dashboard
 )
 
@@ -102,8 +106,8 @@ def render_page_header(page_title):
 
 # --- ADMIN SEITE: STREAM INFOS ---
 def render_streaminfos_page():
-    st.title("📡 Stream Overlay Konfigurator")
-    st.info("Generiere hier die Links für OBS. In OBS: Browserquelle -> URL einfügen -> 1920x1080.")
+    render_page_header("📡 Stream Overlay Konfigurator")
+    st.info("Generiere hier die Links für OBS Browserquellen (1920x1080).")
     
     south_teams = {k:v for k,v in TEAMS_DB.items() if v["staffel"] == "Süd"}
     team_opts = {v["name"]: k for k,v in south_teams.items()}
@@ -114,14 +118,14 @@ def render_streaminfos_page():
         c_h, c_g = st.columns(2)
         with c_h:
             st.subheader("🏠 Heimteam")
-            h_name = st.selectbox("Heimteam", list(team_opts.keys()), key="s_h")
+            h_name = st.selectbox("Team wählen", list(team_opts.keys()), key="s_h")
             h_id = team_opts[h_name]
-            h_coach = st.text_input("Coach Heim", key="c_h")
+            h_coach = st.text_input("Head Coach Heim", key="c_h")
             df_h, _ = fetch_team_data(h_id, CURRENT_SEASON_ID)
             if df_h is not None:
                 p_map_h = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_h.iterrows()}
                 sel_h = st.multiselect("Starting 5 Heim", list(p_map_h.keys()), max_selections=5, key="p_h")
-                if st.button("🔗 Link HEIM"):
+                if st.button("🔗 Link HEIM generieren"):
                     p = {"view": "obs_starting5", "name": h_name, "logo_id": h_id, "coach": h_coach, "ids": ",".join([str(p_map_h[s]['PLAYER_ID']) for s in sel_h])}
                     for s in sel_h:
                         p_data = p_map_h[s]
@@ -131,14 +135,14 @@ def render_streaminfos_page():
 
         with c_g:
             st.subheader("🚌 Gastteam")
-            g_name = st.selectbox("Gastteam", list(team_opts.keys()), index=1, key="s_g")
+            g_name = st.selectbox("Team wählen", list(team_opts.keys()), key="s_g", index=1)
             g_id = team_opts[g_name]
-            g_coach = st.text_input("Coach Gast", key="c_g")
+            g_coach = st.text_input("Head Coach Gast", key="c_g")
             df_g, _ = fetch_team_data(g_id, CURRENT_SEASON_ID)
             if df_g is not None:
                 p_map_g = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_g.iterrows()}
                 sel_g = st.multiselect("Starting 5 Gast", list(p_map_g.keys()), max_selections=5, key="p_g")
-                if st.button("🔗 Link GAST"):
+                if st.button("🔗 Link GAST generieren"):
                     p_g = {"view": "obs_starting5", "name": g_name, "logo_id": g_id, "coach": g_coach, "ids": ",".join([str(p_map_g[s]['PLAYER_ID']) for s in sel_g])}
                     for s in sel_g:
                         p_data = p_map_g[s]
@@ -148,14 +152,16 @@ def render_streaminfos_page():
 
     with tab2:
         st.subheader("Tabelle")
-        if st.button("🔗 Link Tabelle Süd"): st.code("/?view=obs_standings&region=Süd")
+        if st.button("🔗 Link Tabelle Süd generieren"):
+            st.code("/?view=obs_standings&region=Süd")
 
     with tab3:
         st.subheader("Teamvergleich")
         c1, c2 = st.columns(2)
         v_h = c1.selectbox("Team A", list(team_opts.keys()), key="v_h")
         v_g = c2.selectbox("Team B", list(team_opts.keys()), key="v_g", index=1)
-        if st.button("🔗 Link Vergleich"): st.code(f"/?view=obs_comparison&hid={team_opts[v_h]}&gid={team_opts[v_g]}&hname={v_h}&gname={v_g}")
+        if st.button("🔗 Link Vergleich generieren"):
+            st.code(f"/?view=obs_comparison&hid={team_opts[v_h]}&gid={team_opts[v_g]}&hname={v_h}&gname={v_g}")
 
     with tab4:
         st.subheader("Player of the Game")
@@ -164,7 +170,7 @@ def render_streaminfos_page():
         game_opts = {f"{g['date']} | {g['home']} vs {g['guest']}": g['id'] for g in all_g}
         if game_opts:
             sel_g = st.selectbox("Spiel wählen", list(game_opts.keys()))
-            if st.button("🔗 Link POTG"):
+            if st.button("🔗 Link POTG generieren"):
                 st.code(f"/?view=obs_potg&game_id={game_opts[sel_g]}")
         else: st.warning("Keine Spiele gefunden.")
 
@@ -333,8 +339,10 @@ def render_live_page():
         box = fetch_game_boxscore(gid)
         det = fetch_game_details(gid)
         if box and det:
+            # Merge important live details into box
             box["gameTime"] = det.get("gameTime")
             box["period"] = det.get("period")
+            box["status"] = det.get("status")
             box["result"] = det.get("result")
             render_live_view(box)
             if auto: time_module.sleep(15); st.rerun()
