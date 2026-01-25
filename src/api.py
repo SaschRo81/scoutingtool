@@ -1,4 +1,5 @@
 # --- START OF FILE src/api.py ---
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -16,10 +17,6 @@ def get_base_url(team_id):
         if team_info and team_info.get("staffel") == "Nord":
             return "https://api-n.dbbl.scb.world"
     except: pass
-    return "https://api-s.dbbl.scb.world"
-
-def get_base_url_by_staffel(staffel):
-    if staffel == "Nord": return "https://api-n.dbbl.scb.world"
     return "https://api-s.dbbl.scb.world"
 
 def format_minutes(seconds):
@@ -48,11 +45,6 @@ def extract_nationality(data_obj):
         return data_obj["nationality"].get("name", "-")
     return "-"
 
-def safe_int(val):
-    if val is None: return 0
-    try: return int(float(val))
-    except: return 0
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_best_team_logo(team_id):
     if not team_id: return None
@@ -74,7 +66,7 @@ def get_best_team_logo(team_id):
         except: continue
     return None
 
-# --- DATEN ABRUF FUNKTIONEN ---
+# --- CACHED API CALLS ---
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_player_metadata_cached(player_id):
@@ -322,7 +314,7 @@ def fetch_game_details(game_id):
         except: pass
     return None
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600) 
 def fetch_team_info_basic(team_id):
     base_url = get_base_url(team_id)
     try:
@@ -335,78 +327,107 @@ def fetch_team_info_basic(team_id):
     except: pass
     return {"id": team_id, "venue": None}
 
-def fetch_games_from_recent():
-    endpoints = [
-        "https://api-s.dbbl.scb.world/games/recent?slotSize=400",
-        "https://api-n.dbbl.scb.world/games/recent?slotSize=400"
-    ]
-    games_map = {} 
-    for url in endpoints:
+@st.cache_data(ttl=600)
+def fetch_season_games(season_id):
+    all_games = []
+    for subdomain in ["api-s", "api-n"]:
+        url = f"https://{subdomain}.dbbl.scb.world/games?seasonId={season_id}&pageSize=3000"
         try:
-            r = requests.get(url, headers=API_HEADERS, timeout=3)
-            if r.status_code == 200:
-                data = r.json()
-                lists_to_check = []
-                if isinstance(data.get("past"), list): lists_to_check.extend(data["past"])
-                if isinstance(data.get("present"), list): lists_to_check.extend(data["present"])
-                if isinstance(data.get("future"), list): lists_to_check.extend(data["future"])
-                for g in lists_to_check:
-                    gid = g.get("id")
-                    if not gid or gid in games_map: continue 
+            resp = requests.get(url, headers=API_HEADERS, timeout=4)
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("items", [])
+                for g in items:
                     raw_d = g.get("scheduledTime", "")
                     dt_obj = None; d_disp = "-"; date_only = "-"
                     if raw_d:
                         try:
-                            clean_ts = raw_d.replace("Z", "+00:00")
-                            dt_obj = datetime.fromisoformat(clean_ts).astimezone(pytz.timezone("Europe/Berlin"))
-                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
-                            date_only = dt_obj.strftime("%d.%m.%Y")
+                            dt_obj = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin"))
+                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M"); date_only = dt_obj.strftime("%d.%m.%Y")
                         except: pass
-                    res = g.get("result", {}) or {}
-                    h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
-                    g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
-                    score_str = f"{h_s}:{g_s}" if (h_s is not None and g_s is not None) else "-:-"
-                    status = g.get("status", "SCHEDULED")
-                    if h_s is not None and g_s is not None and status == "SCHEDULED": status = "ENDED"
-                    games_map[gid] = {
-                        "id": gid, "date": d_disp, "date_only": date_only, "datetime": dt_obj,
-                        "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
-                        "score": score_str, "status": status, "home_score": h_s, "guest_score": g_s
-                    }
-        except Exception as e: pass
-    result_list = list(games_map.values())
-    result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
-    return result_list
+                    res = g.get("result") or {}
+                    if not any(x['id'] == g.get("id") for x in all_games):
+                        all_games.append({
+                            "id": g.get("id"), "date": d_disp, "date_only": date_only,
+                            "home": g.get("homeTeam", {}).get("name", "?"),
+                            "guest": g.get("guestTeam", {}).get("name", "?"),
+                            "score": f"{res.get('homeTeamFinalScore',0)}:{res.get('guestTeamFinalScore',0)}" if g.get("status") == "ENDED" else "-:-",
+                            "status": g.get("status")
+                        })
+        except: pass
+    return all_games
 
-@st.cache_data(ttl=600)
-def fetch_season_games(season_id):
-    # Dummy Wrapper falls in app.py genutzt
-    return fetch_games_from_recent()
-
-@st.cache_data(ttl=600)
-def fetch_season_matches(season_id, region="Süd"):
-    base = "https://api-n.dbbl.scb.world" if region == "Nord" else "https://api-s.dbbl.scb.world"
-    url = f"{base}/games?seasonId={season_id}&pageSize=3000"
+@st.cache_data(ttl=1800)
+def fetch_team_rank(team_id, season_id):
+    staffel = ""
+    team_name_db = ""
     try:
-        r = requests.get(url, headers=API_HEADERS, timeout=5)
-        if r.status_code == 200:
-            data = r.json()
-            items = data.get("items", [])
-            return items
+        tid_int = int(team_id)
+        if tid_int in TEAMS_DB:
+            staffel = TEAMS_DB[tid_int].get("staffel", "")
+            team_name_db = TEAMS_DB[tid_int].get("name", "")
     except: pass
-    return []
+
+    urls = []
+    if staffel == "Süd":
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
+    elif staffel == "Nord":
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
+    urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}")
+    urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}")
+
+    search_id = str(team_id)
+    for url in urls:
+        try:
+            r = requests.get(url, headers=API_HEADERS, timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                items = data if isinstance(data, list) else data.get("items", [])
+                for idx, entry in enumerate(items):
+                    st_obj = entry.get("seasonTeam", {})
+                    tid_found = str(st_obj.get("id", ""))
+                    teamId_found = str(st_obj.get("teamId", ""))
+                    name_found = st_obj.get("name", "")
+                    
+                    match_by_id = (tid_found == search_id or teamId_found == search_id)
+                    match_by_name = False
+                    if team_name_db and name_found:
+                        if team_name_db.lower() in name_found.lower() or name_found.lower() in team_name_db.lower():
+                            match_by_name = True
+
+                    if match_by_id or match_by_name:
+                        return {
+                            "rank": entry.get("rank", 0),
+                            "totalGames": entry.get("totalGames", 0),
+                            "totalVictories": entry.get("totalVictories", 0),
+                            "totalLosses": entry.get("totalLosses", 0),
+                            "last10Victories": entry.get("last10Victories", 0),
+                            "last10Losses": entry.get("last10Losses", 0),
+                            "points": entry.get("totalPointsMade", 0) 
+                        }
+        except: continue
+    return None
 
 @st.cache_data(ttl=1800)
 def fetch_league_standings(season_id, league_selection):
+    """
+    Holt die Tabelle basierend auf der Liga-Auswahl.
+    VALIDIERT den Inhalt, um sicherzustellen, dass die API nicht einfach die falsche Staffel zurückgibt.
+    """
+    # 1. URLs definieren mit Priorisierung
     urls = []
-    region_key = "SOUTH" if league_selection == "Süd" else "NORTH"
-    if league_selection in ["Nord", "Süd"]:
-        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group={region_key}")
-        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group={region_key}")
+    if league_selection == "Nord":
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=NORTH")
+    elif league_selection == "Süd":
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group=SOUTH")
     else:
+        # Fallback für 1. DBBL oder andere
         urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}")
-    
-    all_season_games = fetch_season_matches(season_id, league_selection)
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}")
 
     for url in urls:
         try:
@@ -414,84 +435,90 @@ def fetch_league_standings(season_id, league_selection):
             if r.status_code == 200:
                 data = r.json()
                 items = data if isinstance(data, list) else data.get("items", [])
+                
                 if not items: continue
 
-                match_count = 0; check_count = 0
-                for entry in items:
-                    st_obj = entry.get("seasonTeam", {})
-                    tid = safe_int(st_obj.get("teamId")) or safe_int(st_obj.get("id"))
-                    if tid in TEAMS_DB:
-                        check_count += 1
-                        if TEAMS_DB[tid].get("staffel") == league_selection: match_count += 1
-                
-                if check_count > 0 and (match_count / check_count) < 0.5: continue
+                # --- VALIDIERUNG START ---
+                # Wir prüfen stichprobenartig, ob die Teams zur gewählten Staffel passen.
+                # Wenn wir "Nord" wollen, sollten die Team-IDs auch "Nord"-Teams aus unserer TEAMS_DB sein.
+                if league_selection in ["Nord", "Süd"]:
+                    match_count = 0
+                    check_count = 0
+                    
+                    for entry in items:
+                        # Versuchen die Team ID zu finden (seasonTeam -> teamId)
+                        st_obj = entry.get("seasonTeam", {})
+                        tid = safe_int(st_obj.get("teamId"))
+                        if not tid: tid = safe_int(st_obj.get("id")) # Fallback
+                        
+                        if tid in TEAMS_DB:
+                            check_count += 1
+                            if TEAMS_DB[tid].get("staffel") == league_selection:
+                                match_count += 1
+                    
+                    # Wenn wir Teams aus unserer DB gefunden haben, aber weniger als 50% passen zur Staffel:
+                    # Dann ist das die falsche Tabelle! (z.B. Süd API liefert Süd Tabelle trotz group=NORTH)
+                    if check_count > 0 and (match_count / check_count) < 0.5:
+                        continue # Nächste URL probieren!
+                # --- VALIDIERUNG ENDE ---
 
                 table_data = []
                 for entry in items:
                     team_name = entry.get("seasonTeam", {}).get("name", "Unknown")
-                    tid_raw = entry.get("seasonTeam", {}).get("teamId")
                     rank = entry.get("rank", 0)
                     wins = entry.get("totalVictories", 0)
                     losses = entry.get("totalLosses", 0)
-                    pts_own = entry.get("totalPointsMade", 0)
-                    pts_opp = entry.get("totalPointsReceived", 0)
-                    diff = pts_own - pts_opp
-                    diff_str = f"+{diff}" if diff > 0 else str(diff)
-
-                    trend = []
-                    if tid_raw:
-                        team_games = []
-                        search_tid = str(tid_raw)
-                        for g in all_season_games:
-                            if g.get("status") == "ENDED":
-                                h_id = str(g.get("homeTeam", {}).get("teamId"))
-                                g_id = str(g.get("guestTeam", {}).get("teamId"))
-                                
-                                if h_id == search_tid or g_id == search_tid:
-                                    raw_d = g.get("scheduledTime", "")
-                                    res = g.get("result", {})
-                                    h_s = res.get("homeTeamFinalScore", 0)
-                                    g_s = res.get("guestTeamFinalScore", 0)
-                                    
-                                    is_win = False
-                                    if h_id == search_tid: is_win = (h_s > g_s)
-                                    else: is_win = (g_s > h_s)
-                                    
-                                    team_games.append({"date": raw_d, "res": "W" if is_win else "L"})
-                        
-                        team_games.sort(key=lambda x: x["date"], reverse=True)
-                        trend = [x["res"] for x in team_games[:5]]
-
+                    
                     table_data.append({
-                        "Platz": rank, "Team": team_name, "W": wins, "L": losses,
-                        "Körbe": f"{pts_own}:{pts_opp}", "Diff": diff_str, "Trend": trend
+                        "Platz": rank,
+                        "Team": team_name,
+                        "W": wins,
+                        "L": losses
                     })
                 
                 table_data.sort(key=lambda x: x["Platz"])
                 return pd.DataFrame(table_data)
-        except: continue
+        except:
+            continue
+            
     return pd.DataFrame()
 
+# Helper für safe_int in api.py da es hier auch genutzt wird
+def safe_int(val):
+    if val is None: return 0
+    try: return int(float(val))
+    except: return 0
+
 def fetch_last_n_games_complete(team_id, season_id, n=3):
+    """
+    Holt die letzten n absolvierten Spiele eines Teams INKLUSIVE Boxscore & PBP.
+    WICHTIG: Erzeugt Kopien der gecachten Boxscores, damit 'meta'-Felder nicht den Cache verschmutzen!
+    """
     schedule = fetch_schedule(team_id, season_id)
     if not schedule: return []
+    
     def parse_dt(d):
         try: return datetime.strptime(d['date'], "%d.%m.%Y %H:%M")
         except: return datetime.min
+
     played = [g for g in schedule if g.get('has_result')]
     played.sort(key=lambda x: parse_dt(x), reverse=True)
     selection = played[:n]
+    
     detailed_games = []
     for game in selection:
         gid = game['id']
-        cached_box = fetch_game_boxscore(gid)
+        cached_box = fetch_game_boxscore(gid) # Enthält 'actions' (PBP)
         if cached_box:
+            # WICHTIG: Kopie erstellen, da wir unten META-Felder einfügen
             box = cached_box.copy()
+            
+            # Heim/Gast Logik aus dem Spielplan nutzen (zuverlässiger als IDs im Boxscore)
             is_home_game = (str(game.get('homeTeamId')) == str(team_id))
+            
             box['meta_is_home'] = is_home_game
             box['meta_opponent'] = game['guest'] if is_home_game else game['home']
             box['meta_date'] = game['date']
             box['meta_result'] = game['score']
             detailed_games.append(box)
     return detailed_games
-# --- END OF FILE src/api.py ---
