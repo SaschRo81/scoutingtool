@@ -84,11 +84,10 @@ body {
 .obs-header-row {
     background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
     color: white; 
-    padding: 15px; 
+    padding: 15px 30px; 
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 25px; /* Abstand Logo zu Text */
+    justify-content: space-between; /* Text links, Logo rechts */
     border-bottom: 5px solid #ff6600;
 }
 .header-title {
@@ -98,8 +97,8 @@ body {
     letter-spacing: 1px;
 }
 .header-logo-img {
-    height: 70px;
-    filter: drop-shadow(0 0 5px rgba(255,255,255,0.5)); /* Leichter Glow damit man es auf dunkel sieht */
+    height: 120px; /* Logo deutlich größer */
+    filter: drop-shadow(0 0 5px rgba(255,255,255,0.5));
 }
 
 .obs-table { width: 100%; font-size: 26px; border-collapse: collapse; text-align: center; }
@@ -164,19 +163,18 @@ def render_obs_standings():
     df = fetch_league_standings(season, region)
     
     if not df.empty:
-        # Header mit Logo und korrektem Titel
         dbbl_logo = "https://toyota-dbbl.de/app/themes/dbbl/src/assets/toyota-DBBL-logo.svg"
         
-        # Region schön formatieren (Süd statt SÜD)
         region_display = region.capitalize()
         if region_display == "Süd": region_display = "Süd"
         if region_display == "Nord": region_display = "Nord"
         
+        # Reihenfolge getauscht: Erst Titel, dann Logo
         html = f"""
         <div class='obs-content-wrapper'>
             <div class='obs-header-row'>
-                <img src='{dbbl_logo}' class='header-logo-img'>
                 <span class='header-title'>2. DBBL {region_display}</span>
+                <img src='{dbbl_logo}' class='header-logo-img'>
             </div>
         """
         html += "<table class='obs-table'><thead><tr><th style='width:60px;'>#</th><th style='text-align:left;'>Team</th><th>Sp</th><th>S</th><th>N</th><th>Diff</th></tr></thead><tbody>"
@@ -189,24 +187,17 @@ def render_obs_standings():
             n = row.get('N', 0)
             diff = row.get('Diff', '0')
             
-            # --- FARB-LOGIK ---
-            try:
-                rank_val = int(platz)
-            except:
-                rank_val = 99
+            try: rank_val = int(platz)
+            except: rank_val = 99
             
             row_style = ""
             if rank_val <= 4:
-                # Grün (Top 4)
                 row_style = "background-color: rgba(40, 167, 69, 0.15); border-left: 8px solid #28a745;"
             elif rank_val <= 8:
-                # Grau (Mittelfeld)
                 row_style = "background-color: rgba(108, 117, 125, 0.15); border-left: 8px solid #6c757d;"
             else:
-                # Rot (Abstieg)
                 row_style = "background-color: rgba(220, 53, 69, 0.15); border-left: 8px solid #dc3545;"
 
-            # Diff Farbe
             diff_style = "color:#00ff00;" if (str(diff).startswith("+")) else ("color:#ff4444;" if str(diff).startswith("-") else "color:#aaa;")
             
             html += f"<tr style='{row_style}'><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{sp}</td><td>{s}</td><td>{n}</td><td style='{diff_style}'>{diff}</td></tr>"
