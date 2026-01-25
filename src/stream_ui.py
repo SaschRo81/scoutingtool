@@ -94,6 +94,13 @@ body {
     border: 4px solid #ff6600; border-radius: 20px; padding: 30px; text-align: center;
     color: white; box-shadow: 0 0 30px rgba(0,0,0,0.8); font-family: sans-serif;
 }
+.potg-stat-box {
+    display: flex; justify-content: center; gap: 15px; margin-top: 25px; 
+    background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px;
+}
+.potg-stat-item { text-align: center; min-width: 60px; }
+.potg-stat-label { font-size: 14px; color: #ccc; margin-bottom: 2px; }
+.potg-stat-val { font-size: 28px; font-weight: 900; color: white; }
 </style>
 """
 
