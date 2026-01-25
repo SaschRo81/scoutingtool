@@ -9,18 +9,17 @@ from src.api import (
 )
 from src.html_gen import generate_comparison_html
 
-# --- ABSOLUTER CLEAN-UP FÜR OBS (Kein Weiß, Keine Symbole, Statisch) ---
+# --- ABSOLUTER CLEAN-UP FÜR OBS ---
 OBS_ULTRA_CLEAN_CSS = """
 <style>
-/* Verstecke ALLES von Streamlit (Header, Footer, Sidebar, Krone, Status, Deko-Linie) */
+/* Verstecke ALLES von Streamlit */
 header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], 
 [data-testid="stStatusWidget"], .viewerBadge_container__1QSob, 
-.stAppDeployButton, [data-testid="stDecoration"] {
+.stAppDeployButton, [data-testid="stDecoration"], #MainMenu {
     display: none !important;
     visibility: hidden !important;
 }
 
-/* Mache ALLES transparent */
 .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"], .block-container {
     background-color: transparent !important;
     background-image: none !important;
@@ -28,7 +27,6 @@ header, footer, [data-testid="stSidebar"], [data-testid="stHeader"],
     margin: 0 !important;
 }
 
-/* Entferne weiße Ränder und Scrollbars */
 body {
     background-color: transparent !important;
     overflow: hidden !important;
@@ -36,89 +34,65 @@ body {
     padding: 0;
 }
 
-/* Lower Third Design */
+/* TV LAYOUT */
 .overlay-container {
-    position: fixed;
-    bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 1550px;
-    display: flex;
-    flex-direction: column;
-    z-index: 9999;
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+    width: 1550px; display: flex; flex-direction: column; z-index: 9999;
 }
-
 .header-bar {
     background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
-    color: white;
-    padding: 12px 35px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-top: 5px solid #ff6600;
-    border-radius: 10px 10px 0 0;
-    box-shadow: 0 -5px 15px rgba(0,0,0,0.5);
+    color: white; padding: 12px 35px; display: flex; align-items: center; justify-content: space-between;
+    border-top: 5px solid #ff6600; border-radius: 10px 10px 0 0; box-shadow: 0 -5px 15px rgba(0,0,0,0.5);
 }
-
 .team-info { display: flex; align-items: center; gap: 20px; }
 .team-logo { height: 65px; object-fit: contain; }
 .team-name { font-size: 34px; font-weight: 900; text-transform: uppercase; font-family: sans-serif; }
-
 .coach-info { text-align: right; font-size: 16px; color: #ddd; text-transform: uppercase; font-family: sans-serif; }
 .coach-name { font-weight: bold; color: white; display: block; font-size: 22px; }
 
 .players-row {
-    display: flex;
-    justify-content: space-between;
-    background: rgba(0, 20, 60, 0.9);
-    padding: 20px;
-    border-radius: 0 0 10px 10px;
+    display: flex; justify-content: space-between; background: rgba(0, 20, 60, 0.9);
+    padding: 20px; border-radius: 0 0 10px 10px;
 }
-
-.player-card {
-    width: 19%;
-    text-align: center;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
+.player-card { width: 19%; text-align: center; position: relative; display: flex; flex-direction: column; align-items: center; }
 .img-wrapper { position: relative; width: 150px; height: 150px; margin-bottom: 10px; }
-.p-img {
-    width: 100%; height: 100%; object-fit: cover;
-    border-radius: 8px; border: 3px solid white; background: #555;
-}
-
+.p-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 3px solid white; background: #555; }
 .p-nr {
-    position: absolute; bottom: -8px; left: -8px;
-    background: #ff6600; color: white; font-weight: 900;
-    width: 42px; height: 42px; display: flex;
-    align-items: center; justify-content: center;
+    position: absolute; bottom: -8px; left: -8px; background: #ff6600; color: white; font-weight: 900;
+    width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
     font-size: 22px; border: 2px solid white; border-radius: 5px;
 }
+.p-name { font-size: 20px; font-weight: bold; color: white; font-family: sans-serif; text-transform: uppercase; text-shadow: 2px 2px 4px black; }
 
-.p-name {
-    font-size: 20px; font-weight: bold; color: white; font-family: sans-serif;
-    text-transform: uppercase; text-shadow: 2px 2px 4px black;
-}
-
-/* Tabellen & Vergleich */
+/* TABELLE */
 .obs-content-wrapper {
-    width: 90%;
-    margin: 50px auto;
-    background: rgba(0,0,0,0.85);
-    padding: 30px;
-    border-radius: 20px;
-    border: 2px solid #444;
-    color: white;
+    width: 1500px; margin: 60px auto; background: rgba(0,0,0,0.9);
+    padding: 0; border-radius: 15px; border: 3px solid #00338d;
+    color: white; font-family: sans-serif; overflow: hidden; box-shadow: 0 0 30px rgba(0,0,0,0.8);
 }
+.obs-header-row {
+    background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
+    color: white; padding: 15px; text-align: center; font-size: 36px; font-weight: 900;
+    border-bottom: 5px solid #ff6600; text-transform: uppercase;
+}
+.obs-table { width: 100%; font-size: 24px; border-collapse: collapse; text-align: center; }
+.obs-table th { background: #001a4d; color: #ff6600; padding: 12px; text-transform: uppercase; font-size: 20px; border-bottom: 2px solid #555; }
+.obs-table td { padding: 10px; border-bottom: 1px solid #444; font-weight: bold; vertical-align: middle; }
+.obs-table tr:first-child td { color: #ffd700; } 
 
-/* Player of the Game Card */
+.trend-w, .trend-l {
+    display: inline-block; width: 28px; height: 28px; line-height: 28px;
+    text-align: center; border-radius: 50%; font-size: 16px; font-weight: bold;
+    margin-right: 3px; color: white;
+}
+.trend-w { background-color: #28a745; }
+.trend-l { background-color: #dc3545; }
+
+/* POTG */
 .potg-card {
     width: 450px; margin: 100px auto; background: linear-gradient(180deg, #001f5b 0%, #000 100%);
     border: 4px solid #ff6600; border-radius: 20px; padding: 30px; text-align: center;
-    color: white; box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    color: white; box-shadow: 0 0 30px rgba(0,0,0,0.8); font-family: sans-serif;
 }
 </style>
 """
@@ -134,7 +108,6 @@ def render_obs_starting5():
         ids = [x for x in ids_str.split(",") if x]
         if not ids: return
 
-        # HTML flach bauen
         html = f"<div class='overlay-container'><div class='header-bar'><div class='team-info'>"
         if logo_url: html += f"<img src='{logo_url}' class='team-logo'>"
         html += f"<div class='team-name'>{team_name}</div></div><div class='coach-info'>Head Coach<span class='coach-name'>{coach_name}</span></div></div><div class='players-row'>"
@@ -148,20 +121,36 @@ def render_obs_starting5():
             html += f"<div class='player-card'><div class='img-wrapper'><img src='{img}' class='p-img'><div class='p-nr'>{p_nr}</div></div><div class='p-name'>{display_name}</div></div>"
         html += "</div></div>"
         st.markdown(html, unsafe_allow_html=True)
-    except Exception as e:
-        st.error(f"Fehler: {e}")
+    except Exception as e: st.error(f"Fehler: {e}")
 
 def render_obs_standings():
     st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
     region = st.query_params.get("region", "Süd")
     season = st.query_params.get("season", "2025")
     df = fetch_league_standings(season, region)
+    
     if not df.empty:
-        html = f"<div class='obs-content-wrapper'><h1 style='text-align:center; color:#ff6600;'>TABELLE {region.upper()}</h1><table style='width:100%; font-size:24px; border-collapse:collapse;'>"
-        html += "<tr style='background:#ff6600; color:white;'><th>#</th><th style='text-align:left;'>Team</th><th>W</th><th>L</th></tr>"
+        html = f"<div class='obs-content-wrapper'><div class='obs-header-row'>Tabelle {region.upper()}</div>"
+        html += "<table class='obs-table'><thead><tr><th style='width:50px;'>#</th><th style='text-align:left;'>Team</th><th>S</th><th>N</th><th>Körbe</th><th>Diff</th><th>Trend</th></tr></thead><tbody>"
+        
         for _, row in df.iterrows():
-            html += f"<tr style='border-bottom:1px solid #444;'><td>{row['Platz']}</td><td style='text-align:left;'>{row['Team']}</td><td>{row['W']}</td><td>{row['L']}</td></tr>"
-        html += "</table></div>"
+            platz = row.get('Platz', '-')
+            team = row.get('Team', 'Unknown')
+            w = row.get('W', 0)
+            l = row.get('L', 0)
+            korb = row.get('Körbe', '0:0')
+            diff = row.get('Diff', '0')
+            trend_data = row.get("Trend", [])
+            trend_html = ""
+            if isinstance(trend_data, list):
+                for t in trend_data:
+                    css_class = "trend-w" if t == "W" else "trend-l"
+                    trend_html += f"<span class='{css_class}'>{t}</span>"
+            
+            diff_style = "color:#00ff00;" if (str(diff).startswith("+")) else ("color:#ff4444;" if str(diff).startswith("-") else "color:#aaa;")
+            html += f"<tr><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{w}</td><td>{l}</td><td style='color:#ccc; font-size:20px;'>{korb}</td><td style='{diff_style}'>{diff}</td><td>{trend_html}</td></tr>"
+            
+        html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
 
 def render_obs_comparison():
@@ -171,7 +160,7 @@ def render_obs_comparison():
     if hid and gid:
         _, ts_h = fetch_team_data(hid, "2025")
         _, ts_g = fetch_team_data(gid, "2025")
-        st.markdown("<div class='obs-content-wrapper' style='background:rgba(0,0,0,0.9);'>", unsafe_allow_html=True)
+        st.markdown("<div class='obs-content-wrapper' style='padding:20px;'>", unsafe_allow_html=True)
         st.markdown(generate_comparison_html(ts_h, ts_g, hname, gname), unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -181,18 +170,12 @@ def render_obs_potg():
     if not gid: return
     box = fetch_game_boxscore(gid)
     if not box: return
-    
     players = []
     for team_key in ["homeTeam", "guestTeam"]:
         for p in box.get(team_key, {}).get("playerStats", []):
             try:
                 eff = float(p.get("efficiency", 0))
-                players.append({
-                    "id": str(p.get("seasonPlayer", {}).get("id")),
-                    "name": f"{p.get('seasonPlayer', {}).get('firstName','')} {p.get('seasonPlayer', {}).get('lastName','')}",
-                    "nr": p.get('seasonPlayer', {}).get('shirtNumber', ''),
-                    "eff": eff, "pts": int(p.get("points", 0))
-                })
+                players.append({"id": str(p.get("seasonPlayer", {}).get("id")), "name": p.get("seasonPlayer",{}).get("lastName","Unk"), "nr": p.get('seasonPlayer',{}).get('shirtNumber',''), "eff": eff, "pts": int(p.get("points", 0))})
             except: pass
     if players:
         mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
