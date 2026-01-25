@@ -79,7 +79,15 @@ body {
 .obs-table { width: 100%; font-size: 24px; border-collapse: collapse; text-align: center; }
 .obs-table th { background: #001a4d; color: #ff6600; padding: 12px; text-transform: uppercase; font-size: 20px; border-bottom: 2px solid #555; }
 .obs-table td { padding: 10px; border-bottom: 1px solid #444; font-weight: bold; vertical-align: middle; }
-.obs-table tr:first-child td { color: #ffd700; } 
+/* Entfernt: .obs-table tr:first-child td { color: #ffd700; }  da wir jetzt Farb-Coding nutzen */
+
+.trend-w, .trend-l {
+    display: inline-block; width: 28px; height: 28px; line-height: 28px;
+    text-align: center; border-radius: 50%; font-size: 16px; font-weight: bold;
+    margin-right: 3px; color: white;
+}
+.trend-w { background-color: #28a745; }
+.trend-l { background-color: #dc3545; }
 
 /* POTG */
 .potg-card {
@@ -134,16 +142,34 @@ def render_obs_standings():
         html += "<table class='obs-table'><thead><tr><th style='width:50px;'>#</th><th style='text-align:left;'>Team</th><th>Sp</th><th>S</th><th>N</th><th>Diff</th></tr></thead><tbody>"
         
         for _, row in df.iterrows():
-            platz = row.get('Platz', '-')
+            platz = row.get('Platz', 0)
             team = row.get('Team', 'Unknown')
             sp = row.get('Sp', 0)
             s = row.get('S', 0)
             n = row.get('N', 0)
             diff = row.get('Diff', '0')
             
+            # --- FARB-LOGIK ---
+            try:
+                rank_val = int(platz)
+            except:
+                rank_val = 99
+            
+            row_style = ""
+            if rank_val <= 4:
+                # Grün (Top 4) - Subtiler grüner Hintergrund + Grüner Rand links
+                row_style = "background-color: rgba(40, 167, 69, 0.15); border-left: 6px solid #28a745;"
+            elif rank_val <= 8:
+                # Grau (Mittelfeld)
+                row_style = "background-color: rgba(108, 117, 125, 0.15); border-left: 6px solid #6c757d;"
+            else:
+                # Rot (Abstieg)
+                row_style = "background-color: rgba(220, 53, 69, 0.15); border-left: 6px solid #dc3545;"
+
+            # Diff Farbe (Positiv/Negativ)
             diff_style = "color:#00ff00;" if (str(diff).startswith("+")) else ("color:#ff4444;" if str(diff).startswith("-") else "color:#aaa;")
             
-            html += f"<tr><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{sp}</td><td>{s}</td><td>{n}</td><td style='{diff_style}'>{diff}</td></tr>"
+            html += f"<tr style='{row_style}'><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{sp}</td><td>{s}</td><td>{n}</td><td style='{diff_style}'>{diff}</td></tr>"
             
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
