@@ -120,8 +120,8 @@ def render_streaminfos_page():
             df_h, _ = fetch_team_data(h_id, CURRENT_SEASON_ID)
             if df_h is not None:
                 p_map_h = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_h.iterrows()}
-                sel_h = st.multiselect("Starting 5 Heim", list(p_map_h.keys()), max_selections=5, key="p_h")
-                if st.button("🔗 Link HEIM generieren"):
+                sel_h = st.multiselect("Starter Heim", list(p_map_h.keys()), max_selections=5, key="p_h")
+                if st.button("🔗 Link HEIM"):
                     p = {"view": "obs_starting5", "name": h_name, "logo_id": h_id, "coach": h_coach, "ids": ",".join([str(p_map_h[s]['PLAYER_ID']) for s in sel_h])}
                     for s in sel_h:
                         p_data = p_map_h[s]
@@ -137,8 +137,8 @@ def render_streaminfos_page():
             df_g, _ = fetch_team_data(g_id, CURRENT_SEASON_ID)
             if df_g is not None:
                 p_map_g = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_g.iterrows()}
-                sel_g = st.multiselect("Starting 5 Gast", list(p_map_g.keys()), max_selections=5, key="p_g")
-                if st.button("🔗 Link GAST generieren"):
+                sel_g = st.multiselect("Starter Gast", list(p_map_g.keys()), max_selections=5, key="p_g")
+                if st.button("🔗 Link GAST"):
                     p_g = {"view": "obs_starting5", "name": g_name, "logo_id": g_id, "coach": g_coach, "ids": ",".join([str(p_map_g[s]['PLAYER_ID']) for s in sel_g])}
                     for s in sel_g:
                         p_data = p_map_g[s]
@@ -148,25 +148,23 @@ def render_streaminfos_page():
 
     with tab2:
         st.subheader("Tabelle")
-        if st.button("🔗 Link Tabelle Süd generieren"):
-            st.code("/?view=obs_standings&region=Süd")
+        if st.button("🔗 Link Tabelle Süd"): st.code("/?view=obs_standings&region=Süd")
 
     with tab3:
         st.subheader("Teamvergleich")
         c1, c2 = st.columns(2)
         v_h = c1.selectbox("Team A", list(team_opts.keys()), key="v_h")
         v_g = c2.selectbox("Team B", list(team_opts.keys()), key="v_g", index=1)
-        if st.button("🔗 Link Vergleich generieren"):
-            st.code(f"/?view=obs_comparison&hid={team_opts[v_h]}&gid={team_opts[v_g]}&hname={v_h}&gname={v_g}")
+        if st.button("🔗 Link Vergleich"): st.code(f"/?view=obs_comparison&hid={team_opts[v_h]}&gid={team_opts[v_g]}&hname={v_h}&gname={v_g}")
 
     with tab4:
         st.subheader("Player of the Game")
-        from src.api import fetch_games_from_recent # Import from src.api not app
+        from src.api import fetch_games_from_recent
         all_g = fetch_games_from_recent()
         game_opts = {f"{g['date']} | {g['home']} vs {g['guest']}": g['id'] for g in all_g}
         if game_opts:
             sel_g = st.selectbox("Spiel wählen", list(game_opts.keys()))
-            if st.button("🔗 Link POTG generieren"):
+            if st.button("🔗 Link POTG"):
                 st.code(f"/?view=obs_potg&game_id={game_opts[sel_g]}")
         else: st.warning("Keine Spiele gefunden.")
 
