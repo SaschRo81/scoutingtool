@@ -159,7 +159,7 @@ def render_full_play_by_play(box):
         icon = "🏀"
         if "FOUL" in raw_type: icon = "🛑"
         elif "TURNOVER" in raw_type: icon = "⚠️"
-        elif "TIMEOUT" in raw_type: icon = "ww"
+        elif "TIMEOUT" in raw_type: icon = "⏱️"
         elif "SUBSTITUTION" in raw_type: icon = "🔄"
         
         # Zeile bauen
@@ -280,4 +280,5 @@ def render_live_view(box):
         render_charts_and_stats(box)
 
 def render_team_analysis_dashboard(tid, tname):
-    st.write("Analysis Dashboard")
+    st.title(f"Deep Dive: {tname}")
+    st.write("Erweiterte Statistiken (Clutch, Lineups) kommen hier.")
