@@ -9,7 +9,7 @@ from src.api import (
 )
 from src.html_gen import generate_comparison_html
 
-# --- OBS DARK MODE CSS (BLUE THEME) ---
+# --- OBS DARK THEME FINAL CSS ---
 OBS_DARK_CSS = """
 <style>
 /* 1. Alles von Streamlit verstecken */
@@ -55,12 +55,12 @@ body {
 .coach-info { text-align: right; font-size: 16px; color: #ccc; text-transform: uppercase; font-family: sans-serif; }
 .coach-name { font-weight: bold; color: white; display: block; font-size: 22px; }
 
-/* Starting 5 Container (DUNKELBLAU) */
+/* Starting 5 Container - IMMER DUNKELBLAU */
 .players-row {
     display: flex; justify-content: space-between; 
-    background: #001a4d; /* DUNKELBLAU */
+    background-color: #001a4d !important; /* HIER WURDE ES GEFIXT */
     padding: 20px; border-radius: 0 0 10px 10px;
-    border-bottom: 5px solid #ff6600; /* Orange Akzent unten */
+    border-bottom: 5px solid #ff6600;
 }
 .player-card { width: 19%; text-align: center; position: relative; display: flex; flex-direction: column; align-items: center; }
 .img-wrapper { position: relative; width: 150px; height: 150px; margin-bottom: 10px; }
@@ -72,11 +72,11 @@ body {
 }
 .p-name { 
     font-size: 20px; font-weight: bold; font-family: sans-serif; 
-    color: white; /* WEISSE SCHRIFT */
+    color: white !important; /* Immer Weiß */
     text-transform: uppercase; text-shadow: 1px 1px 2px black;
 }
 
-/* Content Wrapper (Standings & Comparison) - DUNKEL */
+/* Content Wrapper (Standings & Comparison) */
 .obs-content-wrapper {
     position: fixed;
     top: 50%;
@@ -86,7 +86,7 @@ body {
     background: #001a4d; /* DUNKELBLAU */
     padding: 0;
     border-radius: 15px;
-    border: 3px solid #ff6600; /* Orange Border */
+    border: 3px solid #ff6600; 
     color: white; 
     font-family: sans-serif;
     box-shadow: 0 0 50px rgba(0,0,0,0.8);
@@ -108,39 +108,44 @@ body {
     letter-spacing: 2px; color: white;
 }
 
-/* Tabellen Styles - DARK MODE */
+/* Tabellen Styles - VERGRÖSSERT & BESSERE LESBARKEIT */
 .obs-content-wrapper table {
-    width: 100%; border-collapse: collapse; font-size: 24px; text-align: center; margin: 0;
+    width: 100%; border-collapse: collapse; 
+    font-size: 28px !important; /* SCHRIFTGRÖSSE ERHÖHT */
+    text-align: center; margin: 0;
 }
 .obs-content-wrapper th { 
-    background: #002661; /* Etwas helleres Blau für Header */
-    color: #ff6600; /* Orange Schrift im Header */
+    background: #002661; 
+    color: #ff6600 !important; /* Orange Header */
     padding: 15px; 
-    text-transform: uppercase; font-size: 22px; border-bottom: 2px solid #ff6600; 
+    text-transform: uppercase; font-size: 24px; border-bottom: 2px solid #ff6600; 
 }
 .obs-content-wrapper td { 
-    padding: 12px; border-bottom: 1px solid #444; font-weight: bold; vertical-align: middle; 
-    color: white; /* Weisser Text */
+    padding: 14px; /* Mehr Platz */
+    border-bottom: 1px solid #444; 
+    font-weight: bold; 
+    vertical-align: middle; 
+    color: #ffffff !important; /* ERZWINGT WEISSE SCHRIFT AUCH IN MITTELSPALTE */
 }
-/* Alternierende Zeilen (sehr subtil) */
+/* Alternierende Zeilen */
 .obs-content-wrapper tr:nth-child(even) { background-color: rgba(255,255,255,0.05); }
 
-/* POTG Card Style - DARK MODE */
+/* POTG Card Style */
 .potg-card {
     width: 500px; margin: 80px auto; 
-    background: #001a4d; /* DUNKELBLAU */
+    background: #001a4d; 
     border: 4px solid #ff6600; border-radius: 20px; padding: 30px; 
     text-align: center; color: white; 
     box-shadow: 0 0 50px rgba(0,0,0,0.8); font-family: sans-serif;
 }
 .potg-stat-box {
     display: flex; justify-content: center; gap: 15px; margin-top: 25px; 
-    background: rgba(255,255,255,0.1); /* Halb-Transparent */
+    background: rgba(255,255,255,0.1); 
     padding: 15px; border-radius: 10px; border: 1px solid #444;
 }
 .potg-stat-item { text-align: center; min-width: 70px; }
 .potg-stat-label { font-size: 16px; color: #ccc; margin-bottom: 4px; font-weight: bold; }
-.potg-stat-val { font-size: 32px; font-weight: 900; color: #ff6600; /* Orange Zahlen */ }
+.potg-stat-val { font-size: 32px; font-weight: 900; color: #ff6600; }
 </style>
 """
 
@@ -157,7 +162,6 @@ def render_obs_starting5():
 
         html = f"<div class='overlay-container'><div class='header-bar'><div class='team-info'>"
         if logo_url: html += f"<img src='{logo_url}' class='team-logo'>"
-        # HIER: "Trainer" statt "Head Coach"
         html += f"<div class='team-name'>{team_name}</div></div><div class='coach-info'>Trainer<span class='coach-name'>{coach_name}</span></div></div><div class='players-row'>"
         for pid in ids:
             meta = get_player_metadata_cached(pid)
@@ -197,13 +201,12 @@ def render_obs_standings():
             try: rank_val = int(platz)
             except: rank_val = 99
             
-            # Farb-Indikatoren (nur kleiner Balken links), Rest dunkel
             row_style = ""
             if rank_val <= 4: row_style = "border-left: 8px solid #28a745;"
             elif rank_val <= 8: row_style = "border-left: 8px solid #6c757d;"
             else: row_style = "border-left: 8px solid #dc3545;"
 
-            diff_style = "color:#28a745;" if (str(diff).startswith("+")) else ("color:#dc3545;" if str(diff).startswith("-") else "color:#999;")
+            diff_style = "color:#28a745 !important;" if (str(diff).startswith("+")) else ("color:#dc3545 !important;" if str(diff).startswith("-") else "color:#ccc !important;")
             html += f"<tr style='{row_style}'><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{sp}</td><td>{s}</td><td>{n}</td><td style='{diff_style}'>{diff}</td></tr>"
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
@@ -219,7 +222,6 @@ def render_obs_comparison():
         
         content_html = generate_comparison_html(ts_h, ts_g, hname, gname)
         
-        # HIER: "Direkter Vergleich" statt "Head-to-Head"
         html = f"""
         <div class='obs-content-wrapper' style='padding-bottom:10px;'>
              <div class='obs-header-row'>
@@ -259,7 +261,6 @@ def render_obs_potg():
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
         
-        # HIER: "Spielerin des Spiels" auf Deutsch
         html = f"""
         <div class='potg-card'>
             <h2 style='color:#ff6600; margin:0 0 15px 0; font-size:24px; text-transform:uppercase;'>Spielerin des Spiels</h2>
