@@ -9,7 +9,7 @@ from src.api import (
 )
 from src.html_gen import generate_comparison_html
 
-# --- ABSOLUTER CLEAN-UP FÜR OBS ---
+# --- OBS ULTRA CLEAN CSS ---
 OBS_ULTRA_CLEAN_CSS = """
 <style>
 /* Verstecke ALLES von Streamlit */
@@ -20,6 +20,7 @@ header, footer, [data-testid="stSidebar"], [data-testid="stHeader"],
     visibility: hidden !important;
 }
 
+/* Transparenz erzwingen */
 .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"], .block-container {
     background-color: transparent !important;
     background-image: none !important;
@@ -27,6 +28,7 @@ header, footer, [data-testid="stSidebar"], [data-testid="stHeader"],
     margin: 0 !important;
 }
 
+/* Body Reset */
 body {
     background-color: transparent !important;
     overflow: hidden !important;
@@ -34,7 +36,7 @@ body {
     padding: 0;
 }
 
-/* TV LAYOUT */
+/* --- TV LOOK DESIGN --- */
 .overlay-container {
     position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
     width: 1550px; display: flex; flex-direction: column; z-index: 9999;
@@ -49,7 +51,6 @@ body {
 .team-name { font-size: 34px; font-weight: 900; text-transform: uppercase; font-family: sans-serif; }
 .coach-info { text-align: right; font-size: 16px; color: #ddd; text-transform: uppercase; font-family: sans-serif; }
 .coach-name { font-weight: bold; color: white; display: block; font-size: 22px; }
-
 .players-row {
     display: flex; justify-content: space-between; background: rgba(0, 20, 60, 0.9);
     padding: 20px; border-radius: 0 0 10px 10px;
@@ -79,7 +80,6 @@ body {
 .obs-table th { background: #001a4d; color: #ff6600; padding: 12px; text-transform: uppercase; font-size: 20px; border-bottom: 2px solid #555; }
 .obs-table td { padding: 10px; border-bottom: 1px solid #444; font-weight: bold; vertical-align: middle; }
 .obs-table tr:first-child td { color: #ffd700; } 
-
 .trend-w, .trend-l {
     display: inline-block; width: 28px; height: 28px; line-height: 28px;
     text-align: center; border-radius: 50%; font-size: 16px; font-weight: bold;
@@ -128,11 +128,9 @@ def render_obs_standings():
     region = st.query_params.get("region", "Süd")
     season = st.query_params.get("season", "2025")
     df = fetch_league_standings(season, region)
-    
     if not df.empty:
         html = f"<div class='obs-content-wrapper'><div class='obs-header-row'>Tabelle {region.upper()}</div>"
         html += "<table class='obs-table'><thead><tr><th style='width:50px;'>#</th><th style='text-align:left;'>Team</th><th>S</th><th>N</th><th>Körbe</th><th>Diff</th><th>Trend</th></tr></thead><tbody>"
-        
         for _, row in df.iterrows():
             platz = row.get('Platz', '-')
             team = row.get('Team', 'Unknown')
@@ -146,10 +144,8 @@ def render_obs_standings():
                 for t in trend_data:
                     css_class = "trend-w" if t == "W" else "trend-l"
                     trend_html += f"<span class='{css_class}'>{t}</span>"
-            
             diff_style = "color:#00ff00;" if (str(diff).startswith("+")) else ("color:#ff4444;" if str(diff).startswith("-") else "color:#aaa;")
             html += f"<tr><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{w}</td><td>{l}</td><td style='color:#ccc; font-size:20px;'>{korb}</td><td style='{diff_style}'>{diff}</td><td>{trend_html}</td></tr>"
-            
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
 
@@ -175,7 +171,7 @@ def render_obs_potg():
         for p in box.get(team_key, {}).get("playerStats", []):
             try:
                 eff = float(p.get("efficiency", 0))
-                players.append({"id": str(p.get("seasonPlayer", {}).get("id")), "name": p.get("seasonPlayer",{}).get("lastName","Unk"), "nr": p.get('seasonPlayer',{}).get('shirtNumber',''), "eff": eff, "pts": int(p.get("points", 0))})
+                players.append({"id": str(p.get("seasonPlayer", {}).get("id")), "name": f"{p.get('seasonPlayer', {}).get('firstName','')} {p.get('seasonPlayer', {}).get('lastName','')}", "nr": p.get('seasonPlayer', {}).get('shirtNumber', ''), "eff": eff, "pts": int(p.get("points", 0))})
             except: pass
     if players:
         mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
