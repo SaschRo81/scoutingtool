@@ -9,7 +9,7 @@ from src.api import (
 )
 from src.html_gen import generate_comparison_html
 
-# --- OBS ULTRA CLEAN CSS ---
+# --- OBS ULTRA CLEAN CSS (LIGHT MODE) ---
 OBS_ULTRA_CLEAN_CSS = """
 <style>
 /* Verstecke ALLES von Streamlit */
@@ -36,80 +36,93 @@ body {
     padding: 0;
 }
 
-/* --- TV LOOK DESIGN --- */
+/* --- TV LOOK DESIGN (WHITE BACKGROUNDS) --- */
 .overlay-container {
     position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
     width: 1550px; display: flex; flex-direction: column; z-index: 9999;
 }
 .header-bar {
-    background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
+    background: linear-gradient(90deg, #001f5b 0%, #00338d 100%); /* Header bleibt dunkelblau */
     color: white; padding: 12px 35px; display: flex; align-items: center; justify-content: space-between;
-    border-top: 5px solid #ff6600; border-radius: 10px 10px 0 0; box-shadow: 0 -5px 15px rgba(0,0,0,0.5);
+    border-top: 5px solid #ff6600; border-radius: 10px 10px 0 0; 
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
 .team-info { display: flex; align-items: center; gap: 20px; }
 .team-logo { height: 65px; object-fit: contain; }
 .team-name { font-size: 34px; font-weight: 900; text-transform: uppercase; font-family: sans-serif; }
 .coach-info { text-align: right; font-size: 16px; color: #ddd; text-transform: uppercase; font-family: sans-serif; }
 .coach-name { font-weight: bold; color: white; display: block; font-size: 22px; }
+
+/* Starting 5 Container */
 .players-row {
-    display: flex; justify-content: space-between; background: rgba(0, 20, 60, 0.9);
+    display: flex; justify-content: space-between; 
+    background: white; /* HIER WEISS */
     padding: 20px; border-radius: 0 0 10px 10px;
+    border-bottom: 5px solid #001f5b; /* Abschlusskante */
 }
 .player-card { width: 19%; text-align: center; position: relative; display: flex; flex-direction: column; align-items: center; }
 .img-wrapper { position: relative; width: 150px; height: 150px; margin-bottom: 10px; }
-.p-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 3px solid white; background: #555; }
+.p-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 3px solid #001f5b; background: #eee; }
 .p-nr {
     position: absolute; bottom: -8px; left: -8px; background: #ff6600; color: white; font-weight: 900;
     width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
     font-size: 22px; border: 2px solid white; border-radius: 5px;
 }
-.p-name { font-size: 20px; font-weight: bold; color: white; font-family: sans-serif; text-transform: uppercase; text-shadow: 2px 2px 4px black; }
+.p-name { 
+    font-size: 20px; font-weight: bold; font-family: sans-serif; 
+    color: #001f5b; /* DUNKLE SCHRIFT */
+    text-transform: uppercase; 
+    text-shadow: none; /* Kein Shadow mehr nötig auf Weiß */
+}
 
-/* TABELLE DESIGN - FIX */
+/* TABELLE DESIGN */
 .obs-content-wrapper {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: 1400px; 
-    background: rgba(0,0,0,0.9);
+    background: white; /* HIER WEISS */
     padding: 0;
     border-radius: 15px;
     border: 3px solid #00338d;
-    color: white;
+    color: #333; /* DUNKLE SCHRIFT */
     font-family: sans-serif;
     overflow: hidden;
-    box-shadow: 0 0 40px rgba(0,0,0,0.9);
+    box-shadow: 0 0 40px rgba(0,0,0,0.5);
 }
 .obs-header-row {
-    background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
+    background: linear-gradient(90deg, #001f5b 0%, #00338d 100%); /* Header bleibt dunkelblau */
     color: white; 
     padding: 10px 30px; 
     display: flex;
     align-items: center;
-    justify-content: space-between; /* Logo rechts, Text links */
+    justify-content: center; 
     border-bottom: 5px solid #ff6600;
-    height: 150px; /* Fixe Höhe für Header */
+    height: 120px; 
 }
 .header-title {
-    font-size: 48px; /* Größerer Text */
+    font-size: 50px; 
     font-weight: 900;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    white-space: nowrap; /* VERHINDERT ZEILENUMBRUCH */
-}
-.header-logo-img {
-    height: 130px !important; /* Logo groß erzwingen */
-    width: auto;
-    object-fit: contain;
-    filter: drop-shadow(0 0 5px rgba(255,255,255,0.5));
-    flex-shrink: 0; /* VERHINDERT SCHRUMPFEN */
-    margin-left: 20px;
+    letter-spacing: 2px;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
 }
 
 .obs-table { width: 100%; font-size: 26px; border-collapse: collapse; text-align: center; }
-.obs-table th { background: #001a4d; color: #ff6600; padding: 15px; text-transform: uppercase; font-size: 22px; border-bottom: 2px solid #555; }
-.obs-table td { padding: 12px; border-bottom: 1px solid #444; font-weight: bold; vertical-align: middle; }
+.obs-table th { 
+    background: #eee; /* Heller Header für Tabelle */
+    color: #001a4d; /* Dunkle Schrift */
+    padding: 15px; text-transform: uppercase; font-size: 22px; 
+    border-bottom: 3px solid #001a4d; 
+}
+.obs-table td { 
+    padding: 12px; border-bottom: 1px solid #ccc; font-weight: bold; vertical-align: middle; 
+    color: #333; /* DUNKLE SCHRIFT */
+}
+/* Alternierende Zeilenfarbe für bessere Lesbarkeit */
+.obs-table tr:nth-child(even) { background-color: #f9f9f9; }
 
 /* Trend Bubbles */
 .trend-w, .trend-l {
@@ -122,17 +135,21 @@ body {
 
 /* POTG */
 .potg-card {
-    width: 450px; margin: 100px auto; background: linear-gradient(180deg, #001f5b 0%, #000 100%);
+    width: 450px; margin: 100px auto; 
+    background: white; /* HIER WEISS */
     border: 4px solid #ff6600; border-radius: 20px; padding: 30px; text-align: center;
-    color: white; box-shadow: 0 0 30px rgba(0,0,0,0.8); font-family: sans-serif;
+    color: #333; /* DUNKLE SCHRIFT */
+    box-shadow: 0 0 30px rgba(0,0,0,0.5); font-family: sans-serif;
 }
 .potg-stat-box {
     display: flex; justify-content: center; gap: 15px; margin-top: 25px; 
-    background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px;
+    background: #f0f0f0; /* Hellgrau Box */
+    padding: 15px; border-radius: 10px;
+    border: 1px solid #ddd;
 }
 .potg-stat-item { text-align: center; min-width: 60px; }
-.potg-stat-label { font-size: 14px; color: #ccc; margin-bottom: 2px; }
-.potg-stat-val { font-size: 28px; font-weight: 900; color: white; }
+.potg-stat-label { font-size: 14px; color: #666; margin-bottom: 2px; }
+.potg-stat-val { font-size: 28px; font-weight: 900; color: #00338d; }
 </style>
 """
 
@@ -169,18 +186,13 @@ def render_obs_standings():
     df = fetch_league_standings(season, region)
     
     if not df.empty:
-        dbbl_logo = "https://toyota-dbbl.de/app/themes/dbbl/src/assets/toyota-DBBL-logo.svg"
-        
         region_display = region.capitalize()
-        # Vollständiger Titel wie gewünscht
         title_text = f"2. Damen Basketball Bundesliga {region_display}"
         
-        # HTML mit Klassen für CSS Styling
         html = f"""
         <div class='obs-content-wrapper'>
             <div class='obs-header-row'>
                 <span class='header-title'>{title_text}</span>
-                <img src='{dbbl_logo}' class='header-logo-img'>
             </div>
         """
         html += "<table class='obs-table'><thead><tr><th style='width:60px;'>#</th><th style='text-align:left;'>Team</th><th>Sp</th><th>S</th><th>N</th><th>Diff</th></tr></thead><tbody>"
@@ -196,19 +208,19 @@ def render_obs_standings():
             try: rank_val = int(platz)
             except: rank_val = 99
             
-            # Farb-Logik
+            # Farb-Logik für Hintergründe der Zeilen
             row_style = ""
             if rank_val <= 4:
-                # Grün (Top 4)
-                row_style = "background-color: rgba(40, 167, 69, 0.15); border-left: 8px solid #28a745;"
+                # Grün (Top 4) - Sehr helles Grün für Weiß-Hintergrund
+                row_style = "background-color: #e8f5e9; border-left: 8px solid #28a745;"
             elif rank_val <= 8:
-                # Grau (Mittelfeld)
-                row_style = "background-color: rgba(108, 117, 125, 0.15); border-left: 8px solid #6c757d;"
+                # Grau (Mittelfeld) - Sehr helles Grau
+                row_style = "background-color: #f8f9fa; border-left: 8px solid #6c757d;"
             else:
-                # Rot (Abstieg)
-                row_style = "background-color: rgba(220, 53, 69, 0.15); border-left: 8px solid #dc3545;"
+                # Rot (Abstieg) - Sehr helles Rot
+                row_style = "background-color: #fce8e6; border-left: 8px solid #dc3545;"
 
-            diff_style = "color:#00ff00;" if (str(diff).startswith("+")) else ("color:#ff4444;" if str(diff).startswith("-") else "color:#aaa;")
+            diff_style = "color:#28a745;" if (str(diff).startswith("+")) else ("color:#dc3545;" if str(diff).startswith("-") else "color:#999;")
             
             html += f"<tr style='{row_style}'><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{sp}</td><td>{s}</td><td>{n}</td><td style='{diff_style}'>{diff}</td></tr>"
             
@@ -258,16 +270,31 @@ def render_obs_potg():
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
         
-        # HTML Flachklopfen um Indentation-Fehler zu vermeiden
-        html = f"<div class='potg-card'><h2 style='color:#ff6600; margin:0 0 15px 0; font-size:24px;'>PLAYER OF THE GAME</h2>"
-        html += f"<img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid white; object-fit:cover;'>"
-        html += f"<h1 style='margin:15px 0 5px 0; font-size:32px;'>{mvp['name']}</h1>"
-        html += f"<h2 style='margin:0; color:#ccc;'>#{mvp['nr']}</h2>"
-        html += "<div class='potg-stat-box'>"
-        html += f"<div class='potg-stat-item'><div class='potg-stat-label'>MIN</div><div class='potg-stat-val'>{mvp['min']}</div></div>"
-        html += f"<div class='potg-stat-item'><div class='potg-stat-label'>PTS</div><div class='potg-stat-val'>{mvp['pts']}</div></div>"
-        html += f"<div class='potg-stat-item'><div class='potg-stat-label'>REB</div><div class='potg-stat-val'>{mvp['reb']}</div></div>"
-        html += f"<div class='potg-stat-item'><div class='potg-stat-label'>EFF</div><div class='potg-stat-val'>{mvp['eff']:.0f}</div></div>"
-        html += "</div></div>"
-        
+        html = f"""
+        <div class='potg-card'>
+            <h2 style='color:#ff6600; margin:0 0 15px 0; font-size:24px; text-transform:uppercase;'>Player of the Game</h2>
+            <img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid #00338d; object-fit:cover;'>
+            <h1 style='margin:15px 0 5px 0; font-size:32px; color:#001f5b;'>{mvp['name']}</h1>
+            <h2 style='margin:0; color:#666;'>#{mvp['nr']}</h2>
+            
+            <div class='potg-stat-box'>
+                <div class='potg-stat-item'>
+                    <div class='potg-stat-label'>MIN</div>
+                    <div class='potg-stat-val'>{mvp['min']}</div>
+                </div>
+                <div class='potg-stat-item'>
+                    <div class='potg-stat-label'>PTS</div>
+                    <div class='potg-stat-val'>{mvp['pts']}</div>
+                </div>
+                <div class='potg-stat-item'>
+                    <div class='potg-stat-label'>REB</div>
+                    <div class='potg-stat-val'>{mvp['reb']}</div>
+                </div>
+                <div class='potg-stat-item'>
+                    <div class='potg-stat-label'>EFF</div>
+                    <div class='potg-stat-val'>{mvp['eff']:.0f}</div>
+                </div>
+            </div>
+        </div>
+        """
         st.markdown(html, unsafe_allow_html=True)
