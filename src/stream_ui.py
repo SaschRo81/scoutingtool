@@ -65,12 +65,12 @@ body {
 }
 .p-name { font-size: 20px; font-weight: bold; color: white; font-family: sans-serif; text-transform: uppercase; text-shadow: 2px 2px 4px black; }
 
-/* TABELLE DESIGN */
+/* TABELLE DESIGN - FIX */
 .obs-content-wrapper {
     position: fixed;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%); /* Exakte Zentrierung */
+    transform: translate(-50%, -50%);
     width: 1400px; 
     background: rgba(0,0,0,0.9);
     padding: 0;
@@ -84,21 +84,27 @@ body {
 .obs-header-row {
     background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
     color: white; 
-    padding: 15px 30px; 
+    padding: 10px 30px; 
     display: flex;
     align-items: center;
-    justify-content: space-between; /* Text links, Logo rechts */
+    justify-content: space-between; /* Logo rechts, Text links */
     border-bottom: 5px solid #ff6600;
+    height: 150px; /* Fixe Höhe für Header */
 }
 .header-title {
-    font-size: 42px;
+    font-size: 48px; /* Größerer Text */
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 1px;
+    white-space: nowrap; /* VERHINDERT ZEILENUMBRUCH */
 }
 .header-logo-img {
-    height: 200px; /* Logo deutlich größer */
+    height: 130px !important; /* Logo groß erzwingen */
+    width: auto;
+    object-fit: contain;
     filter: drop-shadow(0 0 5px rgba(255,255,255,0.5));
+    flex-shrink: 0; /* VERHINDERT SCHRUMPFEN */
+    margin-left: 20px;
 }
 
 .obs-table { width: 100%; font-size: 26px; border-collapse: collapse; text-align: center; }
@@ -166,14 +172,14 @@ def render_obs_standings():
         dbbl_logo = "https://toyota-dbbl.de/app/themes/dbbl/src/assets/toyota-DBBL-logo.svg"
         
         region_display = region.capitalize()
-        if region_display == "Süd": region_display = "Süd"
-        if region_display == "Nord": region_display = "Nord"
+        # Vollständiger Titel wie gewünscht
+        title_text = f"2. Damen Basketball Bundesliga {region_display}"
         
-        # Reihenfolge getauscht: Erst Titel, dann Logo
+        # HTML mit Klassen für CSS Styling
         html = f"""
         <div class='obs-content-wrapper'>
             <div class='obs-header-row'>
-                <span class='header-title'>2. Damen Basketball Bundesliga {region_display}</span>
+                <span class='header-title'>{title_text}</span>
                 <img src='{dbbl_logo}' class='header-logo-img'>
             </div>
         """
@@ -190,12 +196,16 @@ def render_obs_standings():
             try: rank_val = int(platz)
             except: rank_val = 99
             
+            # Farb-Logik
             row_style = ""
             if rank_val <= 4:
+                # Grün (Top 4)
                 row_style = "background-color: rgba(40, 167, 69, 0.15); border-left: 8px solid #28a745;"
             elif rank_val <= 8:
+                # Grau (Mittelfeld)
                 row_style = "background-color: rgba(108, 117, 125, 0.15); border-left: 8px solid #6c757d;"
             else:
+                # Rot (Abstieg)
                 row_style = "background-color: rgba(220, 53, 69, 0.15); border-left: 8px solid #dc3545;"
 
             diff_style = "color:#00ff00;" if (str(diff).startswith("+")) else ("color:#ff4444;" if str(diff).startswith("-") else "color:#aaa;")
@@ -248,31 +258,16 @@ def render_obs_potg():
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
         
-        html = f"""
-        <div class='potg-card'>
-            <h2 style='color:#ff6600; margin:0 0 15px 0; font-size:24px;'>PLAYER OF THE GAME</h2>
-            <img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid white; object-fit:cover;'>
-            <h1 style='margin:15px 0 5px 0; font-size:32px;'>{mvp['name']}</h1>
-            <h2 style='margin:0; color:#ccc;'>#{mvp['nr']}</h2>
-            
-            <div class='potg-stat-box'>
-                <div class='potg-stat-item'>
-                    <div class='potg-stat-label'>MIN</div>
-                    <div class='potg-stat-val'>{mvp['min']}</div>
-                </div>
-                <div class='potg-stat-item'>
-                    <div class='potg-stat-label'>PTS</div>
-                    <div class='potg-stat-val'>{mvp['pts']}</div>
-                </div>
-                <div class='potg-stat-item'>
-                    <div class='potg-stat-label'>REB</div>
-                    <div class='potg-stat-val'>{mvp['reb']}</div>
-                </div>
-                <div class='potg-stat-item'>
-                    <div class='potg-stat-label'>EFF</div>
-                    <div class='potg-stat-val'>{mvp['eff']:.0f}</div>
-                </div>
-            </div>
-        </div>
-        """
+        # HTML Flachklopfen um Indentation-Fehler zu vermeiden
+        html = f"<div class='potg-card'><h2 style='color:#ff6600; margin:0 0 15px 0; font-size:24px;'>PLAYER OF THE GAME</h2>"
+        html += f"<img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid white; object-fit:cover;'>"
+        html += f"<h1 style='margin:15px 0 5px 0; font-size:32px;'>{mvp['name']}</h1>"
+        html += f"<h2 style='margin:0; color:#ccc;'>#{mvp['nr']}</h2>"
+        html += "<div class='potg-stat-box'>"
+        html += f"<div class='potg-stat-item'><div class='potg-stat-label'>MIN</div><div class='potg-stat-val'>{mvp['min']}</div></div>"
+        html += f"<div class='potg-stat-item'><div class='potg-stat-label'>PTS</div><div class='potg-stat-val'>{mvp['pts']}</div></div>"
+        html += f"<div class='potg-stat-item'><div class='potg-stat-label'>REB</div><div class='potg-stat-val'>{mvp['reb']}</div></div>"
+        html += f"<div class='potg-stat-item'><div class='potg-stat-label'>EFF</div><div class='potg-stat-val'>{mvp['eff']:.0f}</div></div>"
+        html += "</div></div>"
+        
         st.markdown(html, unsafe_allow_html=True)
