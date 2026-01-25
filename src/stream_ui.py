@@ -97,7 +97,7 @@ body {
     letter-spacing: 1px;
 }
 .header-logo-img {
-    height: 120px; /* Logo deutlich größer */
+    height: 200px; /* Logo deutlich größer */
     filter: drop-shadow(0 0 5px rgba(255,255,255,0.5));
 }
 
@@ -173,7 +173,7 @@ def render_obs_standings():
         html = f"""
         <div class='obs-content-wrapper'>
             <div class='obs-header-row'>
-                <span class='header-title'>2. DBBL {region_display}</span>
+                <span class='header-title'>2. Damen Basketball Bundesliga {region_display}</span>
                 <img src='{dbbl_logo}' class='header-logo-img'>
             </div>
         """
