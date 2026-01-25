@@ -1,130 +1,493 @@
+# --- START OF FILE src/api.py ---
 import streamlit as st
+import requests
 import pandas as pd
-from src.api import (
-    get_player_metadata_cached, 
-    fetch_game_boxscore, 
-    get_best_team_logo, 
-    fetch_league_standings, 
-    fetch_team_data
-)
-from src.html_gen import generate_comparison_html
+import base64
+from datetime import datetime
+import pytz
+from src.config import API_HEADERS, SEASON_ID, TEAMS_DB
 
-# --- OBS ULTRA CLEAN CSS ---
-OBS_ULTRA_CLEAN_CSS = """
-<style>
-header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], 
-[data-testid="stStatusWidget"], .viewerBadge_container__1QSob, 
-.stAppDeployButton, [data-testid="stDecoration"], #MainMenu { display: none !important; visibility: hidden !important; }
-.stApp, [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"], .block-container { background-color: transparent !important; padding: 0 !important; margin: 0 !important; }
-body { background-color: transparent !important; overflow: hidden !important; margin: 0; padding: 0; }
+# --- HILFSFUNKTIONEN ---
 
-.overlay-container { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); width: 1550px; display: flex; flex-direction: column; z-index: 9999; }
-.header-bar { background: linear-gradient(90deg, #001f5b 0%, #00338d 100%); color: white; padding: 12px 35px; display: flex; align-items: center; justify-content: space-between; border-top: 5px solid #ff6600; border-radius: 10px 10px 0 0; box-shadow: 0 -5px 15px rgba(0,0,0,0.5); }
-.team-info { display: flex; align-items: center; gap: 20px; }
-.team-logo { height: 65px; object-fit: contain; }
-.team-name { font-size: 34px; font-weight: 900; text-transform: uppercase; font-family: sans-serif; }
-.coach-info { text-align: right; font-size: 16px; color: #ddd; text-transform: uppercase; font-family: sans-serif; }
-.coach-name { font-weight: bold; color: white; display: block; font-size: 22px; }
-.players-row { display: flex; justify-content: space-between; background: rgba(0, 20, 60, 0.9); padding: 20px; border-radius: 0 0 10px 10px; }
-.player-card { width: 19%; text-align: center; position: relative; display: flex; flex-direction: column; align-items: center; }
-.img-wrapper { position: relative; width: 150px; height: 150px; margin-bottom: 10px; }
-.p-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 3px solid white; background: #555; }
-.p-nr { position: absolute; bottom: -8px; left: -8px; background: #ff6600; color: white; font-weight: 900; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 22px; border: 2px solid white; border-radius: 5px; }
-.p-name { font-size: 20px; font-weight: bold; color: white; font-family: sans-serif; text-transform: uppercase; text-shadow: 2px 2px 4px black; }
-
-.obs-content-wrapper { width: 1500px; margin: 60px auto; background: rgba(0,0,0,0.9); padding: 0; border-radius: 15px; border: 3px solid #00338d; color: white; font-family: sans-serif; overflow: hidden; box-shadow: 0 0 30px rgba(0,0,0,0.8); }
-.obs-header-row { background: linear-gradient(90deg, #001f5b 0%, #00338d 100%); color: white; padding: 15px; text-align: center; font-size: 36px; font-weight: 900; border-bottom: 5px solid #ff6600; text-transform: uppercase; }
-.obs-table { width: 100%; font-size: 24px; border-collapse: collapse; text-align: center; }
-.obs-table th { background: #001a4d; color: #ff6600; padding: 12px; text-transform: uppercase; font-size: 20px; border-bottom: 2px solid #555; }
-.obs-table td { padding: 10px; border-bottom: 1px solid #444; font-weight: bold; vertical-align: middle; }
-.obs-table tr:first-child td { color: #ffd700; } 
-.trend-w, .trend-l { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; font-size: 16px; font-weight: bold; margin-right: 3px; color: white; }
-.trend-w { background-color: #28a745; }
-.trend-l { background-color: #dc3545; }
-
-.potg-card { width: 450px; margin: 100px auto; background: linear-gradient(180deg, #001f5b 0%, #000 100%); border: 4px solid #ff6600; border-radius: 20px; padding: 30px; text-align: center; color: white; box-shadow: 0 0 30px rgba(0,0,0,0.8); font-family: sans-serif; }
-</style>
-"""
-
-def render_obs_starting5():
-    st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
+def get_base_url(team_id):
     try:
-        ids_str = st.query_params.get("ids", "")
-        team_name = st.query_params.get("name", "TEAM")
-        coach_name = st.query_params.get("coach", "")
-        logo_id = st.query_params.get("logo_id", "")
-        logo_url = get_best_team_logo(logo_id) if logo_id else ""
-        ids = [x for x in ids_str.split(",") if x]
-        if not ids: return
+        tid = int(team_id)
+        team_info = TEAMS_DB.get(tid)
+        if team_info and team_info.get("staffel") == "Nord":
+            return "https://api-n.dbbl.scb.world"
+    except: pass
+    return "https://api-s.dbbl.scb.world"
 
-        html = f"<div class='overlay-container'><div class='header-bar'><div class='team-info'>"
-        if logo_url: html += f"<img src='{logo_url}' class='team-logo'>"
-        html += f"<div class='team-name'>{team_name}</div></div><div class='coach-info'>Head Coach<span class='coach-name'>{coach_name}</span></div></div><div class='players-row'>"
-        for pid in ids:
-            meta = get_player_metadata_cached(pid)
-            img = meta.get("img") or "https://via.placeholder.com/150"
-            p_name = st.query_params.get(f"n_{pid}", "Player")
-            parts = p_name.split(" ")
-            display_name = f"{parts[0][0]}. {parts[-1]}" if len(parts) > 1 else p_name
-            p_nr = st.query_params.get(f"nr_{pid}", "#")
-            html += f"<div class='player-card'><div class='img-wrapper'><img src='{img}' class='p-img'><div class='p-nr'>{p_nr}</div></div><div class='p-name'>{display_name}</div></div>"
-        html += "</div></div>"
-        st.markdown(html, unsafe_allow_html=True)
-    except Exception as e: st.error(f"Fehler: {e}")
+def get_base_url_by_staffel(staffel):
+    if staffel == "Nord": return "https://api-n.dbbl.scb.world"
+    return "https://api-s.dbbl.scb.world"
 
-def render_obs_standings():
-    st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
-    region = st.query_params.get("region", "Süd")
-    season = st.query_params.get("season", "2025")
-    df = fetch_league_standings(season, region)
-    if not df.empty:
-        html = f"<div class='obs-content-wrapper'><div class='obs-header-row'>Tabelle {region.upper()}</div>"
-        html += "<table class='obs-table'><thead><tr><th style='width:50px;'>#</th><th style='text-align:left;'>Team</th><th>S</th><th>N</th><th>Körbe</th><th>Diff</th><th>Trend</th></tr></thead><tbody>"
-        for _, row in df.iterrows():
-            platz = row.get('Platz', '-')
-            team = row.get('Team', 'Unknown')
-            w = row.get('W', 0)
-            l = row.get('L', 0)
-            korb = row.get('Körbe', '0:0')
-            diff = row.get('Diff', '0')
-            trend_data = row.get("Trend", [])
-            trend_html = ""
-            if isinstance(trend_data, list):
-                for t in trend_data:
-                    css_class = "trend-w" if t == "W" else "trend-l"
-                    trend_html += f"<span class='{css_class}'>{t}</span>"
-            diff_style = "color:#00ff00;" if (str(diff).startswith("+")) else ("color:#ff4444;" if str(diff).startswith("-") else "color:#aaa;")
-            html += f"<tr><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{w}</td><td>{l}</td><td style='color:#ccc; font-size:20px;'>{korb}</td><td style='{diff_style}'>{diff}</td><td>{trend_html}</td></tr>"
-        html += "</tbody></table></div>"
-        st.markdown(html, unsafe_allow_html=True)
+def format_minutes(seconds):
+    if seconds is None: return "00:00"
+    try:
+        sec = int(seconds); m = sec // 60; s = sec % 60; return f"{m:02d}:{s:02d}"
+    except: return "00:00"
 
-def render_obs_comparison():
-    st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
-    hid = st.query_params.get("hid"); gid = st.query_params.get("gid")
-    hname = st.query_params.get("hname"); gname = st.query_params.get("gname")
-    if hid and gid:
-        _, ts_h = fetch_team_data(hid, "2025")
-        _, ts_g = fetch_team_data(gid, "2025")
-        st.markdown("<div class='obs-content-wrapper' style='padding:20px;'>", unsafe_allow_html=True)
-        st.markdown(generate_comparison_html(ts_h, ts_g, hname, gname), unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+def calculate_age(birthdate_str):
+    if not birthdate_str or str(birthdate_str).lower() in ["nan", "none", "", "-", "null"]: return "-"
+    try:
+        clean_date = str(birthdate_str).split("T")[0]
+        bd = datetime.strptime(clean_date, "%Y-%m-%d")
+        today = datetime.now()
+        age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+        return str(age)
+    except: return "-"
 
-def render_obs_potg():
-    st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
-    gid = st.query_params.get("game_id")
-    if not gid: return
-    box = fetch_game_boxscore(gid)
-    if not box: return
-    players = []
-    for team_key in ["homeTeam", "guestTeam"]:
-        for p in box.get(team_key, {}).get("playerStats", []):
-            try:
-                eff = float(p.get("efficiency", 0))
-                players.append({"id": str(p.get("seasonPlayer", {}).get("id")), "name": p.get("seasonPlayer",{}).get("lastName","Unk"), "nr": p.get('seasonPlayer',{}).get('shirtNumber',''), "eff": eff, "pts": int(p.get("points", 0))})
-            except: pass
-    if players:
-        mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
-        meta = get_player_metadata_cached(mvp["id"])
-        img = meta.get("img") or "https://via.placeholder.com/300"
-        html = f"<div class='potg-card'><h2 style='color:#ff6600;'>PLAYER OF THE GAME</h2><img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid white;'><br><h1>{mvp['name']}</h1><h2>#{mvp['nr']}</h2><div style='display:flex; justify-content:center; gap:20px; margin-top:20px; background:rgba(255,255,255,0.1); padding:10px; border-radius:10px;'><div>PTS<br><b>{mvp['pts']}</b></div><div>EFF<br><b>{mvp['eff']:.0f}</b></div></div></div>"
-        st.markdown(html, unsafe_allow_html=True)
+def extract_nationality(data_obj):
+    if not data_obj: return "-"
+    if "nationalities" in data_obj and isinstance(data_obj["nationalities"], list) and data_obj["nationalities"]:
+        first = data_obj["nationalities"][0]
+        if isinstance(first, str): return "/".join(data_obj["nationalities"])
+        elif isinstance(first, dict): return "/".join([n.get("name", "") for n in data_obj["nationalities"]])
+    if "nationality" in data_obj and isinstance(data_obj["nationality"], dict):
+        return data_obj["nationality"].get("name", "-")
+    return "-"
+
+def safe_int(val):
+    if val is None: return 0
+    try: return int(float(val))
+    except: return 0
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_best_team_logo(team_id):
+    if not team_id: return None
+    sid = SEASON_ID if SEASON_ID else "2025"
+    candidates = [
+        f"https://api-s.dbbl.scb.world/images/teams/logo/{sid}/{team_id}",
+        f"https://api-n.dbbl.scb.world/images/teams/logo/{sid}/{team_id}",
+        f"https://api-s.dbbl.scb.world/images/teams/logo/2024/{team_id}",
+        f"https://api-n.dbbl.scb.world/images/teams/logo/2024/{team_id}"
+    ]
+    headers = { "User-Agent": "Mozilla/5.0", "Accept": "image/*", "Referer": "https://dbbl.de/" }
+    for url in candidates:
+        try:
+            r = requests.get(url, headers=headers, timeout=1.0)
+            if r.status_code == 200 and len(r.content) > 500: 
+                b64 = base64.b64encode(r.content).decode()
+                mime = "image/jpeg" if "jpg" in url or "jpeg" in url else "image/png"
+                return f"data:{mime};base64,{b64}"
+        except: continue
+    return None
+
+# --- DATEN ABRUF FUNKTIONEN ---
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_player_metadata_cached(player_id):
+    clean_id = str(player_id).replace(".0", "")
+    for subdomain in ["api-s", "api-n"]:
+        url = f"https://{subdomain}.dbbl.scb.world/season-players/{clean_id}"
+        try:
+            resp = requests.get(url, headers=API_HEADERS, timeout=1.5)
+            if resp.status_code == 200:
+                data = resp.json()
+                person = data.get("person", {})
+                img = data.get("imageUrl", "")
+                bdate = data.get("birthDate") or person.get("birthDate") or person.get("birthdate")
+                age = calculate_age(bdate)
+                nat = extract_nationality(data)
+                if nat == "-": nat = extract_nationality(person)
+                height = data.get("height") or person.get("height", "-")
+                return {"img": img, "height": height, "pos": data.get("position", "-"), "age": age, "nationality": nat}
+        except: pass
+    return {"img": "", "height": "-", "pos": "-", "age": "-", "nationality": "-"}
+
+@st.cache_data(ttl=600)
+def fetch_team_details_raw(team_id, season_id):
+    urls = [
+        f"https://api-1.dbbl.scb.world/teams/{team_id}/{season_id}",
+        f"{get_base_url(team_id)}/teams/{team_id}/{season_id}",
+        f"https://api-s.dbbl.scb.world/teams/{team_id}/{season_id}",
+        f"https://api-n.dbbl.scb.world/teams/{team_id}/{season_id}"
+    ]
+    for url in urls:
+        try:
+            resp = requests.get(url, headers=API_HEADERS, timeout=2)
+            if resp.status_code == 200: return resp.json()
+        except: pass
+    return None
+
+def fetch_team_data(team_id, season_id):
+    base_url = get_base_url(team_id)
+    api_stats_players = f"{base_url}/teams/{team_id}/{season_id}/player-stats"
+    api_team_direct = f"{base_url}/teams/{team_id}/{season_id}/statistics/season"
+    ts = {}
+    df = pd.DataFrame()
+
+    try:
+        r_team = requests.get(api_team_direct, headers=API_HEADERS, timeout=3)
+        if r_team.status_code == 200:
+            data = r_team.json()
+            td = None
+            if isinstance(data, list):
+                search_id = str(team_id)
+                for item in data:
+                    item_tid = str(item.get("teamId", ""))
+                    item_stid = str(item.get("seasonTeamId", ""))
+                    item_obj_id = str(item.get("seasonTeam", {}).get("id", ""))
+                    if search_id in [item_tid, item_stid, item_obj_id]:
+                        td = item; break
+                if td is None and len(data) == 1: td = data[0]
+            elif isinstance(data, dict): td = data
+
+            if isinstance(td, dict) and td.get("gamesPlayed"):
+                gp = td.get("gamesPlayed") or 1
+                fgm = td.get("fieldGoalsMade") or 0; fga = td.get("fieldGoalsAttempted") or 0
+                m3 = td.get("threePointShotsMade") or 0; a3 = td.get("threePointShotsAttempted") or 0
+                ftm = td.get("freeThrowsMade") or 0; fta = td.get("freeThrowsAttempted") or 0
+                m2 = fgm - m3; a2 = fga - a3
+                ts = {
+                    "ppg": (td.get("points") or 0) / gp, "tot": (td.get("totalRebounds") or 0) / gp,
+                    "as": (td.get("assists") or 0) / gp, "to": (td.get("turnovers") or 0) / gp,
+                    "st": (td.get("steals") or 0) / gp, "bs": (td.get("blocks") or 0) / gp,
+                    "pf": (td.get("foulsCommitted") or 0) / gp, "or": (td.get("offensiveRebounds") or 0) / gp,
+                    "dr": (td.get("defensiveRebounds") or 0) / gp,
+                    "2m": m2 / gp, "2a": a2 / gp, "3m": m3 / gp, "3a": a3 / gp, "ftm": ftm / gp, "fta": fta / gp,
+                    "fgpct": (fgm / fga * 100) if fga > 0 else 0, "2pct": (m2 / a2 * 100) if a2 > 0 else 0,
+                    "3pct": (m3 / a3 * 100) if a3 > 0 else 0, "ftpct": (ftm / fta * 100) if fta > 0 else 0,
+                }
+    except Exception as e: print(f"Fehler Team Stats {team_id}: {e}")
+
+    try:
+        roster_lookup = {}
+        raw_details = fetch_team_details_raw(team_id, season_id)
+        if raw_details:
+            squad = raw_details.get("squad", []) if isinstance(raw_details, dict) else []
+            for entry in squad:
+                p = entry.get("person", {})
+                raw_id = p.get("id") or entry.get("id")
+                if raw_id:
+                    pid = str(raw_id).replace(".0", "")
+                    bdate = p.get("birthDate") or p.get("birthdate") or entry.get("birthDate")
+                    nat = extract_nationality(p)
+                    if nat == "-": nat = extract_nationality(entry)
+                    height = p.get("height") or entry.get("height", "-")
+                    roster_lookup[pid] = {"birthdate": bdate, "nationality": nat, "height": height}
+        
+        r_stats = requests.get(api_stats_players, headers=API_HEADERS, timeout=4)
+        if r_stats.status_code == 200:
+            raw_p = r_stats.json()
+            p_list = raw_p if isinstance(raw_p, list) else raw_p.get("data", [])
+            
+            if p_list:
+                df = pd.json_normalize(p_list)
+                df.columns = [str(c).lower() for c in df.columns]
+                
+                col_fn = None; col_ln = None
+                if 'seasonplayer.firstname' in df.columns: col_fn = 'seasonplayer.firstname'
+                elif 'firstname' in df.columns: col_fn = 'firstname'
+                if 'seasonplayer.lastname' in df.columns: col_ln = 'seasonplayer.lastname'
+                elif 'lastname' in df.columns: col_ln = 'lastname'
+                
+                if col_fn and col_ln: df["NAME_FULL"] = (df[col_fn].astype(str) + " " + df[col_ln].astype(str)).str.strip()
+                else: df["NAME_FULL"] = "Unknown"
+
+                col_id_opts = ["seasonplayer.id", "seasonplayerid", "personid", "playerid", "id"]
+                col_id = None
+                for opt in col_id_opts:
+                     matches = [c for c in df.columns if opt in c]
+                     if matches: col_id = sorted(matches, key=len)[0]; break
+                
+                col_nr = next((c for c in df.columns if "shirtnumber" in c or "jerseynumber" in c), None)
+                df["NR"] = df[col_nr].astype(str).str.replace(".0","",regex=False) if col_nr else "-"
+                df["PLAYER_ID"] = df[col_id].astype(str).str.replace(".0","",regex=False) if col_id else "0"
+                
+                def get_val(key, default=0.0):
+                    matches = [c for c in df.columns if key == c or (key in c and 'pergame' not in c and 'percent' not in c)]
+                    if matches: return pd.to_numeric(df[sorted(matches, key=len)[0]], errors="coerce").fillna(default)
+                    return pd.Series([default]*len(df), index=df.index)
+
+                def get_meta_field(pid, field_key):
+                    val = roster_lookup.get(pid, {}).get(field_key)
+                    if val and val != "-": return val
+                    meta = get_player_metadata_cached(pid)
+                    if field_key == "birthdate": return None 
+                    return meta.get(field_key, "-")
+
+                df["AGE"] = df["PLAYER_ID"].apply(lambda pid: calculate_age(roster_lookup.get(pid, {}).get("birthdate")))
+                mask_no_age = df["AGE"] == "-"
+                if mask_no_age.any(): df.loc[mask_no_age, "AGE"] = df.loc[mask_no_age, "PLAYER_ID"].apply(lambda pid: get_player_metadata_cached(pid).get("age", "-"))
+
+                df["NATIONALITY"] = df["PLAYER_ID"].apply(lambda pid: get_meta_field(pid, "nationality"))
+                df["HEIGHT_ROSTER"] = df["PLAYER_ID"].apply(lambda pid: get_meta_field(pid, "height"))
+                
+                df["GP"] = get_val("gamesplayed").replace(0, 1)
+                df["TOTAL_MINUTES"] = get_val("secondsplayed") / 60
+                df["TOTAL_PTS"] = get_val("points"); df["TOTAL_REB"] = get_val("totalrebounds")
+                df["TOTAL_AST"] = get_val("assists"); df["TOTAL_STL"] = get_val("steals")
+                df["TOTAL_TO"] = get_val("turnovers"); df["TOTAL_BLK"] = get_val("blocks")
+                df["TOTAL_PF"] = get_val("foulscommitted"); df["TOTAL_OR"] = get_val("offensiverebounds")
+                df["TOTAL_DR"] = get_val("defensiverebounds"); df["TOTAL_FGM"] = get_val("fieldgoalsmade")
+                df["TOTAL_FGA"] = get_val("fieldgoalsattempted"); df["TOTAL_3M"] = get_val("threepointshotsmade")
+                df["TOTAL_3A"] = get_val("threepointshotsattempted"); df["TOTAL_FTM"] = get_val("freethrowsmade")
+                df["TOTAL_FTA"] = get_val("freethrowsattempted"); df["TOTAL_2M"] = df["TOTAL_FGM"] - df["TOTAL_3M"]
+                df["TOTAL_2A"] = df["TOTAL_FGA"] - df["TOTAL_3A"]
+                
+                gp_safe = df["GP"].replace(0, 1)
+                df["MIN_DISPLAY"] = (df["TOTAL_MINUTES"] * 60 / gp_safe).apply(format_minutes)
+                df["PPG"] = (df["TOTAL_PTS"] / gp_safe).round(1); df["TOT"] = (df["TOTAL_REB"] / gp_safe).round(1)
+                df["AS"] = (df["TOTAL_AST"] / gp_safe).round(1); df["ST"] = (df["TOTAL_STL"] / gp_safe).round(1)
+                df["TO"] = (df["TOTAL_TO"] / gp_safe).round(1); df["BS"] = (df["TOTAL_BLK"] / gp_safe).round(1)
+                df["PF"] = (df["TOTAL_PF"] / gp_safe).round(1); df["OR"] = (df["TOTAL_OR"] / gp_safe).round(1)
+                df["DR"] = (df["TOTAL_DR"] / gp_safe).round(1); df["2M"] = (df["TOTAL_2M"] / gp_safe).round(1)
+                df["2A"] = (df["TOTAL_2A"] / gp_safe).round(1); df["3M"] = (df["TOTAL_3M"] / gp_safe).round(1)
+                df["3A"] = (df["TOTAL_3A"] / gp_safe).round(1); df["FTM"] = (df["TOTAL_FTM"] / gp_safe).round(1)
+                df["FTA"] = (df["TOTAL_FTA"] / gp_safe).round(1)
+
+                df["FG%"] = (df["TOTAL_FGM"] / df["TOTAL_FGA"] * 100).round(1).fillna(0)
+                df["3PCT"] = (df["TOTAL_3M"] / df["TOTAL_3A"] * 100).round(1).fillna(0)
+                df["FTPCT"] = (df["TOTAL_FTM"] / df["TOTAL_FTA"] * 100).round(1).fillna(0)
+                df["2PCT"] = 0.0; mask2 = df["TOTAL_2A"] > 0
+                df.loc[mask2, "2PCT"] = (df.loc[mask2, "TOTAL_2M"] / df.loc[mask2, "TOTAL_2A"] * 100).round(1)
+                df["select"] = False
+    except Exception as e: print(f"Error Player Stats ({base_url}): {e}")
+
+    if not ts and not df.empty:
+        tg = df["GP"].max() if not df.empty else 1
+        if tg == 0: tg = 1
+        t_fgm = df["TOTAL_FGM"].sum(); t_fga = df["TOTAL_FGA"].sum()
+        t_3m = df["TOTAL_3M"].sum(); t_3a = df["TOTAL_3A"].sum()
+        t_ftm = df["TOTAL_FTM"].sum(); t_fta = df["TOTAL_FTA"].sum()
+        t_2m = t_fgm - t_3m; t_2a = t_fga - t_3a
+        ts = {
+            "ppg": df["TOTAL_PTS"].sum()/tg, "tot": df["TOTAL_REB"].sum()/tg,
+            "as": df["TOTAL_AST"].sum()/tg, "st": df["TOTAL_STL"].sum()/tg,
+            "to": df["TOTAL_TO"].sum()/tg, "bs": df["TOTAL_BLK"].sum()/tg,
+            "pf": df["TOTAL_PF"].sum()/tg, "or": df["TOTAL_OR"].sum()/tg,
+            "dr": df["TOTAL_DR"].sum()/tg,
+            "2m": t_2m/tg, "2a": t_2a/tg, "3m": t_3m/tg, "3a": t_3a/tg, "ftm": t_ftm/tg, "fta": t_fta/tg,
+            "fgpct": (t_fgm/t_fga*100) if t_fga>0 else 0, "2pct": (t_2m/t_2a*100) if t_2a>0 else 0,
+            "3pct": (t_3m/t_3a*100) if t_3a>0 else 0, "ftpct": (t_ftm/t_fta*100) if t_fta>0 else 0,
+        }
+    
+    if df is not None and not df.empty:
+        for c in ["2M", "2A", "2PCT", "3M", "3A", "3PCT", "FTM", "FTA", "FTPCT", "DR", "OR", "TOT", "AS", "TO", "ST", "PF", "BS", "PPG", "MIN_DISPLAY"]:
+            if c not in df.columns: df[c] = 0
+
+    return df, ts
+
+def fetch_schedule(team_id, season_id):
+    urls = [
+        f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}",
+        f"https://api-n.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}"
+    ]
+    for url in urls:
+        try:
+            resp = requests.get(url, headers=API_HEADERS, timeout=3)
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("items", [])
+                if items:
+                    clean = []
+                    for g in items:
+                        res = g.get("result", {}) or {}
+                        h_s = res.get('homeTeamFinalScore'); g_s = res.get('guestTeamFinalScore')
+                        score = f"{h_s} : {g_s}" if (h_s is not None) else "-"
+                        raw_d = g.get("scheduledTime", ""); d_disp = raw_d
+                        if raw_d:
+                            try: d_disp = datetime.fromisoformat(raw_d.replace("Z", "+00:00")).astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
+                            except: pass
+                        clean.append({
+                            "id": g.get("id"), "date": d_disp, "score": score,
+                            "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
+                            "homeTeamId": str(g.get("homeTeam", {}).get("teamId")), 
+                            "guestTeamId": str(g.get("guestTeam", {}).get("teamId")),
+                            "home_score": h_s, "guest_score": g_s,
+                            "has_result": (h_s is not None and g_s is not None)
+                        })
+                    return clean
+        except: pass
+    return []
+
+def fetch_game_boxscore(game_id):
+    for subdomain in ["api-s", "api-n"]:
+        try:
+            r = requests.get(f"https://{subdomain}.dbbl.scb.world/games/{game_id}/stats", headers=API_HEADERS, timeout=2)
+            if r.status_code == 200: return r.json()
+        except: pass
+    return None
+
+def fetch_game_details(game_id):
+    for subdomain in ["api-s", "api-n"]:
+        try:
+            r = requests.get(f"https://{subdomain}.dbbl.scb.world/games/{game_id}", headers=API_HEADERS, timeout=2)
+            if r.status_code == 200: return r.json()
+        except: pass
+    return None
+
+@st.cache_data(ttl=3600)
+def fetch_team_info_basic(team_id):
+    base_url = get_base_url(team_id)
+    try:
+        resp = requests.get(f"{base_url}/teams/{team_id}", headers=API_HEADERS, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            venues = data.get("venues", [])
+            main = next((v for v in venues if v.get("isMain")), venues[0] if venues else None)
+            if main: return {"id": team_id, "venue": main}
+    except: pass
+    return {"id": team_id, "venue": None}
+
+def fetch_games_from_recent():
+    endpoints = [
+        "https://api-s.dbbl.scb.world/games/recent?slotSize=400",
+        "https://api-n.dbbl.scb.world/games/recent?slotSize=400"
+    ]
+    games_map = {} 
+    for url in endpoints:
+        try:
+            r = requests.get(url, headers=API_HEADERS, timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                lists_to_check = []
+                if isinstance(data.get("past"), list): lists_to_check.extend(data["past"])
+                if isinstance(data.get("present"), list): lists_to_check.extend(data["present"])
+                if isinstance(data.get("future"), list): lists_to_check.extend(data["future"])
+                for g in lists_to_check:
+                    gid = g.get("id")
+                    if not gid or gid in games_map: continue 
+                    raw_d = g.get("scheduledTime", "")
+                    dt_obj = None; d_disp = "-"; date_only = "-"
+                    if raw_d:
+                        try:
+                            clean_ts = raw_d.replace("Z", "+00:00")
+                            dt_obj = datetime.fromisoformat(clean_ts).astimezone(pytz.timezone("Europe/Berlin"))
+                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
+                            date_only = dt_obj.strftime("%d.%m.%Y")
+                        except: pass
+                    res = g.get("result", {}) or {}
+                    h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
+                    g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
+                    score_str = f"{h_s}:{g_s}" if (h_s is not None and g_s is not None) else "-:-"
+                    status = g.get("status", "SCHEDULED")
+                    if h_s is not None and g_s is not None and status == "SCHEDULED": status = "ENDED"
+                    games_map[gid] = {
+                        "id": gid, "date": d_disp, "date_only": date_only, "datetime": dt_obj,
+                        "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
+                        "score": score_str, "status": status, "home_score": h_s, "guest_score": g_s
+                    }
+        except Exception as e: pass
+    result_list = list(games_map.values())
+    result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
+    return result_list
+
+# --- TREND & TABELLE (NEU) ---
+
+@st.cache_data(ttl=600)
+def fetch_season_matches(season_id, region="Süd"):
+    base = "https://api-n.dbbl.scb.world" if region == "Nord" else "https://api-s.dbbl.scb.world"
+    url = f"{base}/games?seasonId={season_id}&pageSize=3000"
+    try:
+        r = requests.get(url, headers=API_HEADERS, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            items = data.get("items", [])
+            return items
+    except: pass
+    return []
+
+@st.cache_data(ttl=1800)
+def fetch_league_standings(season_id, league_selection):
+    urls = []
+    region_key = "SOUTH" if league_selection == "Süd" else "NORTH"
+    if league_selection in ["Nord", "Süd"]:
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}&group={region_key}")
+        urls.append(f"https://api-n.dbbl.scb.world/standings?seasonId={season_id}&group={region_key}")
+    else:
+        urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}")
+    
+    all_season_games = fetch_season_matches(season_id, league_selection)
+
+    for url in urls:
+        try:
+            r = requests.get(url, headers=API_HEADERS, timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                items = data if isinstance(data, list) else data.get("items", [])
+                if not items: continue
+
+                match_count = 0; check_count = 0
+                for entry in items:
+                    st_obj = entry.get("seasonTeam", {})
+                    tid = safe_int(st_obj.get("teamId")) or safe_int(st_obj.get("id"))
+                    if tid in TEAMS_DB:
+                        check_count += 1
+                        if TEAMS_DB[tid].get("staffel") == league_selection: match_count += 1
+                
+                if check_count > 0 and (match_count / check_count) < 0.5: continue
+
+                table_data = []
+                for entry in items:
+                    team_name = entry.get("seasonTeam", {}).get("name", "Unknown")
+                    tid_raw = entry.get("seasonTeam", {}).get("teamId")
+                    rank = entry.get("rank", 0)
+                    wins = entry.get("totalVictories", 0)
+                    losses = entry.get("totalLosses", 0)
+                    pts_own = entry.get("totalPointsMade", 0)
+                    pts_opp = entry.get("totalPointsReceived", 0)
+                    diff = pts_own - pts_opp
+                    diff_str = f"+{diff}" if diff > 0 else str(diff)
+
+                    trend = []
+                    if tid_raw:
+                        team_games = []
+                        search_tid = str(tid_raw)
+                        for g in all_season_games:
+                            if g.get("status") == "ENDED":
+                                h_id = str(g.get("homeTeam", {}).get("teamId"))
+                                g_id = str(g.get("guestTeam", {}).get("teamId"))
+                                
+                                if h_id == search_tid or g_id == search_tid:
+                                    raw_d = g.get("scheduledTime", "")
+                                    res = g.get("result", {})
+                                    h_s = res.get("homeTeamFinalScore", 0)
+                                    g_s = res.get("guestTeamFinalScore", 0)
+                                    
+                                    is_win = False
+                                    if h_id == search_tid: is_win = (h_s > g_s)
+                                    else: is_win = (g_s > h_s)
+                                    
+                                    team_games.append({"date": raw_d, "res": "W" if is_win else "L"})
+                        
+                        team_games.sort(key=lambda x: x["date"], reverse=True)
+                        trend = [x["res"] for x in team_games[:5]]
+
+                    table_data.append({
+                        "Platz": rank, "Team": team_name, "W": wins, "L": losses,
+                        "Körbe": f"{pts_own}:{pts_opp}", "Diff": diff_str, "Trend": trend
+                    })
+                
+                table_data.sort(key=lambda x: x["Platz"])
+                return pd.DataFrame(table_data)
+        except: continue
+    return pd.DataFrame()
+
+def fetch_last_n_games_complete(team_id, season_id, n=3):
+    schedule = fetch_schedule(team_id, season_id)
+    if not schedule: return []
+    
+    def parse_dt(d):
+        try: return datetime.strptime(d['date'], "%d.%m.%Y %H:%M")
+        except: return datetime.min
+
+    played = [g for g in schedule if g.get('has_result')]
+    played.sort(key=lambda x: parse_dt(x), reverse=True)
+    selection = played[:n]
+    
+    detailed_games = []
+    for game in selection:
+        gid = game['id']
+        cached_box = fetch_game_boxscore(gid)
+        if cached_box:
+            box = cached_box.copy()
+            is_home_game = (str(game.get('homeTeamId')) == str(team_id))
+            box['meta_is_home'] = is_home_game
+            box['meta_opponent'] = game['guest'] if is_home_game else game['home']
+            box['meta_date'] = game['date']
+            box['meta_result'] = game['score']
+            detailed_games.append(box)
+    return detailed_games
