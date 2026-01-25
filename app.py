@@ -37,7 +37,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-from src.api import fetch_team_data, get_player_metadata_cached, fetch_schedule, fetch_game_boxscore, get_best_team_logo, fetch_league_standings, fetch_team_info_basic, fetch_game_details
+from src.api import fetch_team_data, get_player_metadata_cached, fetch_schedule, fetch_game_boxscore, get_best_team_logo, fetch_league_standings, fetch_team_info_basic, fetch_game_details, fetch_games_from_recent
 from src.html_gen import generate_header_html, generate_top3_html, generate_card_html, generate_team_stats_html, generate_custom_sections_html, generate_comparison_html
 from src.state_manager import export_session_state, load_session_state
 from src.analysis_ui import (
@@ -75,13 +75,13 @@ for key, default in [
 # --- NAVIGATION ---
 def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
 def go_scouting(): st.session_state.current_page = "scouting"
+def go_streaminfos(): st.session_state.current_page = "streaminfos"
 def go_comparison(): st.session_state.current_page = "comparison"
 def go_analysis(): st.session_state.current_page = "analysis"
 def go_player_comparison(): st.session_state.current_page = "player_comparison"
 def go_game_venue(): st.session_state.current_page = "game_venue" 
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
-def go_streaminfos(): st.session_state.current_page = "streaminfos"
 def go_team_stats(): 
     st.session_state.current_page = "team_stats"
     st.session_state.stats_team_id = None
@@ -99,7 +99,7 @@ def inject_custom_css():
         st.markdown("""<style>[data-testid="stAppViewContainer"] { background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.8)), url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg"); background-size: cover; background-attachment: fixed; } [data-testid="stHeader"] { background-color: rgba(0,0,0,0); }</style>""", unsafe_allow_html=True)
     else:
         st.markdown('<style>[data-testid="stAppViewContainer"] { background-image: none !important; background-color: #ffffff !important; } [data-testid="stHeader"] { background-color: #ffffff !important; }</style>', unsafe_allow_html=True)
-
+        
 def render_page_header(page_title):
     inject_custom_css()
     c1, c2 = st.columns([1, 4])
@@ -111,8 +111,8 @@ def render_page_header(page_title):
 # --- PAGES ---
 
 def render_streaminfos_page():
-    render_page_header("📡 Stream Overlay Konfigurator")
-    st.info("Generiere hier die Links für OBS Browserquellen (1920x1080).")
+    st.title("📡 Stream Overlay Konfigurator")
+    st.info("Generiere hier die Links für OBS. In OBS: Browserquelle -> URL einfügen -> 1920x1080.")
     
     south_teams = {k:v for k,v in TEAMS_DB.items() if v["staffel"] == "Süd"}
     team_opts = {v["name"]: k for k,v in south_teams.items()}
@@ -130,12 +130,12 @@ def render_streaminfos_page():
             if df_h is not None:
                 p_map_h = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_h.iterrows()}
                 sel_h = st.multiselect("Starter Heim", list(p_map_h.keys()), max_selections=5, key="p_h")
-                if st.button("🔗 Link HEIM generieren"):
+                if st.button("🔗 Link HEIM"):
                     p = {"view": "obs_starting5", "name": h_name, "logo_id": h_id, "coach": h_coach, "ids": ",".join([str(p_map_h[s]['PLAYER_ID']) for s in sel_h])}
                     for s in sel_h:
-                        p_d = p_map_h[s]
-                        p[f"n_{p_d['PLAYER_ID']}"] = p_d['NAME_FULL']
-                        p[f"nr_{p_d['PLAYER_ID']}"] = p_d['NR']
+                        p_data = p_map_h[s]
+                        p[f"n_{p_data['PLAYER_ID']}"] = p_data['NAME_FULL']
+                        p[f"nr_{p_data['PLAYER_ID']}"] = p_data['NR']
                     st.code(f"/?{urlencode(p)}")
 
         with c_g:
@@ -147,37 +147,29 @@ def render_streaminfos_page():
             if df_g is not None:
                 p_map_g = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_g.iterrows()}
                 sel_g = st.multiselect("Starter Gast", list(p_map_g.keys()), max_selections=5, key="p_g")
-                if st.button("🔗 Link GAST generieren"):
+                if st.button("🔗 Link GAST"):
                     p_g = {"view": "obs_starting5", "name": g_name, "logo_id": g_id, "coach": g_coach, "ids": ",".join([str(p_map_g[s]['PLAYER_ID']) for s in sel_g])}
                     for s in sel_g:
-                        p_d = p_map_g[s]
-                        p_g[f"n_{p_d['PLAYER_ID']}"] = p_d['NAME_FULL']
-                        p_g[f"nr_{p_d['PLAYER_ID']}"] = p_d['NR']
+                        p_data = p_map_g[s]
+                        p_g[f"n_{p_data['PLAYER_ID']}"] = p_data['NAME_FULL']
+                        p_g[f"nr_{p_data['PLAYER_ID']}"] = p_data['NR']
                     st.code(f"/?{urlencode(p_g)}")
 
     with tab2:
-        st.subheader("Tabelle")
-        if st.button("🔗 Link Tabelle Süd generieren"):
-            st.code("/?view=obs_standings&region=Süd")
+        if st.button("🔗 Link Tabelle Süd"): st.code("/?view=obs_standings&region=Süd")
 
     with tab3:
-        st.subheader("Teamvergleich")
-        c1, c2 = st.columns(2)
-        v_h = c1.selectbox("Team A", list(team_opts.keys()), key="v_h")
-        v_g = c2.selectbox("Team B", list(team_opts.keys()), key="v_g", index=1)
-        if st.button("🔗 Link Vergleich generieren"):
-            st.code(f"/?view=obs_comparison&hid={team_opts[v_h]}&gid={team_opts[v_g]}&hname={v_h}&gname={v_g}")
+        v_h = st.selectbox("Team A", list(team_opts.keys()), key="v_h")
+        v_g = st.selectbox("Team B", list(team_opts.keys()), key="v_g", index=1)
+        if st.button("🔗 Link Vergleich"): st.code(f"/?view=obs_comparison&hid={team_opts[v_h]}&gid={team_opts[v_g]}&hname={v_h}&gname={v_g}")
 
     with tab4:
-        st.subheader("Player of the Game")
-        from app import fetch_games_from_recent # Local import
         sel_t = st.selectbox("Team für Spielsuche", list(team_opts.keys()), key="potg_t")
         sch = fetch_schedule(team_opts[sel_t], CURRENT_SEASON_ID)
         game_opts = {f"{g['date']} | {g['home']} vs {g['guest']}": g['id'] for g in sch if g.get('id')}
         if game_opts:
             sel_g = st.selectbox("Spiel wählen", list(game_opts.keys()))
-            if st.button("🔗 Link POTG generieren"):
-                st.code(f"/?view=obs_potg&game_id={game_opts[sel_g]}")
+            if st.button("🔗 Link POTG"): st.code(f"/?view=obs_potg&game_id={game_opts[sel_g]}")
         else: st.warning("Keine Spiele gefunden.")
 
 def render_scouting_page():
@@ -290,7 +282,7 @@ def render_scouting_page():
                                 st.session_state.pdf_bytes = pdfkit.from_string(f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", False, options=opts); st.session_state.print_mode = True; st.rerun()
                             except Exception as e: st.error(f"PDF Error: {e}"); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
                         else: st.warning("PDFKit fehlt."); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
-
+                            
 def fetch_games_from_recent():
     from src.config import API_HEADERS
     endpoints = [
@@ -396,7 +388,7 @@ def render_live_page():
                         st.markdown(html, unsafe_allow_html=True)
                         btn_txt = "Zum Liveticker" if raw_status == "RUNNING" else "Zum Spiel / Stats"
                         if st.button(btn_txt, key=f"btn_live_{game['id']}", use_container_width=True): st.session_state.live_game_id = game['id']; st.rerun()
-
+                            
 def render_game_venue_page():
     render_page_header("📍 Spielorte der Teams"); c1, c2 = st.columns([1, 2])
     with c1: s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="venue_staffel"); t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}; to = {v["name"]: k for k, v in t.items()}
@@ -622,7 +614,7 @@ def render_player_comparison_page():
             with c1: st.markdown(f"<div style='text-align: right; {s1}'>{v1}</div>", unsafe_allow_html=True)
             with c2: st.markdown(f"<div style='text-align: center; background:#f8f9fa;'>{l}</div>", unsafe_allow_html=True)
             with c3: st.markdown(f"<div style='text-align: left; {s2}'>{v2}</div>", unsafe_allow_html=True)
-
+                
 def render_home():
     inject_custom_css()
     st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>{BASKETBALL_ICON} DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
