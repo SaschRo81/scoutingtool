@@ -270,6 +270,7 @@ def fetch_team_data(team_id, season_id):
 
     return df, ts
 
+@st.cache_data(ttl=300)
 def fetch_schedule(team_id, season_id):
     urls = [
         f"https://api-s.dbbl.scb.world/games?currentPage=1&seasonTeamId={team_id}&pageSize=1000&gameType=all&seasonId={season_id}",
@@ -303,6 +304,7 @@ def fetch_schedule(team_id, season_id):
         except: pass
     return []
 
+@st.cache_data(ttl=10)
 def fetch_game_boxscore(game_id):
     for subdomain in ["api-s", "api-n"]:
         try:
@@ -311,6 +313,7 @@ def fetch_game_boxscore(game_id):
         except: pass
     return None
 
+@st.cache_data(ttl=10)
 def fetch_game_details(game_id):
     for subdomain in ["api-s", "api-n"]:
         try:
@@ -362,7 +365,50 @@ def fetch_season_games(season_id):
         except: pass
     return all_games
 
-# --- NEUE FUNKTIONEN FÜR TREND & TABELLE ---
+def fetch_games_from_recent():
+    endpoints = [
+        "https://api-s.dbbl.scb.world/games/recent?slotSize=400",
+        "https://api-n.dbbl.scb.world/games/recent?slotSize=400"
+    ]
+    games_map = {} 
+    for url in endpoints:
+        try:
+            r = requests.get(url, headers=API_HEADERS, timeout=3)
+            if r.status_code == 200:
+                data = r.json()
+                lists_to_check = []
+                if isinstance(data.get("past"), list): lists_to_check.extend(data["past"])
+                if isinstance(data.get("present"), list): lists_to_check.extend(data["present"])
+                if isinstance(data.get("future"), list): lists_to_check.extend(data["future"])
+                for g in lists_to_check:
+                    gid = g.get("id")
+                    if not gid or gid in games_map: continue 
+                    raw_d = g.get("scheduledTime", "")
+                    dt_obj = None; d_disp = "-"; date_only = "-"
+                    if raw_d:
+                        try:
+                            clean_ts = raw_d.replace("Z", "+00:00")
+                            dt_obj = datetime.fromisoformat(clean_ts).astimezone(pytz.timezone("Europe/Berlin"))
+                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
+                            date_only = dt_obj.strftime("%d.%m.%Y")
+                        except: pass
+                    res = g.get("result", {}) or {}
+                    h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
+                    g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
+                    score_str = f"{h_s}:{g_s}" if (h_s is not None and g_s is not None) else "-:-"
+                    status = g.get("status", "SCHEDULED")
+                    if h_s is not None and g_s is not None and status == "SCHEDULED": status = "ENDED"
+                    games_map[gid] = {
+                        "id": gid, "date": d_disp, "date_only": date_only, "datetime": dt_obj,
+                        "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
+                        "score": score_str, "status": status, "home_score": h_s, "guest_score": g_s
+                    }
+        except Exception as e: pass
+    result_list = list(games_map.values())
+    result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
+    return result_list
+
+# --- NEW: FUNCTIONS FOR TREND CALCULATION ---
 
 @st.cache_data(ttl=600)
 def fetch_season_matches(season_id, region="Süd"):
@@ -387,7 +433,6 @@ def fetch_league_standings(season_id, league_selection):
     else:
         urls.append(f"https://api-s.dbbl.scb.world/standings?seasonId={season_id}")
     
-    # Alle Spiele für Trend
     all_season_games = fetch_season_matches(season_id, league_selection)
 
     for url in urls:
@@ -454,45 +499,29 @@ def fetch_league_standings(season_id, league_selection):
         except: continue
     return pd.DataFrame()
 
-def fetch_games_from_recent():
-    endpoints = [
-        "https://api-s.dbbl.scb.world/games/recent?slotSize=400",
-        "https://api-n.dbbl.scb.world/games/recent?slotSize=400"
-    ]
-    games_map = {} 
-    for url in endpoints:
-        try:
-            r = requests.get(url, headers=API_HEADERS, timeout=3)
-            if r.status_code == 200:
-                data = r.json()
-                lists_to_check = []
-                if isinstance(data.get("past"), list): lists_to_check.extend(data["past"])
-                if isinstance(data.get("present"), list): lists_to_check.extend(data["present"])
-                if isinstance(data.get("future"), list): lists_to_check.extend(data["future"])
-                for g in lists_to_check:
-                    gid = g.get("id")
-                    if not gid or gid in games_map: continue 
-                    raw_d = g.get("scheduledTime", "")
-                    dt_obj = None; d_disp = "-"; date_only = "-"
-                    if raw_d:
-                        try:
-                            clean_ts = raw_d.replace("Z", "+00:00")
-                            dt_obj = datetime.fromisoformat(clean_ts).astimezone(pytz.timezone("Europe/Berlin"))
-                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
-                            date_only = dt_obj.strftime("%d.%m.%Y")
-                        except: pass
-                    res = g.get("result", {}) or {}
-                    h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
-                    g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
-                    score_str = f"{h_s}:{g_s}" if (h_s is not None and g_s is not None) else "-:-"
-                    status = g.get("status", "SCHEDULED")
-                    if h_s is not None and g_s is not None and status == "SCHEDULED": status = "ENDED"
-                    games_map[gid] = {
-                        "id": gid, "date": d_disp, "date_only": date_only, "datetime": dt_obj,
-                        "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
-                        "score": score_str, "status": status, "home_score": h_s, "guest_score": g_s
-                    }
-        except Exception as e: pass
-    result_list = list(games_map.values())
-    result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
-    return result_list
+def fetch_last_n_games_complete(team_id, season_id, n=3):
+    schedule = fetch_schedule(team_id, season_id)
+    if not schedule: return []
+    
+    def parse_dt(d):
+        try: return datetime.strptime(d['date'], "%d.%m.%Y %H:%M")
+        except: return datetime.min
+
+    played = [g for g in schedule if g.get('has_result')]
+    played.sort(key=lambda x: parse_dt(x), reverse=True)
+    selection = played[:n]
+    
+    detailed_games = []
+    for game in selection:
+        gid = game['id']
+        cached_box = fetch_game_boxscore(gid)
+        if cached_box:
+            box = cached_box.copy()
+            is_home_game = (str(game.get('homeTeamId')) == str(team_id))
+            box['meta_is_home'] = is_home_game
+            box['meta_opponent'] = game['guest'] if is_home_game else game['home']
+            box['meta_date'] = game['date']
+            box['meta_result'] = game['score']
+            detailed_games.append(box)
+    return detailed_games
+# --- END OF FILE src/api.py ---
