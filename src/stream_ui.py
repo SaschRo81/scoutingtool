@@ -42,7 +42,7 @@ body {
     width: 1550px; display: flex; flex-direction: column; z-index: 9999;
 }
 .header-bar {
-    background: linear-gradient(90deg, #001f5b 0%, #00338d 100%); /* Header bleibt dunkelblau */
+    background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
     color: white; padding: 12px 35px; display: flex; align-items: center; justify-content: space-between;
     border-top: 5px solid #ff6600; border-radius: 10px 10px 0 0; 
     box-shadow: 0 5px 15px rgba(0,0,0,0.3);
@@ -56,9 +56,9 @@ body {
 /* Starting 5 Container */
 .players-row {
     display: flex; justify-content: space-between; 
-    background: white; /* HIER WEISS */
+    background: white; 
     padding: 20px; border-radius: 0 0 10px 10px;
-    border-bottom: 5px solid #001f5b; /* Abschlusskante */
+    border-bottom: 5px solid #001f5b;
 }
 .player-card { width: 19%; text-align: center; position: relative; display: flex; flex-direction: column; align-items: center; }
 .img-wrapper { position: relative; width: 150px; height: 150px; margin-bottom: 10px; }
@@ -70,39 +70,41 @@ body {
 }
 .p-name { 
     font-size: 20px; font-weight: bold; font-family: sans-serif; 
-    color: #001f5b; /* DUNKLE SCHRIFT */
+    color: #001f5b; 
     text-transform: uppercase; 
-    text-shadow: none; /* Kein Shadow mehr nötig auf Weiß */
+    text-shadow: none;
 }
 
-/* TABELLE DESIGN */
+/* --- TABELLE & CONTENT WRAPPER --- */
 .obs-content-wrapper {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: 1400px; 
-    background: white; /* HIER WEISS */
+    background: white; 
     padding: 0;
     border-radius: 15px;
     border: 3px solid #00338d;
-    color: #333; /* DUNKLE SCHRIFT */
+    color: #333; 
     font-family: sans-serif;
-    overflow: hidden;
+    /* overflow: hidden;  <-- ENTFERNT, damit nichts abgeschnitten wird */
     box-shadow: 0 0 40px rgba(0,0,0,0.5);
+    z-index: 10000;
 }
+
 .obs-header-row {
-    background: linear-gradient(90deg, #001f5b 0%, #00338d 100%); /* Header bleibt dunkelblau */
+    background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
     color: white; 
     padding: 10px 30px; 
     display: flex;
     align-items: center;
     justify-content: center; 
     border-bottom: 5px solid #ff6600;
-    height: 120px; 
+    min-height: 100px; 
 }
 .header-title {
-    font-size: 50px; 
+    font-size: 42px; 
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 2px;
@@ -110,19 +112,35 @@ body {
     text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
 }
 
-.obs-table { width: 100%; font-size: 26px; border-collapse: collapse; text-align: center; }
-.obs-table th { 
-    background: #eee; /* Heller Header für Tabelle */
-    color: #001a4d; /* Dunkle Schrift */
+/* Styles für ALLE Tabellen im Wrapper (Standings UND Comparison) */
+.obs-content-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 24px;
+    text-align: center;
+    margin-bottom: 0; /* Kein Rand unten, damit es bündig ist */
+}
+.obs-content-wrapper th { 
+    background: #eee; 
+    color: #001a4d; 
     padding: 15px; text-transform: uppercase; font-size: 22px; 
     border-bottom: 3px solid #001a4d; 
 }
-.obs-table td { 
+.obs-content-wrapper td { 
     padding: 12px; border-bottom: 1px solid #ccc; font-weight: bold; vertical-align: middle; 
-    color: #333; /* DUNKLE SCHRIFT */
+    color: #333;
 }
-/* Alternierende Zeilenfarbe für bessere Lesbarkeit */
-.obs-table tr:nth-child(even) { background-color: #f9f9f9; }
+.obs-content-wrapper tr:nth-child(even) { background-color: #f9f9f9; }
+.obs-content-wrapper tr:last-child td { border-bottom: none; } /* Letzte Zeile ohne Strich */
+
+/* Spezifisch für Comparison Titles in generate_comparison_html falls vorhanden */
+.obs-content-wrapper h2, .obs-content-wrapper h3 {
+    text-align: center;
+    color: #00338d;
+    text-transform: uppercase;
+    margin-top: 20px;
+    font-size: 32px;
+}
 
 /* Trend Bubbles */
 .trend-w, .trend-l {
@@ -136,14 +154,14 @@ body {
 /* POTG */
 .potg-card {
     width: 450px; margin: 100px auto; 
-    background: white; /* HIER WEISS */
+    background: white;
     border: 4px solid #ff6600; border-radius: 20px; padding: 30px; text-align: center;
-    color: #333; /* DUNKLE SCHRIFT */
+    color: #333; 
     box-shadow: 0 0 30px rgba(0,0,0,0.5); font-family: sans-serif;
 }
 .potg-stat-box {
     display: flex; justify-content: center; gap: 15px; margin-top: 25px; 
-    background: #f0f0f0; /* Hellgrau Box */
+    background: #f0f0f0; 
     padding: 15px; border-radius: 10px;
     border: 1px solid #ddd;
 }
@@ -194,8 +212,9 @@ def render_obs_standings():
             <div class='obs-header-row'>
                 <span class='header-title'>{title_text}</span>
             </div>
+            <table>
+            <thead><tr><th style='width:60px;'>#</th><th style='text-align:left;'>Team</th><th>Sp</th><th>S</th><th>N</th><th>Diff</th></tr></thead><tbody>
         """
-        html += "<table class='obs-table'><thead><tr><th style='width:60px;'>#</th><th style='text-align:left;'>Team</th><th>Sp</th><th>S</th><th>N</th><th>Diff</th></tr></thead><tbody>"
         
         for _, row in df.iterrows():
             platz = row.get('Platz', 0)
@@ -208,16 +227,13 @@ def render_obs_standings():
             try: rank_val = int(platz)
             except: rank_val = 99
             
-            # Farb-Logik für Hintergründe der Zeilen
+            # Farb-Logik
             row_style = ""
             if rank_val <= 4:
-                # Grün (Top 4) - Sehr helles Grün für Weiß-Hintergrund
                 row_style = "background-color: #e8f5e9; border-left: 8px solid #28a745;"
             elif rank_val <= 8:
-                # Grau (Mittelfeld) - Sehr helles Grau
                 row_style = "background-color: #f8f9fa; border-left: 8px solid #6c757d;"
             else:
-                # Rot (Abstieg) - Sehr helles Rot
                 row_style = "background-color: #fce8e6; border-left: 8px solid #dc3545;"
 
             diff_style = "color:#28a745;" if (str(diff).startswith("+")) else ("color:#dc3545;" if str(diff).startswith("-") else "color:#999;")
@@ -231,12 +247,27 @@ def render_obs_comparison():
     st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
     hid = st.query_params.get("hid"); gid = st.query_params.get("gid")
     hname = st.query_params.get("hname"); gname = st.query_params.get("gname")
+    
     if hid and gid:
         _, ts_h = fetch_team_data(hid, "2025")
         _, ts_g = fetch_team_data(gid, "2025")
-        st.markdown("<div class='obs-content-wrapper' style='padding:20px;'>", unsafe_allow_html=True)
-        st.markdown(generate_comparison_html(ts_h, ts_g, hname, gname), unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Hier generieren wir den HTML Content für den Vergleich
+        content_html = generate_comparison_html(ts_h, ts_g, hname, gname)
+        
+        # Wir fügen den Header manuell hinzu, falls generate_comparison_html keinen Header liefert
+        # Oder wir wrappen es einfach sauber, damit die Table Styles greifen
+        html = f"""
+        <div class='obs-content-wrapper' style='padding-bottom: 20px;'>
+             <div class='obs-header-row'>
+                <span class='header-title'>Head-to-Head (Saison-Schnitt)</span>
+            </div>
+            <div style='padding: 0;'>
+                {content_html}
+            </div>
+        </div>
+        """
+        st.markdown(html, unsafe_allow_html=True)
 
 def render_obs_potg():
     st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
