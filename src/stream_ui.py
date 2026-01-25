@@ -166,16 +166,57 @@ def render_obs_potg():
     if not gid: return
     box = fetch_game_boxscore(gid)
     if not box: return
+    
     players = []
     for team_key in ["homeTeam", "guestTeam"]:
         for p in box.get(team_key, {}).get("playerStats", []):
             try:
                 eff = float(p.get("efficiency", 0))
-                players.append({"id": str(p.get("seasonPlayer", {}).get("id")), "name": f"{p.get('seasonPlayer', {}).get('firstName','')} {p.get('seasonPlayer', {}).get('lastName','')}", "nr": p.get('seasonPlayer', {}).get('shirtNumber', ''), "eff": eff, "pts": int(p.get("points", 0))})
+                sec = int(p.get("secondsPlayed") or 0)
+                min_str = f"{sec//60:02d}:{sec%60:02d}"
+                reb = int(p.get("totalRebounds") or 0)
+                
+                players.append({
+                    "id": str(p.get("seasonPlayer", {}).get("id")),
+                    "name": f"{p.get('seasonPlayer', {}).get('firstName','')} {p.get('seasonPlayer', {}).get('lastName','')}",
+                    "nr": p.get('seasonPlayer', {}).get('shirtNumber', ''),
+                    "eff": eff,
+                    "pts": int(p.get("points", 0)),
+                    "reb": reb,
+                    "min": min_str
+                })
             except: pass
+            
     if players:
         mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
-        html = f"<div class='potg-card'><h2 style='color:#ff6600;'>PLAYER OF THE GAME</h2><img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid white;'><br><h1>{mvp['name']}</h1><h2>#{mvp['nr']}</h2><div style='display:flex; justify-content:center; gap:20px; margin-top:20px; background:rgba(255,255,255,0.1); padding:10px; border-radius:10px;'><div>PTS<br><b>{mvp['pts']}</b></div><div>EFF<br><b>{mvp['eff']:.0f}</b></div></div></div>"
+        
+        html = f"""
+        <div class='potg-card'>
+            <h2 style='color:#ff6600; margin:0 0 15px 0; font-size:24px;'>PLAYER OF THE GAME</h2>
+            <img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid white; object-fit:cover;'>
+            <h1 style='margin:15px 0 5px 0; font-size:32px;'>{mvp['name']}</h1>
+            <h2 style='margin:0; color:#ccc;'>#{mvp['nr']}</h2>
+            
+            <div class='potg-stat-box'>
+                <div class='potg-stat-item'>
+                    <div class='potg-stat-label'>MIN</div>
+                    <div class='potg-stat-val'>{mvp['min']}</div>
+                </div>
+                <div class='potg-stat-item'>
+                    <div class='potg-stat-label'>PTS</div>
+                    <div class='potg-stat-val'>{mvp['pts']}</div>
+                </div>
+                <div class='potg-stat-item'>
+                    <div class='potg-stat-label'>REB</div>
+                    <div class='potg-stat-val'>{mvp['reb']}</div>
+                </div>
+                <div class='potg-stat-item'>
+                    <div class='potg-stat-label'>EFF</div>
+                    <div class='potg-stat-val'>{mvp['eff']:.0f}</div>
+                </div>
+            </div>
+        </div>
+        """
         st.markdown(html, unsafe_allow_html=True)
