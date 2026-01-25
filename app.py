@@ -10,26 +10,16 @@ from urllib.parse import quote_plus, urlencode
 import base64
 import pytz
 
-# --- NEU: STREAM UI IMPORTE & ROUTING ---
-# Diese Funktionen müssen in src/stream_ui.py vorhanden sein
-from src.stream_ui import render_obs_starting5, render_obs_standings, render_obs_potg, render_obs_comparison
+# --- IMPORT STREAM UI FUNKTIONEN ---
+from src.stream_ui import render_obs_starting5, render_obs_potg, render_obs_standings, render_obs_comparison
 
 # 1. OBS ROUTING (GANZ OBEN)
-# Fängt Anfragen für OBS ab, bevor das normale Dashboard geladen wird.
 if "view" in st.query_params:
     view_mode = st.query_params["view"]
-    if view_mode == "obs_starting5":
-        render_obs_starting5()
-        st.stop()
-    elif view_mode == "obs_standings":
-        render_obs_standings()
-        st.stop()
-    elif view_mode == "obs_potg":
-        render_obs_potg()
-        st.stop()
-    elif view_mode == "obs_comparison":
-        render_obs_comparison()
-        st.stop()
+    if view_mode == "obs_starting5": render_obs_starting5(); st.stop()
+    elif view_mode == "obs_standings": render_obs_standings(); st.stop()
+    elif view_mode == "obs_comparison": render_obs_comparison(); st.stop()
+    elif view_mode == "obs_potg": render_obs_potg(); st.stop()
 
 # --- STANDARDFUNKTIONEN & IMPORTE ---
 try:
@@ -39,18 +29,13 @@ except ImportError:
     HAS_PDFKIT = False
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-from src.utils import get_logo_url, optimize_image_base64
 from src.api import (
     fetch_team_data, get_player_metadata_cached, fetch_schedule, 
-    fetch_game_boxscore, fetch_game_details, fetch_team_info_basic,
-    fetch_season_games, get_best_team_logo, fetch_league_standings,
-    fetch_games_from_recent
+    fetch_game_boxscore, get_best_team_logo, fetch_league_standings, 
+    fetch_team_info_basic, fetch_game_details, fetch_games_from_recent, 
+    fetch_season_games
 )
-from src.html_gen import (
-    generate_header_html, generate_top3_html, generate_card_html, 
-    generate_team_stats_html, generate_custom_sections_html,
-    generate_comparison_html
-)
+from src.html_gen import generate_header_html, generate_top3_html, generate_card_html, generate_team_stats_html, generate_custom_sections_html, generate_comparison_html
 from src.state_manager import export_session_state, load_session_state
 from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
@@ -62,31 +47,29 @@ from src.analysis_ui import (
 # --- KONFIGURATION ---
 CURRENT_SEASON_ID = "2025" 
 BASKETBALL_ICON = "🏀"
-
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon=BASKETBALL_ICON)
 
-# --- STANDARDWERTE FÜR SCOUTING REPORT ---
+# DEFAULTS
 DEFAULT_OFFENSE = [{"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}, {"Fokus": "Spacing", "Beschreibung": "swing or skip the ball to get it inside"}, {"Fokus": "Rules", "Beschreibung": "Stick to our offense rules"}, {"Fokus": "Automatics", "Beschreibung": "use cuts and shifts to get movement on court"}, {"Fokus": "Share", "Beschreibung": "the ball / always look for an extra pass"}, {"Fokus": "Set Offense", "Beschreibung": "look inside a lot"}, {"Fokus": "Pick´n Roll", "Beschreibung": "watch out for the half rol against the hetch"}, {"Fokus": "Pace", "Beschreibung": "Execution over speed, take care of the ball"}]
 DEFAULT_DEFENSE = [{"Fokus": "Rebound", "Beschreibung": "box out!"}, {"Fokus": "Transition", "Beschreibung": "Slow the ball down! Pick up the ball early!"}, {"Fokus": "Communication", "Beschreibung": "Talk on positioning, helpside & on screens"}, {"Fokus": "Positioning", "Beschreibung": "close the middle on close outs and drives"}, {"Fokus": "Pick´n Roll", "Beschreibung": "red (yellow, last 8 sec. from shot clock)"}, {"Fokus": "DHO", "Beschreibung": "aggressive switch - same size / gap - small and big"}, {"Fokus": "Offball screens", "Beschreibung": "yellow"}]
 DEFAULT_ABOUT = [{"Fokus": "Be ready", "Beschreibung": "for wild caotic / a lot of 1-1 and shooting"}, {"Fokus": "Stay ready", "Beschreibung": "no matter what happens Don’t be bothered by calls/no calls"}, {"Fokus": "No matter what", "Beschreibung": "the score is, we always give 100%."}, {"Fokus": "Together", "Beschreibung": "Fight for & trust in each other!"}, {"Fokus": "Take care", "Beschreibung": "of the ball no easy turnovers to prevent easy fastbreaks!"}, {"Fokus": "Halfcourt", "Beschreibung": "Take responsibility! Stop them as a team!"}, {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"}]
 
-# Session State Initialisierung
+# Session State
 for key, default in [
     ("current_page", "home"), ("print_mode", False), ("final_html", ""), 
     ("pdf_bytes", None), ("roster_df", None), ("team_stats", None), 
     ("game_meta", {}), ("report_filename", "scouting_report.pdf"), 
-    ("saved_notes", {}), ("saved_colors", {}), 
+    ("saved_notes", {}), ("saved_colors", {}), ("selected_game_id", None), 
+    ("generated_ai_report", None), ("live_game_id", None), ("stats_team_id", None), 
+    ("live_view_mode", "today"), ("live_date_filter", date.today()), 
+    ("analysis_team_id", None), ("stats_league_selection", None),
     ("facts_offense", pd.DataFrame(DEFAULT_OFFENSE)), 
     ("facts_defense", pd.DataFrame(DEFAULT_DEFENSE)), 
-    ("facts_about", pd.DataFrame(DEFAULT_ABOUT)),
-    ("selected_game_id", None), ("generated_ai_report", None), 
-    ("live_game_id", None), ("stats_team_id", None), 
-    ("live_view_mode", "today"), ("live_date_filter", date.today()), 
-    ("analysis_team_id", None), ("stats_league_selection", None)
+    ("facts_about", pd.DataFrame(DEFAULT_ABOUT))
 ]:
     if key not in st.session_state: st.session_state[key] = default
 
-# --- NAVIGATION HELPER ---
+# --- NAVIGATION ---
 def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
 def go_scouting(): st.session_state.current_page = "scouting"
 def go_comparison(): st.session_state.current_page = "comparison"
@@ -104,53 +87,28 @@ def go_team_analysis():
     st.session_state.current_page = "team_analysis"
     st.session_state.analysis_team_id = None
 
-# --- CSS INJECTION ---
 def inject_custom_css():
-    base_css = """
-    <style>
-    div.stButton > button {
-        width: 100%; height: 3em; font-size: 16px; font-weight: bold; border-radius: 8px;
-        box-shadow: 0px 2px 4px rgba(0,0,0,0.1); background-color: #ffffff !important; 
-        color: #333333 !important; border: 1px solid #ddd; opacity: 1 !important; 
-    }
-    div.stButton > button:hover { transform: scale(1.01); border-color: #ff4b4b; color: #ff4b4b !important; }
-    .title-container {
-        background-color: #ffffff; padding: 20px; border-radius: 15px; 
-        box-shadow: 0px 4px 6px rgba(0,0,0,0.1); text-align: center; 
-        margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto; 
-        border: 1px solid #f0f0f0; opacity: 1 !important;
-    }
-    </style>
-    """
-    st.markdown(base_css, unsafe_allow_html=True)
+    st.markdown("""<style>
+    div.stButton > button { width: 100%; height: 3em; font-weight: bold; border-radius: 8px; }
+    .title-container { background-color: #ffffff; padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 40px; border: 1px solid #f0f0f0; }
+    </style>""", unsafe_allow_html=True)
     if st.session_state.current_page == "home":
-        bg_css = """
-        <style>
-        [data-testid="stAppViewContainer"] {
-            background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.8)), 
-                              url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg");
-            background-size: cover; background-position: center; background-repeat: no-repeat;
-            background-attachment: fixed;
-        }
-        [data-testid="stHeader"] { background-color: rgba(0,0,0,0); }
-        </style>
-        """
-        st.markdown(bg_css, unsafe_allow_html=True)
+        st.markdown("""<style>[data-testid="stAppViewContainer"] { background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.8)), url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg"); background-size: cover; background-attachment: fixed; } [data-testid="stHeader"] { background-color: rgba(0,0,0,0); }</style>""", unsafe_allow_html=True)
     else:
-        st.markdown('<style>[data-testid="stAppViewContainer"] { background-image: none !important; background-color: #ffffff !important; }[data-testid="stHeader"] { background-color: #ffffff !important; }</style>', unsafe_allow_html=True)
+        st.markdown('<style>[data-testid="stAppViewContainer"] { background-image: none !important; background-color: #ffffff !important; } [data-testid="stHeader"] { background-color: #ffffff !important; }</style>', unsafe_allow_html=True)
 
 def render_page_header(page_title):
     inject_custom_css()
     c1, c2 = st.columns([1, 4])
     with c1: st.button("🏠 Home", on_click=go_home, key=f"hdr_home_{st.session_state.current_page}")
-    with c2: st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro by Sascha Rosanke</h3>", unsafe_allow_html=True)
+    with c2: st.markdown("<h3 style='text-align: right; color: #666;'>DBBL Scouting Pro</h3>", unsafe_allow_html=True)
     st.title(page_title)
     st.divider()
 
 # --- ADMIN SEITE: STREAM INFOS ---
 def render_streaminfos_page():
-    render_page_header("📡 Stream Overlay Konfigurator")
-    st.info("Generiere hier die Links für OBS Browserquellen (1920x1080).")
+    st.title("📡 Stream Overlay Konfigurator")
+    st.info("Generiere hier die Links für OBS. In OBS: Browserquelle -> URL einfügen -> 1920x1080.")
     
     south_teams = {k:v for k,v in TEAMS_DB.items() if v["staffel"] == "Süd"}
     team_opts = {v["name"]: k for k,v in south_teams.items()}
@@ -161,36 +119,36 @@ def render_streaminfos_page():
         c_h, c_g = st.columns(2)
         with c_h:
             st.subheader("🏠 Heimteam")
-            h_name = st.selectbox("Team wählen", list(team_opts.keys()), key="s_h")
+            h_name = st.selectbox("Heimteam", list(team_opts.keys()), key="s_h")
             h_id = team_opts[h_name]
-            h_coach = st.text_input("Head Coach Heim", key="c_h")
+            h_coach = st.text_input("Coach Heim", key="c_h")
             df_h, _ = fetch_team_data(h_id, CURRENT_SEASON_ID)
             if df_h is not None:
                 p_map_h = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_h.iterrows()}
-                sel_h = st.multiselect("Starter Heim", list(p_map_h.keys()), max_selections=5, key="p_h")
+                sel_h = st.multiselect("Starting 5 Heim", list(p_map_h.keys()), max_selections=5, key="p_h")
                 if st.button("🔗 Link HEIM"):
                     p = {"view": "obs_starting5", "name": h_name, "logo_id": h_id, "coach": h_coach, "ids": ",".join([str(p_map_h[s]['PLAYER_ID']) for s in sel_h])}
                     for s in sel_h:
-                        p_d = p_map_h[s]
-                        p[f"n_{p_d['PLAYER_ID']}"] = p_d['NAME_FULL']
-                        p[f"nr_{p_d['PLAYER_ID']}"] = p_d['NR']
+                        p_data = p_map_h[s]
+                        p[f"n_{p_data['PLAYER_ID']}"] = p_data['NAME_FULL']
+                        p[f"nr_{p_data['PLAYER_ID']}"] = p_data['NR']
                     st.code(f"/?{urlencode(p)}")
 
         with c_g:
             st.subheader("🚌 Gastteam")
-            g_name = st.selectbox("Team wählen", list(team_opts.keys()), key="s_g", index=1)
+            g_name = st.selectbox("Gastteam", list(team_opts.keys()), index=1, key="s_g")
             g_id = team_opts[g_name]
-            g_coach = st.text_input("Head Coach Gast", key="c_g")
+            g_coach = st.text_input("Coach Gast", key="c_g")
             df_g, _ = fetch_team_data(g_id, CURRENT_SEASON_ID)
             if df_g is not None:
                 p_map_g = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_g.iterrows()}
-                sel_g = st.multiselect("Starter Gast", list(p_map_g.keys()), max_selections=5, key="p_g")
+                sel_g = st.multiselect("Starting 5 Gast", list(p_map_g.keys()), max_selections=5, key="p_g")
                 if st.button("🔗 Link GAST"):
                     p_g = {"view": "obs_starting5", "name": g_name, "logo_id": g_id, "coach": g_coach, "ids": ",".join([str(p_map_g[s]['PLAYER_ID']) for s in sel_g])}
                     for s in sel_g:
-                        p_d = p_map_g[s]
-                        p_g[f"n_{p_d['PLAYER_ID']}"] = p_d['NAME_FULL']
-                        p_g[f"nr_{p_d['PLAYER_ID']}"] = p_d['NR']
+                        p_data = p_map_g[s]
+                        p_g[f"n_{p_data['PLAYER_ID']}"] = p_data['NAME_FULL']
+                        p_g[f"nr_{p_data['PLAYER_ID']}"] = p_data['NR']
                     st.code(f"/?{urlencode(p_g)}")
 
     with tab2:
@@ -206,7 +164,6 @@ def render_streaminfos_page():
 
     with tab4:
         st.subheader("Player of the Game")
-        from src.api import fetch_games_from_recent
         all_g = fetch_games_from_recent()
         game_opts = {f"{g['date']} | {g['home']} vs {g['guest']}": g['id'] for g in all_g}
         if game_opts:
@@ -215,46 +172,25 @@ def render_streaminfos_page():
                 st.code(f"/?view=obs_potg&game_id={game_opts[sel_g]}")
         else: st.warning("Keine Spiele gefunden.")
 
-# --- HAUPTSEITE (DASHBOARD) ---
 def render_home():
     inject_custom_css()
-    st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>{BASKETBALL_ICON} DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
-    
-    # 3-Spalten-Layout für bessere Übersicht (wie im guten Screenshot)
+    st.title(f"{BASKETBALL_ICON} DBBL Scouting Dashboard")
     c1, c2, c3 = st.columns(3)
-    
     with c1:
-        if st.button("📝 PreGame Report", use_container_width=True): go_scouting(); st.rerun()
+        if st.button("📝 PreGame Report"): st.session_state.current_page = "scouting"; st.rerun()
     with c2:
-        if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
+        if st.button("🔴 Live Center"): st.session_state.current_page = "live"; st.rerun()
     with c3:
-        if st.button("📡 Stream Infos (OBS)", use_container_width=True): go_streaminfos(); st.rerun()
+        if st.button("📡 Stream Infos (OBS)"): go_streaminfos(); st.rerun()
     
-    st.write("") # Abstand
-    
+    st.divider()
     c4, c5, c6 = st.columns(3)
     with c4:
-        if st.button("🧠 Team Spielanalyse", use_container_width=True): go_team_analysis(); st.rerun()
+        if st.button("🧠 Team Spielanalyse"): st.session_state.current_page = "team_analysis"; st.rerun()
     with c5:
-        if st.button("📊 Head-to-Head", use_container_width=True): go_comparison(); st.rerun()
+        if st.button("📊 Head-to-Head"): st.session_state.current_page = "comparison"; st.rerun()
     with c6:
-        if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
-
-    st.write("") # Abstand
-    
-    c7, c8, c9 = st.columns(3)
-    with c7:
-        if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
-    with c8:
-        if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
-    with c9:
-         if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
-
-    st.write("")
-    
-    c10, _, _ = st.columns(3)
-    with c10:
-        if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
+        if st.button("📈 Team Stats"): st.session_state.current_page = "team_stats"; st.rerun()
 
 # --- OTHER PAGES ---
 def render_scouting_page():
@@ -398,7 +334,6 @@ def render_live_page():
             if st.button("Vergangene Spiele", type="primary" if st.session_state.live_view_mode == "past" else "secondary", use_container_width=True):
                 st.session_state.live_view_mode = "past"; st.rerun()
         st.divider()
-        from src.api import fetch_games_from_recent
         with st.spinner("Lade Spielplan (Nord & Süd)..."): all_games = fetch_games_from_recent()
         games_to_show = []
         display_info = ""
@@ -669,3 +604,5 @@ elif st.session_state.current_page == "live": render_live_page()
 elif st.session_state.current_page == "team_stats": render_team_stats_page()
 elif st.session_state.current_page == "team_analysis": render_team_analysis_page()
 elif st.session_state.current_page == "streaminfos": render_streaminfos_page()
+elif st.session_state.current_page == "live": render_live_view(None) # Platzhalter
+# --- END OF FILE app.py ---
