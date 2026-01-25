@@ -29,12 +29,7 @@ except ImportError:
     HAS_PDFKIT = False
 
 from src.config import VERSION, TEAMS_DB, SEASON_ID, CSS_STYLES
-from src.api import (
-    fetch_team_data, get_player_metadata_cached, fetch_schedule, 
-    fetch_game_boxscore, get_best_team_logo, fetch_league_standings, 
-    fetch_team_info_basic, fetch_game_details, fetch_games_from_recent, 
-    fetch_season_games
-)
+from src.api import fetch_team_data, get_player_metadata_cached, fetch_schedule, fetch_game_boxscore, get_best_team_logo, fetch_league_standings, fetch_team_info_basic, fetch_game_details, fetch_games_from_recent, fetch_season_games
 from src.html_gen import generate_header_html, generate_top3_html, generate_card_html, generate_team_stats_html, generate_custom_sections_html, generate_comparison_html
 from src.state_manager import export_session_state, load_session_state
 from src.analysis_ui import (
@@ -164,6 +159,7 @@ def render_streaminfos_page():
 
     with tab4:
         st.subheader("Player of the Game")
+        from src.api import fetch_games_from_recent
         all_g = fetch_games_from_recent()
         game_opts = {f"{g['date']} | {g['home']} vs {g['guest']}": g['id'] for g in all_g}
         if game_opts:
@@ -174,23 +170,42 @@ def render_streaminfos_page():
 
 def render_home():
     inject_custom_css()
-    st.title(f"{BASKETBALL_ICON} DBBL Scouting Dashboard")
+    st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>{BASKETBALL_ICON} DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
+    
+    # 3-Spalten-Layout (Clean & Symmetrisch)
     c1, c2, c3 = st.columns(3)
     with c1:
-        if st.button("📝 PreGame Report"): st.session_state.current_page = "scouting"; st.rerun()
+        if st.button("📝 PreGame Report", use_container_width=True): go_scouting(); st.rerun()
     with c2:
-        if st.button("🔴 Live Center"): st.session_state.current_page = "live"; st.rerun()
+        if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
     with c3:
-        if st.button("📡 Stream Infos (OBS)"): go_streaminfos(); st.rerun()
+        if st.button("📡 Stream Infos (OBS)", use_container_width=True): go_streaminfos(); st.rerun()
     
-    st.divider()
+    st.write("") # Abstand
+    
     c4, c5, c6 = st.columns(3)
     with c4:
-        if st.button("🧠 Team Spielanalyse"): st.session_state.current_page = "team_analysis"; st.rerun()
+        if st.button("🧠 Team Spielanalyse", use_container_width=True): go_team_analysis(); st.rerun()
     with c5:
-        if st.button("📊 Head-to-Head"): st.session_state.current_page = "comparison"; st.rerun()
+        if st.button("📊 Head-to-Head", use_container_width=True): go_comparison(); st.rerun()
     with c6:
-        if st.button("📈 Team Stats"): st.session_state.current_page = "team_stats"; st.rerun()
+        if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
+
+    st.write("") # Abstand
+    
+    c7, c8, c9 = st.columns(3)
+    with c7:
+        if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
+    with c8:
+        if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
+    with c9:
+         if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
+
+    st.write("")
+    
+    c10, _, _ = st.columns(3)
+    with c10:
+        if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
 
 # --- OTHER PAGES ---
 def render_scouting_page():
@@ -334,6 +349,7 @@ def render_live_page():
             if st.button("Vergangene Spiele", type="primary" if st.session_state.live_view_mode == "past" else "secondary", use_container_width=True):
                 st.session_state.live_view_mode = "past"; st.rerun()
         st.divider()
+        from src.api import fetch_games_from_recent
         with st.spinner("Lade Spielplan (Nord & Süd)..."): all_games = fetch_games_from_recent()
         games_to_show = []
         display_info = ""
@@ -604,5 +620,4 @@ elif st.session_state.current_page == "live": render_live_page()
 elif st.session_state.current_page == "team_stats": render_team_stats_page()
 elif st.session_state.current_page == "team_analysis": render_team_analysis_page()
 elif st.session_state.current_page == "streaminfos": render_streaminfos_page()
-elif st.session_state.current_page == "live": render_live_view(None) # Platzhalter
 # --- END OF FILE app.py ---
