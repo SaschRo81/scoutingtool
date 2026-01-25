@@ -10,24 +10,16 @@ from urllib.parse import quote_plus, urlencode
 import base64
 import pytz
 
-# --- IMPORT DER STREAM UI FUNKTIONEN ---
+# --- IMPORT STREAM UI FUNKTIONEN ---
 from src.stream_ui import render_obs_starting5, render_obs_potg, render_obs_standings, render_obs_comparison
 
 # 1. OBS ROUTING (GANZ OBEN)
 if "view" in st.query_params:
     view_mode = st.query_params["view"]
-    if view_mode == "obs_starting5":
-        render_obs_starting5()
-        st.stop()
-    elif view_mode == "obs_standings":
-        render_obs_standings()
-        st.stop()
-    elif view_mode == "obs_comparison":
-        render_obs_comparison()
-        st.stop()
-    elif view_mode == "obs_potg":
-        render_obs_potg()
-        st.stop()
+    if view_mode == "obs_starting5": render_obs_starting5(); st.stop()
+    elif view_mode == "obs_standings": render_obs_standings(); st.stop()
+    elif view_mode == "obs_comparison": render_obs_comparison(); st.stop()
+    elif view_mode == "obs_potg": render_obs_potg(); st.stop()
 
 # --- STANDARDFUNKTIONEN & IMPORTE ---
 try:
@@ -75,13 +67,13 @@ for key, default in [
 # --- NAVIGATION ---
 def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
 def go_scouting(): st.session_state.current_page = "scouting"
-def go_streaminfos(): st.session_state.current_page = "streaminfos"
 def go_comparison(): st.session_state.current_page = "comparison"
 def go_analysis(): st.session_state.current_page = "analysis"
 def go_player_comparison(): st.session_state.current_page = "player_comparison"
 def go_game_venue(): st.session_state.current_page = "game_venue" 
 def go_prep(): st.session_state.current_page = "prep"
 def go_live(): st.session_state.current_page = "live"
+def go_streaminfos(): st.session_state.current_page = "streaminfos"
 def go_team_stats(): 
     st.session_state.current_page = "team_stats"
     st.session_state.stats_team_id = None
@@ -99,7 +91,7 @@ def inject_custom_css():
         st.markdown("""<style>[data-testid="stAppViewContainer"] { background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.8)), url("https://cdn.pixabay.com/photo/2022/11/22/20/25/ball-7610545_1280.jpg"); background-size: cover; background-attachment: fixed; } [data-testid="stHeader"] { background-color: rgba(0,0,0,0); }</style>""", unsafe_allow_html=True)
     else:
         st.markdown('<style>[data-testid="stAppViewContainer"] { background-image: none !important; background-color: #ffffff !important; } [data-testid="stHeader"] { background-color: #ffffff !important; }</style>', unsafe_allow_html=True)
-        
+
 def render_page_header(page_title):
     inject_custom_css()
     c1, c2 = st.columns([1, 4])
@@ -108,8 +100,7 @@ def render_page_header(page_title):
     st.title(page_title)
     st.divider()
 
-# --- PAGES ---
-
+# --- ADMIN SEITE: STREAM INFOS ---
 def render_streaminfos_page():
     st.title("📡 Stream Overlay Konfigurator")
     st.info("Generiere hier die Links für OBS. In OBS: Browserquelle -> URL einfügen -> 1920x1080.")
@@ -129,8 +120,8 @@ def render_streaminfos_page():
             df_h, _ = fetch_team_data(h_id, CURRENT_SEASON_ID)
             if df_h is not None:
                 p_map_h = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_h.iterrows()}
-                sel_h = st.multiselect("Starter Heim", list(p_map_h.keys()), max_selections=5, key="p_h")
-                if st.button("🔗 Link HEIM"):
+                sel_h = st.multiselect("Starting 5 Heim", list(p_map_h.keys()), max_selections=5, key="p_h")
+                if st.button("🔗 Link HEIM generieren"):
                     p = {"view": "obs_starting5", "name": h_name, "logo_id": h_id, "coach": h_coach, "ids": ",".join([str(p_map_h[s]['PLAYER_ID']) for s in sel_h])}
                     for s in sel_h:
                         p_data = p_map_h[s]
@@ -146,8 +137,8 @@ def render_streaminfos_page():
             df_g, _ = fetch_team_data(g_id, CURRENT_SEASON_ID)
             if df_g is not None:
                 p_map_g = {f"#{r['NR']} {r['NAME_FULL']}": r for _, r in df_g.iterrows()}
-                sel_g = st.multiselect("Starter Gast", list(p_map_g.keys()), max_selections=5, key="p_g")
-                if st.button("🔗 Link GAST"):
+                sel_g = st.multiselect("Starting 5 Gast", list(p_map_g.keys()), max_selections=5, key="p_g")
+                if st.button("🔗 Link GAST generieren"):
                     p_g = {"view": "obs_starting5", "name": g_name, "logo_id": g_id, "coach": g_coach, "ids": ",".join([str(p_map_g[s]['PLAYER_ID']) for s in sel_g])}
                     for s in sel_g:
                         p_data = p_map_g[s]
@@ -156,22 +147,50 @@ def render_streaminfos_page():
                     st.code(f"/?{urlencode(p_g)}")
 
     with tab2:
-        if st.button("🔗 Link Tabelle Süd"): st.code("/?view=obs_standings&region=Süd")
+        st.subheader("Tabelle")
+        if st.button("🔗 Link Tabelle Süd generieren"):
+            st.code("/?view=obs_standings&region=Süd")
 
     with tab3:
-        v_h = st.selectbox("Team A", list(team_opts.keys()), key="v_h")
-        v_g = st.selectbox("Team B", list(team_opts.keys()), key="v_g", index=1)
-        if st.button("🔗 Link Vergleich"): st.code(f"/?view=obs_comparison&hid={team_opts[v_h]}&gid={team_opts[v_g]}&hname={v_h}&gname={v_g}")
+        st.subheader("Teamvergleich")
+        c1, c2 = st.columns(2)
+        v_h = c1.selectbox("Team A", list(team_opts.keys()), key="v_h")
+        v_g = c2.selectbox("Team B", list(team_opts.keys()), key="v_g", index=1)
+        if st.button("🔗 Link Vergleich generieren"):
+            st.code(f"/?view=obs_comparison&hid={team_opts[v_h]}&gid={team_opts[v_g]}&hname={v_h}&gname={v_g}")
 
     with tab4:
-        sel_t = st.selectbox("Team für Spielsuche", list(team_opts.keys()), key="potg_t")
-        sch = fetch_schedule(team_opts[sel_t], CURRENT_SEASON_ID)
-        game_opts = {f"{g['date']} | {g['home']} vs {g['guest']}": g['id'] for g in sch if g.get('id')}
+        st.subheader("Player of the Game")
+        from src.api import fetch_games_from_recent # Import from src.api not app
+        all_g = fetch_games_from_recent()
+        game_opts = {f"{g['date']} | {g['home']} vs {g['guest']}": g['id'] for g in all_g}
         if game_opts:
             sel_g = st.selectbox("Spiel wählen", list(game_opts.keys()))
-            if st.button("🔗 Link POTG"): st.code(f"/?view=obs_potg&game_id={game_opts[sel_g]}")
+            if st.button("🔗 Link POTG generieren"):
+                st.code(f"/?view=obs_potg&game_id={game_opts[sel_g]}")
         else: st.warning("Keine Spiele gefunden.")
 
+def render_home():
+    inject_custom_css()
+    st.title(f"{BASKETBALL_ICON} DBBL Scouting Dashboard")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button("📝 PreGame Report"): st.session_state.current_page = "scouting"; st.rerun()
+    with c2:
+        if st.button("🔴 Live Center"): st.session_state.current_page = "live"; st.rerun()
+    with c3:
+        if st.button("📡 Stream Infos (OBS)"): go_streaminfos(); st.rerun()
+    
+    st.divider()
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        if st.button("🧠 Team Spielanalyse"): st.session_state.current_page = "team_analysis"; st.rerun()
+    with c5:
+        if st.button("📊 Head-to-Head"): st.session_state.current_page = "comparison"; st.rerun()
+    with c6:
+        if st.button("📈 Team Stats"): st.session_state.current_page = "team_stats"; st.rerun()
+
+# --- OTHER PAGES ---
 def render_scouting_page():
     render_page_header("📝 PreGame Report") 
     if st.session_state.print_mode:
@@ -282,50 +301,6 @@ def render_scouting_page():
                                 st.session_state.pdf_bytes = pdfkit.from_string(f"<!DOCTYPE html><html><head><meta charset='utf-8'>{CSS_STYLES}</head><body>{html}</body></html>", False, options=opts); st.session_state.print_mode = True; st.rerun()
                             except Exception as e: st.error(f"PDF Error: {e}"); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
                         else: st.warning("PDFKit fehlt."); st.session_state.pdf_bytes = None; st.session_state.print_mode = True; st.rerun()
-                            
-def fetch_games_from_recent():
-    from src.config import API_HEADERS
-    endpoints = [
-        "https://api-s.dbbl.scb.world/games/recent?slotSize=400",
-        "https://api-n.dbbl.scb.world/games/recent?slotSize=400"
-    ]
-    games_map = {} 
-    for url in endpoints:
-        try:
-            r = requests.get(url, headers=API_HEADERS, timeout=3)
-            if r.status_code == 200:
-                data = r.json()
-                lists_to_check = []
-                if isinstance(data.get("past"), list): lists_to_check.extend(data["past"])
-                if isinstance(data.get("present"), list): lists_to_check.extend(data["present"])
-                if isinstance(data.get("future"), list): lists_to_check.extend(data["future"])
-                for g in lists_to_check:
-                    gid = g.get("id")
-                    if not gid or gid in games_map: continue 
-                    raw_d = g.get("scheduledTime", "")
-                    dt_obj = None; d_disp = "-"; date_only = "-"
-                    if raw_d:
-                        try:
-                            clean_ts = raw_d.replace("Z", "+00:00")
-                            dt_obj = datetime.fromisoformat(clean_ts).astimezone(pytz.timezone("Europe/Berlin"))
-                            d_disp = dt_obj.strftime("%d.%m.%Y %H:%M")
-                            date_only = dt_obj.strftime("%d.%m.%Y")
-                        except: pass
-                    res = g.get("result", {}) or {}
-                    h_s = res.get("homeScore") if res.get("homeScore") is not None else res.get("homeTeamFinalScore")
-                    g_s = res.get("guestScore") if res.get("guestScore") is not None else res.get("guestTeamFinalScore")
-                    score_str = f"{h_s}:{g_s}" if (h_s is not None and g_s is not None) else "-:-"
-                    status = g.get("status", "SCHEDULED")
-                    if h_s is not None and g_s is not None and status == "SCHEDULED": status = "ENDED"
-                    games_map[gid] = {
-                        "id": gid, "date": d_disp, "date_only": date_only, "datetime": dt_obj,
-                        "home": g.get("homeTeam", {}).get("name", "?"), "guest": g.get("guestTeam", {}).get("name", "?"),
-                        "score": score_str, "status": status, "home_score": h_s, "guest_score": g_s
-                    }
-        except Exception as e: pass
-    result_list = list(games_map.values())
-    result_list.sort(key=lambda x: x['datetime'] if x['datetime'] else datetime.min)
-    return result_list
 
 def render_live_page():
     if st.session_state.live_game_id:
@@ -357,6 +332,7 @@ def render_live_page():
             if st.button("Vergangene Spiele", type="primary" if st.session_state.live_view_mode == "past" else "secondary", use_container_width=True):
                 st.session_state.live_view_mode = "past"; st.rerun()
         st.divider()
+        from src.api import fetch_games_from_recent
         with st.spinner("Lade Spielplan (Nord & Süd)..."): all_games = fetch_games_from_recent()
         games_to_show = []
         display_info = ""
@@ -388,7 +364,7 @@ def render_live_page():
                         st.markdown(html, unsafe_allow_html=True)
                         btn_txt = "Zum Liveticker" if raw_status == "RUNNING" else "Zum Spiel / Stats"
                         if st.button(btn_txt, key=f"btn_live_{game['id']}", use_container_width=True): st.session_state.live_game_id = game['id']; st.rerun()
-                            
+
 def render_game_venue_page():
     render_page_header("📍 Spielorte der Teams"); c1, c2 = st.columns([1, 2])
     with c1: s = st.radio("Staffel", ["Süd", "Nord"], horizontal=True, key="venue_staffel"); t = {k: v for k, v in TEAMS_DB.items() if v["staffel"] == s}; to = {v["name"]: k for k, v in t.items()}
@@ -614,43 +590,8 @@ def render_player_comparison_page():
             with c1: st.markdown(f"<div style='text-align: right; {s1}'>{v1}</div>", unsafe_allow_html=True)
             with c2: st.markdown(f"<div style='text-align: center; background:#f8f9fa;'>{l}</div>", unsafe_allow_html=True)
             with c3: st.markdown(f"<div style='text-align: left; {s2}'>{v2}</div>", unsafe_allow_html=True)
-                
-def render_home():
-    inject_custom_css()
-    st.markdown(f"""<div class="title-container"><h1 style='margin:0; color: #333;'>{BASKETBALL_ICON} DBBL Scouting Suite</h1><p style='margin:0; margin-top:10px; color: #555; font-weight: bold;'>Version {VERSION} | by Sascha Rosanke</p></div>""", unsafe_allow_html=True)
-    _, col_center, _ = st.columns([1, 2, 1])
-    with col_center:
-        r1_c1, r1_c2 = st.columns(2)
-        with r1_c1: 
-            if st.button("📊 Teamvergleich", use_container_width=True): go_comparison(); st.rerun()
-        with r1_c2: 
-            if st.button("🤼 Spielervergleich", use_container_width=True): go_player_comparison(); st.rerun()
-        st.write("") 
-        r2_c1, r2_c2 = st.columns(2)
-        with r2_c1:
-            if st.button("🔮 Spielvorbereitung", use_container_width=True): go_prep(); st.rerun()
-        with r2_c2: 
-            if st.button("🎥 Spielnachbereitung", use_container_width=True): go_analysis(); st.rerun()
-        st.write("") 
-        r3_c1, r3_c2 = st.columns(2)
-        with r3_c1: 
-            if st.button("📝 PreGame Report", use_container_width=True): go_scouting(); st.rerun()
-        with r3_c2:
-             if st.button("🔴 Live Game Center", use_container_width=True): go_live(); st.rerun()
-        st.write("")
-        r4_c1, r4_c2 = st.columns(2)
-        with r4_c1:
-             if st.button("📈 Team Stats", use_container_width=True): go_team_stats(); st.rerun()
-        with r4_c2:
-             if st.button("📍 Spielorte", use_container_width=True): go_game_venue(); st.rerun()
-        st.write("")
-        r5_c1, r5_c2 = st.columns(2)
-        with r5_c1:
-             if st.button("🧠 Team Spielanalyse", use_container_width=True): go_team_analysis(); st.rerun()
-        with r5_c2:
-             if st.button("📡 Stream Infos (OBS)", use_container_width=True): go_streaminfos(); st.rerun()
 
-# --- MAIN ROUTER ---
+# --- ROUTER ---
 if st.session_state.current_page == "home": render_home()
 elif st.session_state.current_page == "scouting": render_scouting_page()
 elif st.session_state.current_page == "comparison": render_comparison_page()
