@@ -120,7 +120,7 @@ body {
 .potg-stat-label { font-size: 14px; color: #666; margin-bottom: 2px; }
 .potg-stat-val { font-size: 28px; font-weight: 900; color: #00338d; }
 
-/* --- FINAL BANNER STYLES (REDESIGN) --- */
+/* --- FINAL BANNER STYLES (DYNAMIC) --- */
 .fb-container {
     position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
     width: 1600px; font-family: sans-serif;
@@ -129,40 +129,48 @@ body {
 .fb-header {
     background: linear-gradient(90deg, #001040 0%, #002060 100%); /* Deep Blue */
     color: white; 
-    height: 90px; /* REDUZIERT */
+    height: 100px; 
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 40px; border-top: 6px solid #ff6600;
+    padding: 0 20px; border-top: 6px solid #ff6600;
 }
-.fb-team-name { 
-    font-size: 28px; /* REDUZIERT VON 40px */
-    font-weight: 900; text-transform: uppercase; letter-spacing: 1px; 
-    width: 45%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; 
+.fb-team-box {
+    width: 45%; 
+    display: flex; 
+    align-items: center;
+    height: 100%;
 }
-.fb-team-name.right { text-align: right; }
+.fb-team-box.left { justify-content: flex-start; text-align: left; }
+.fb-team-box.right { justify-content: flex-end; text-align: right; }
 
-.fb-vs { font-size: 24px; font-weight: 900; color: #ff6600; font-style: italic; font-family: sans-serif; }
+.fb-team-name { 
+    font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; 
+    color: white;
+    line-height: 1.1; /* Enger Zeilenabstand für Umbruch */
+    white-space: normal; /* ERLAUBE UMBRUCH BEI LANGEN NAMEN */
+}
+
+.fb-vs { font-size: 24px; font-weight: 900; color: #ff6600; font-style: italic; width: 10%; text-align: center; }
 
 .fb-footer {
-    background: white; height: 110px; /* ERHÖHT FÜR LOGOS */
-    display: flex; align-items: center; justify-content: space-between; /* LOGOS AUSSEN */
-    padding: 0 30px; position: relative;
+    background: white; height: 110px; 
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px; position: relative;
     border-bottom: 4px solid #ccc;
 }
 
-/* NEUE LOGO STYLES FÜR FOOTER */
 .fb-logo-footer {
     height: 90px; width: auto; object-fit: contain;
-    filter: drop-shadow(0 2px 5px rgba(0,0,0,0.2)); /* Weicher Schatten auf Weiß */
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
 }
 
 .fb-center-box {
-    position: absolute; top: -25px; left: 50%; transform: translateX(-50%);
-    background: white; padding: 15px 60px; border-radius: 12px 12px 0 0;
+    position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
+    background: white; padding: 10px 60px; border-radius: 12px 12px 0 0;
     text-align: center; border-top: 5px solid #ff6600;
     box-shadow: 0 -5px 20px rgba(0,0,0,0.15);
 }
-.fb-center-sub { font-size: 16px; font-weight: 900; color: #ff6600; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
-.fb-center-score { font-size: 60px; font-weight: 900; color: #001f5b; line-height: 1; }
+.fb-center-sub { font-size: 14px; font-weight: 900; color: #ff6600; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0px; }
+.fb-center-score { font-size: 64px; font-weight: 900; color: #001f5b; line-height: 1; }
 </style>
 """
 
@@ -260,7 +268,6 @@ def render_obs_final_banner():
     gid = st.query_params.get("game_id")
     if not gid: return
     
-    # Details & Boxscore
     details = fetch_game_details(gid)
     box = fetch_game_boxscore(gid)
     if not details: return
@@ -279,17 +286,30 @@ def render_obs_final_banner():
     sh = res.get("homeTeamFinalScore")
     sg = res.get("guestTeamFinalScore")
     if sh is None or sg is None and box:
-        # Fallback auf Summe falls Result noch nicht final im Details Objekt
         sh = sum([int(p.get("points",0)) for p in box.get("homeTeam", {}).get("playerStats",[])])
         sg = sum([int(p.get("points",0)) for p in box.get("guestTeam", {}).get("playerStats",[])])
 
-    # HTML (RE-DESIGN: LOGOS IM FOOTER)
+    # --- DYNAMISCHE SCHRIFTGRÖSSE BERECHNEN ---
+    def get_font_size(text):
+        l = len(str(text))
+        if l > 28: return "22px" # Sehr lang (Bamberg)
+        if l > 20: return "28px" # Mittel
+        return "38px" # Kurz (Jena)
+
+    fs_h = get_font_size(h_name)
+    fs_g = get_font_size(g_name)
+
+    # HTML
     html = f"""
     <div class='fb-container'>
         <div class='fb-header'>
-            <div class='fb-team-name'>{h_name}</div>
+            <div class='fb-team-box left'>
+                <div class='fb-team-name' style='font-size: {fs_h};'>{h_name}</div>
+            </div>
             <div class='fb-vs'>VS</div>
-            <div class='fb-team-name right'>{g_name}</div>
+            <div class='fb-team-box right'>
+                <div class='fb-team-name' style='font-size: {fs_g};'>{g_name}</div>
+            </div>
         </div>
         <div class='fb-footer'>
             <img src='{h_logo}' class='fb-logo-footer'>
