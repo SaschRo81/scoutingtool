@@ -61,8 +61,32 @@ from src.analysis_ui import (
 )
 
 # Session State Initialisierung
-for key, default in [("current_page", "home"), ("print_mode", False), ("game_meta", {}), ("roster_df", None), ("live_view_mode", "today"), ("live_date_filter", date.today()), ("stats_team_id", None), ("analysis_team_id", None), ("generated_ai_report", None), ("live_game_id", None), ("facts_offense", pd.DataFrame([])), ("facts_defense", pd.DataFrame([])), ("facts_about", pd.DataFrame([]))]:
-    if key not in st.session_state: st.session_state[key] = default
+initial_keys = [
+    ("current_page", "home"),
+    ("print_mode", False),
+    ("game_meta", {}),
+    ("roster_df", None),
+    ("live_view_mode", "today"),
+    ("live_date_filter", date.today()),
+    ("stats_team_id", None),
+    ("stats_league_selection", None), # Wichtig für die Stats-Seite
+    ("analysis_team_id", None),
+    ("generated_ai_report", None),
+    ("live_game_id", None),
+    ("facts_offense", pd.DataFrame([])),
+    ("facts_defense", pd.DataFrame([])),
+    ("facts_about", pd.DataFrame([])),
+    # --- HIER WAREN DIE FEHLENDEN VARIABLEN ---
+    ("saved_colors", {}),
+    ("saved_notes", {}),
+    ("pdf_bytes", None),
+    ("report_filename", "report.pdf"),
+    ("final_html", "")
+]
+
+for key, default in initial_keys:
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 def go_home(): st.session_state.current_page = "home"; st.session_state.print_mode = False
 def go_scouting(): st.session_state.current_page = "scouting"
