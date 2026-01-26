@@ -167,7 +167,7 @@ def render_obs_comparison():
     html += "</table></div>"
     st.markdown(html, unsafe_allow_html=True)
 
-# --- 4. PLAYER OF THE GAME (GOLD & WHITE MIX) ---
+# --- 4. PLAYER OF THE GAME (GOLD THEME) ---
 def render_obs_potg():
     st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
     gid = st.query_params.get("game_id")
@@ -189,4 +189,61 @@ def render_obs_potg():
                 })
             except: pass
             
-    if players
+    if players:
+        mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
+        meta = get_player_metadata_cached(mvp["id"])
+        img = meta.get("img") or "https://via.placeholder.com/300"
+        
+        # DESIGN UPDATE: Goldener Hintergrund, Schwarzer Rand, Schwarze Schrift
+        html = f"<div style='width:450px; margin:100px auto; background:#FFD700; border:4px solid #000; border-radius:20px; padding:30px; text-align:center; color:#000; font-family:sans-serif; box-shadow:0 0 50px rgba(0,0,0,0.8);'>"
+        html += f"<h2 style='color:#000; margin:0 0 15px 0; font-size:24px; text-transform:uppercase; font-weight:900;'>Player of the Game</h2>"
+        html += f"<img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid #000; object-fit:cover;'>"
+        html += f"<h1 style='margin:15px 0 5px 0; font-size:32px; color:#000; font-weight:900;'>{mvp['name']}</h1>"
+        html += f"<h2 style='margin:0; color:#333;'>#{mvp['nr']}</h2>"
+        # Stats Box: Weißer Hintergrund für Kontrast
+        html += "<div style='display:flex; justify-content:center; gap:15px; margin-top:25px; background:#fff; padding:15px; border-radius:10px; border:1px solid #000;'>"
+        html += f"<div><div style='font-size:12px; color:#666;'>MIN</div><div style='font-size:24px; font-weight:900;'>{mvp['min']}</div></div>"
+        html += f"<div><div style='font-size:12px; color:#666;'>PTS</div><div style='font-size:24px; font-weight:900;'>{mvp['pts']}</div></div>"
+        html += f"<div><div style='font-size:12px; color:#666;'>REB</div><div style='font-size:24px; font-weight:900;'>{mvp['reb']}</div></div>"
+        html += f"<div><div style='font-size:12px; color:#666;'>EFF</div><div style='font-size:24px; font-weight:900; color:#001f5b;'>{mvp['eff']:.0f}</div></div></div></div>"
+        st.markdown(html, unsafe_allow_html=True)
+
+# --- 5. FINAL SCORE BANNER ---
+def render_obs_final_banner():
+    st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
+    gid = st.query_params.get("game_id")
+    if not gid: return
+    
+    details = fetch_game_details(gid)
+    box = fetch_game_boxscore(gid)
+    if not details: return
+
+    h_data = details.get("homeTeam", {}); g_data = details.get("guestTeam", {})
+    h_name = h_data.get("nameFull") or h_data.get("name") or "Heim"
+    g_name = g_data.get("nameFull") or g_data.get("name") or "Gast"
+    h_logo = h_data.get("logoUrl") or ""; g_logo = g_data.get("logoUrl") or ""
+    sh = details.get("result", {}).get("homeTeamFinalScore", 0)
+    sg = details.get("result", {}).get("guestTeamFinalScore", 0)
+    
+    if (sh == 0 and sg == 0) and box:
+        sh = sum([int(p.get("points",0)) for p in box.get("homeTeam", {}).get("playerStats",[])])
+        sg = sum([int(p.get("points",0)) for p in box.get("guestTeam", {}).get("playerStats",[])])
+
+    def get_fs(name):
+        l = len(str(name))
+        return "22px" if l > 28 else ("28px" if l > 20 else "38px")
+
+    html = f"<div style='position:fixed; bottom:80px; left:50%; transform:translateX(-50%); width:1600px; font-family:sans-serif; box-shadow:0 15px 50px rgba(0,0,0,0.7);'>"
+    html += f"<div style='background:linear-gradient(90deg, #001040 0%, #002060 100%); color:white; height:95px; display:flex; align-items:center; justify-content:space-between; padding:0 40px; border-top:6px solid #ff6600;'>"
+    html += f"<div style='font-size:{get_fs(h_name)}; font-weight:900; text-transform:uppercase; width:45%; line-height:1.1;'>{h_name}</div>"
+    html += f"<div style='font-size:24px; font-weight:900; color:#ff6600; font-style:italic;'>VS</div>"
+    html += f"<div style='font-size:{get_fs(g_name)}; font-weight:900; text-transform:uppercase; width:45%; text-align:right; line-height:1.1;'>{g_name}</div></div>"
+    html += f"<div style='background:white; height:110px; display:flex; align-items:center; justify-content:space-between; padding:0 40px; position:relative; border-bottom:4px solid #ccc;'>"
+    if h_logo: html += f"<img src='{h_logo}' style='height:90px; filter:drop-shadow(0 4px 4px rgba(0,0,0,0.1));'>"
+    else: html += "<div></div>"
+    html += f"<div style='position:absolute; top:-35px; left:50%; transform:translateX(-50%); background:white; padding:15px 60px; border-radius:12px 12px 0 0; text-align:center; border-top:5px solid #ff6600; box-shadow:0 -5px 20px rgba(0,0,0,0.15);'>"
+    html += f"<div style='font-size:16px; font-weight:900; color:#ff6600;'>FINAL SCORE</div><div style='font-size:60px; font-weight:900; color:#001f5b;'>{sh} | {sg}</div></div>"
+    if g_logo: html += f"<img src='{g_logo}' style='height:90px; filter:drop-shadow(0 4px 4px rgba(0,0,0,0.1));'>"
+    else: html += "<div></div>"
+    html += "</div></div>"
+    st.markdown(html, unsafe_allow_html=True)
