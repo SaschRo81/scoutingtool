@@ -130,7 +130,7 @@ def render_obs_comparison():
         ("Steals", "st"), ("Blocks", "bs"), ("Fouls", "pf")
     ]
 
-    # HINTERGRUND GOLD
+    # HINTERGRUND GOLD (Bleibt als Basis, wird aber von den weißen Zeilen überdeckt)
     html = f"<div style='position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:1100px; background:#FFD700; border-radius:15px; padding:0; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.8); font-family:sans-serif; z-index:9999; border: 4px solid #000;'>"
     html += f"<table style='width:100%; border-collapse:collapse;'>"
     
@@ -150,7 +150,7 @@ def render_obs_comparison():
         h_win = (v_h < v_g) if is_negative_stat else (v_h > v_g)
         g_win = (v_g < v_h) if is_negative_stat else (v_g > v_h)
         
-        # Style: Schwarz auf Gold, Dunkles Grün für Highlight
+        # Style: Schwarz auf Weiß (statt Gold), Dunkles Grün für Highlight
         s_h = "color:#004d00; font-size:30px; font-weight:900;" if h_win else "color:#000; font-size:26px; font-weight:800;"
         s_g = "color:#004d00; font-size:30px; font-weight:900;" if g_win else "color:#000; font-size:26px; font-weight:800;"
         
@@ -159,7 +159,8 @@ def render_obs_comparison():
         else:
             f_h = f"{v_h:.1f}"; f_g = f"{v_g:.1f}"
 
-        html += f"<tr style='border-bottom:1px solid #d4b000; text-align:center;'>"
+        # --- ÄNDERUNG HIER: background:#ffffff hinzugefügt ---
+        html += f"<tr style='border-bottom:1px solid #d4b000; text-align:center; background:#ffffff;'>"
         html += f"<td style='padding:10px; {s_h}'>{f_h}</td>"
         html += f"<td style='background:#fff; color:#000; font-size:16px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; border-left:1px solid #d4b000; border-right:1px solid #d4b000;'>{label}</td>"
         html += f"<td style='padding:10px; {s_g}'>{f_g}</td></tr>"
