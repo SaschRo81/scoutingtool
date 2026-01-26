@@ -543,6 +543,8 @@ def render_player_comparison_page():
 # Prüft, ob "?view=config" in der URL steht.
 if "view" in st.query_params and st.query_params["view"] == "config":
     render_streaminfos_page()
+if "view" in st.query_params and st.query_params["view"] == "live":
+    render_live_page()
 
 # 2. NORMALE NAVIGATION (Wenn kein "view" Parameter da ist)
 elif st.session_state.current_page == "home": render_home()
