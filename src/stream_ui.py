@@ -20,7 +20,8 @@ header, footer, #MainMenu,
 .stAppDeployButton, 
 button[kind="header"],
 .viewerBadge_container__1QSob, 
-[data-testid="stDecoration"] {
+[data-testid="stDecoration"],
+[data-testid="stSidebar"] {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
@@ -83,12 +84,12 @@ body {
     background: linear-gradient(90deg, #001f5b 0%, #00338d 100%);
     color: white; padding: 10px 40px; 
     display: flex; align-items: center; justify-content: space-between; 
-    border-bottom: 5px solid #ff6600; height: 140px;
+    border-bottom: 5px solid #ff6600; min-height: 120px;
 }
-.header-title { font-size: 50px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+.header-title { font-size: 40px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
 .header-logo-img { 
-    height: 120px !important; width: auto; object-fit: contain; 
-    filter: drop-shadow(0 0 8px rgba(255,255,255,0.8)); margin-left: 20px; 
+    height: 100px !important; width: auto; object-fit: contain; 
+    filter: drop-shadow(0 0 8px rgba(255,255,255,0.8)); margin-left: 20px; flex-shrink: 0;
 }
 .obs-table { width: 100%; font-size: 26px; border-collapse: collapse; text-align: center; }
 .obs-table th { background: #eee; color: #001a4d; padding: 15px; text-transform: uppercase; font-size: 22px; border-bottom: 3px solid #001a4d; }
@@ -122,39 +123,40 @@ body {
 .fb-container {
     position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
     width: 1600px; font-family: sans-serif;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
 }
 .fb-header {
-    background: linear-gradient(90deg, #001040 0%, #002060 100%); /* Sehr dunkelblau */
-    color: white; height: 100px; display: flex; align-items: center; justify-content: space-between;
-    padding: 0 40px; border-top: 6px solid #ff6600;
+    background: linear-gradient(90deg, #001040 0%, #002060 100%); /* Deep Blue */
+    color: white; height: 110px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 50px; border-top: 6px solid #ff6600;
 }
-.fb-team-name { font-size: 38px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; width: 40%; }
+.fb-team-name { font-size: 40px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; width: 42%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .fb-team-name.right { text-align: right; }
 .fb-logos { display: flex; align-items: center; gap: 30px; }
-.fb-logo-img { height: 80px; object-fit: contain; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3)); }
-.fb-vs { font-size: 30px; font-weight: bold; color: #ff6600; font-style: italic; }
+.fb-logo-img { height: 90px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(255,255,255,0.2)); }
+.fb-vs { font-size: 32px; font-weight: 900; color: #ff6600; font-style: italic; font-family: sans-serif; }
 
 .fb-footer {
     background: white; height: 80px; display: flex; align-items: center; justify-content: space-between;
     padding: 0; position: relative;
+    border-bottom: 4px solid #ccc;
 }
 .fb-player-box {
-    width: 35%; display: flex; align-items: center; padding: 0 40px; font-size: 24px; font-weight: bold; color: #001f5b;
+    width: 38%; display: flex; align-items: center; padding: 0 40px; font-size: 26px; font-weight: bold; color: #001f5b; text-transform: uppercase;
 }
 .fb-player-box.right { justify-content: flex-end; }
-.fb-pts { margin-left: 15px; color: #666; font-size: 20px; }
-.fb-pts.right { margin-left: 0; margin-right: 15px; }
+.fb-pts { margin-left: 20px; color: #555; font-size: 22px; font-weight: normal; }
+.fb-pts.right { margin-left: 0; margin-right: 20px; }
 
 .fb-center-box {
-    position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
-    background: white; padding: 15px 40px; border-radius: 10px 10px 0 0;
-    text-align: center; border-top: 4px solid #ff6600;
-    box-shadow: 0 -5px 15px rgba(0,0,0,0.1);
+    position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
+    background: white; padding: 10px 50px; border-radius: 12px 12px 0 0;
+    text-align: center; border-top: 5px solid #ff6600;
+    box-shadow: 0 -5px 20px rgba(0,0,0,0.15);
 }
-.fb-center-label { font-size: 14px; font-weight: bold; color: #001f5b; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 2px; }
-.fb-center-sub { font-size: 12px; font-weight: bold; color: #ff6600; text-transform: uppercase; }
-.fb-center-score { font-size: 42px; font-weight: 900; color: #001f5b; line-height: 1; margin-top: 5px; }
+.fb-center-label { font-size: 15px; font-weight: 900; color: #001f5b; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 2px; }
+.fb-center-sub { font-size: 12px; font-weight: 900; color: #ff6600; text-transform: uppercase; letter-spacing: 1px; }
+.fb-center-score { font-size: 48px; font-weight: 900; color: #001f5b; line-height: 1; margin-top: 5px; }
 </style>
 """
 
@@ -189,23 +191,29 @@ def render_obs_standings():
     region = st.query_params.get("region", "Süd")
     season = st.query_params.get("season", "2025")
     df = fetch_league_standings(season, region)
+    
     if not df.empty:
         dbbl_logo = "https://toyota-dbbl.de/app/themes/dbbl/src/assets/toyota-DBBL-logo.svg"
         region_display = region.capitalize()
         title_text = f"2. Damen Basketball Bundesliga {region_display}"
+        
         html = f"""<div class='obs-content-wrapper'><div class='obs-header-row'><span class='header-title'>{title_text}</span><img src='{dbbl_logo}' class='header-logo-img'></div>"""
         html += "<table class='obs-table'><thead><tr><th style='width:60px;'>#</th><th style='text-align:left;'>Team</th><th>Sp</th><th>S</th><th>N</th><th>Diff</th></tr></thead><tbody>"
+        
         for _, row in df.iterrows():
             platz = row.get('Platz', 0); team = row.get('Team', 'Unknown'); sp = row.get('Sp', 0)
             s = row.get('S', 0); n = row.get('N', 0); diff = row.get('Diff', '0')
             try: rank_val = int(platz)
             except: rank_val = 99
+            
             row_style = ""
             if rank_val <= 4: row_style = "background-color: #e8f5e9; border-left: 8px solid #28a745;"
             elif rank_val <= 8: row_style = "background-color: #f8f9fa; border-left: 8px solid #6c757d;"
             else: row_style = "background-color: #fce8e6; border-left: 8px solid #dc3545;"
+
             diff_style = "color:#28a745;" if (str(diff).startswith("+")) else ("color:#dc3545;" if str(diff).startswith("-") else "color:#999;")
             html += f"<tr style='{row_style}'><td>{platz}</td><td style='text-align:left;'>{team}</td><td>{sp}</td><td>{s}</td><td>{n}</td><td style='{diff_style}'>{diff}</td></tr>"
+            
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
 
@@ -230,10 +238,8 @@ def render_obs_potg():
     for team_key in ["homeTeam", "guestTeam"]:
         for p in box.get(team_key, {}).get("playerStats", []):
             try:
-                eff = float(p.get("efficiency", 0))
-                sec = int(p.get("secondsPlayed") or 0)
-                min_str = f"{sec//60:02d}:{sec%60:02d}"
-                reb = int(p.get("totalRebounds") or 0)
+                eff = float(p.get("efficiency", 0)); sec = int(p.get("secondsPlayed") or 0)
+                min_str = f"{sec//60:02d}:{sec%60:02d}"; reb = int(p.get("totalRebounds") or 0)
                 players.append({"id": str(p.get("seasonPlayer", {}).get("id")), "name": f"{p.get('seasonPlayer', {}).get('firstName','')} {p.get('seasonPlayer', {}).get('lastName','')}", "nr": p.get('seasonPlayer', {}).get('shirtNumber', ''), "eff": eff, "pts": int(p.get("points", 0)), "reb": reb, "min": min_str})
             except: pass
     if players:
@@ -250,21 +256,49 @@ def render_obs_final_banner():
     box = fetch_game_boxscore(gid)
     if not box: return
 
-    # Team Namen & Logos
-    h = box.get("homeTeam", {}); g = box.get("guestTeam", {})
-    h_name = h.get("name", "HEIM").upper(); g_name = g.get("name", "GAST").upper()
-    h_logo = get_best_team_logo(str(h.get("seasonTeamId"))); g_logo = get_best_team_logo(str(g.get("seasonTeamId")))
+    # --- DATEN-EXTRAKTION (UPDATE) ---
+    h_data = box.get("homeTeam", {})
+    g_data = box.get("guestTeam", {})
     
-    # Score
-    res = box.get("result", {})
-    sh = res.get("homeTeamFinalScore", 0); sg = res.get("guestTeamFinalScore", 0)
+    # 1. Namen (nameFull)
+    h_name = h_data.get("nameFull") or h_data.get("name") or "HEIM"
+    g_name = g_data.get("nameFull") or g_data.get("name") or "GAST"
+    
+    # 2. Logos (logoUrl aus JSON nehmen)
+    h_logo = h_data.get("logoUrl")
+    if not h_logo:
+        # Fallback auf ID construction
+        hid = str(h_data.get("seasonTeamId") or h_data.get("teamId") or "")
+        h_logo = get_best_team_logo(hid)
+        
+    g_logo = g_data.get("logoUrl")
+    if not g_logo:
+        gid_val = str(g_data.get("seasonTeamId") or g_data.get("teamId") or "")
+        g_logo = get_best_team_logo(gid_val)
+        
+    # Placeholder wenn immer noch leer
+    empty_img = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+    if not h_logo: h_logo = empty_img
+    if not g_logo: g_logo = empty_img
 
-    # Top Performer (PTS)
+    # 3. Score (Result)
+    res = box.get("result", {})
+    sh = res.get("homeTeamFinalScore")
+    sg = res.get("guestTeamFinalScore")
+    
+    # Fallback Berechnung
+    if sh is None or sg is None:
+        sh = sum([int(p.get("points",0)) for p in h_data.get("playerStats",[])])
+        sg = sum([int(p.get("points",0)) for p in g_data.get("playerStats",[])])
+
+    # 4. Top Performer
     def get_top(t_key):
         pl = box.get(t_key, {}).get("playerStats", [])
         if not pl: return "N/A", 0
         best = sorted(pl, key=lambda x: int(x.get("points", 0)), reverse=True)[0]
-        n = f"{best.get('seasonPlayer',{}).get('firstName','').upper()} {best.get('seasonPlayer',{}).get('lastName','').upper()}"
+        sp = best.get('seasonPlayer',{})
+        n = f"{sp.get('firstName','')} {sp.get('lastName','')}"
+        if not n.strip(): n = "PLAYER"
         return n, int(best.get("points", 0))
 
     tp_h_name, tp_h_pts = get_top("homeTeam")
