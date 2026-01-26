@@ -130,11 +130,11 @@ def render_obs_comparison():
         ("Steals", "st"), ("Blocks", "bs"), ("Fouls", "pf")
     ]
 
-    # CONTAINER: Bleibt GOLD (#FFD700) als Rahmenfarbe
+    # CONTAINER
     html = f"<div style='position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:1100px; background:#FFD700; border-radius:15px; padding:0; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.8); font-family:sans-serif; z-index:9999; border: 4px solid #000;'>"
     html += f"<table style='width:100%; border-collapse:collapse;'>"
     
-    # Header Zeile (Bleibt Schwarz/Gold)
+    # Header Zeile
     html += f"<tr><th style='background:#000; color:#FFD700; padding:15px; font-size:24px; font-weight:900; width:40%; text-align:center; text-transform:uppercase; border-bottom:4px solid #000;'>{hname}</th>"
     html += f"<th style='background:#222; color:white; width:20%; text-align:center; font-size:16px; letter-spacing:2px; border-bottom:4px solid #000;'>STATS</th>"
     html += f"<th style='background:#000; color:#FFD700; padding:15px; font-size:24px; font-weight:900; width:40%; text-align:center; text-transform:uppercase; border-bottom:4px solid #000;'>{gname}</th></tr>"
@@ -150,20 +150,22 @@ def render_obs_comparison():
         h_win = (v_h < v_g) if is_negative_stat else (v_h > v_g)
         g_win = (v_g < v_h) if is_negative_stat else (v_g > v_h)
         
-        # Style Definitionen (Schriftfarbe etc.)
-        s_h = "color:#004d00; font-size:30px; font-weight:900;" if h_win else "color:#000; font-size:26px; font-weight:800;"
-        s_g = "color:#004d00; font-size:30px; font-weight:900;" if g_win else "color:#000; font-size:26px; font-weight:800;"
+        # Style Definitionen - JETZT EINHEITLICHE GRÖSSE (28px)
+        # Nur die Farbe unterscheidet sich noch (Grün für den besseren Wert)
+        base_style = "font-size:28px; padding:10px; background:#ffffff;"
+        
+        s_h = f"{base_style} color:#004d00; font-weight:900;" if h_win else f"{base_style} color:#000; font-weight:800;"
+        s_g = f"{base_style} color:#004d00; font-weight:900;" if g_win else f"{base_style} color:#000; font-weight:800;"
         
         if "pct" in key:
             f_h = f"{v_h:.1f}%"; f_g = f"{v_g:.1f}%"
         else:
             f_h = f"{v_h:.1f}"; f_g = f"{v_g:.1f}"
 
-        # FIX: background:#ffffff direkt in die <td> Tags eingefügt
         html += f"<tr style='border-bottom:1px solid #d4b000; text-align:center;'>"
-        html += f"<td style='padding:10px; {s_h} background:#ffffff;'>{f_h}</td>" # HIER WEISS
+        html += f"<td style='{s_h}'>{f_h}</td>"
         html += f"<td style='background:#fff; color:#000; font-size:16px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; border-left:1px solid #d4b000; border-right:1px solid #d4b000;'>{label}</td>"
-        html += f"<td style='padding:10px; {s_g} background:#ffffff;'>{f_g}</td></tr>" # HIER WEISS
+        html += f"<td style='{s_g}'>{f_g}</td></tr>"
 
     html += "</table></div>"
     st.markdown(html, unsafe_allow_html=True)
