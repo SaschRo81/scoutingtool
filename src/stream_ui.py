@@ -130,15 +130,26 @@ def render_obs_comparison():
     html += f"<th style='background:#FFD700; color:black; padding:25px; font-size:32px; font-weight:900; width:40%; text-align:center;'>{gname}</th></tr>"
 
     for label, key in metrics:
-        v_h = ts_h.get(key, 0); v_g = ts_g.get(key, 0)
+        try:
+            v_h = float(ts_h.get(key, 0))
+            v_g = float(ts_g.get(key, 0))
+        except:
+            v_h = 0.0
+            v_g = 0.0
+
         h_win = (v_h < v_g) if key in ["to", "pf"] else (v_h > v_g)
         g_win = (v_g < v_h) if key in ["to", "pf"] else (v_g > v_h)
         
         c_h = "color:#1a8a34; font-size:38px; font-weight:900;" if h_win else "color:#111;"
         c_g = "color:#1a8a34; font-size:38px; font-weight:900;" if g_win else "color:#111;"
         
-        f_h = f"{v_h}%" if "pct" in key else str(v_h)
-        f_g = f"{v_g}%" if "pct" in key else str(v_g)
+        # FORMATIERUNG: Immer auf 1 Nachkommastelle runden
+        if "pct" in key:
+            f_h = f"{v_h:.1f}%"
+            f_g = f"{v_g:.1f}%"
+        else:
+            f_h = f"{v_h:.1f}"
+            f_g = f"{v_g:.1f}"
 
         html += f"<tr style='border-bottom:1px solid #eee; text-align:center; font-size:32px; font-weight:800; color:#333;'>"
         html += f"<td style='padding:15px; {c_h}'>{f_h}</td>"
@@ -181,7 +192,7 @@ def render_obs_potg():
         html += f"<img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid #00338d; object-fit:cover;'>"
         html += f"<h1 style='margin:15px 0 5px 0; font-size:32px; color:#001f5b;'>{mvp['name']}</h1>"
         html += f"<h2 style='margin:0; color:#666;'>#{mvp['nr']}</h2>"
-        html += f"<div style='display:flex; justify-content:center; gap:15px; margin-top:25px; background:#f0f0f0; padding:15px; border-radius:10px; border:1px solid #ddd;'>"
+        html += "<div style='display:flex; justify-content:center; gap:15px; margin-top:25px; background:#f0f0f0; padding:15px; border-radius:10px; border:1px solid #ddd;'>"
         html += f"<div><div style='font-size:12px; color:#666;'>MIN</div><div style='font-size:24px; font-weight:900;'>{mvp['min']}</div></div>"
         html += f"<div><div style='font-size:12px; color:#666;'>PTS</div><div style='font-size:24px; font-weight:900;'>{mvp['pts']}</div></div>"
         html += f"<div><div style='font-size:12px; color:#666;'>REB</div><div style='font-size:24px; font-weight:900;'>{mvp['reb']}</div></div>"
