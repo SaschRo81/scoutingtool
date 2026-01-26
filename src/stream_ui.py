@@ -150,12 +150,16 @@ def render_obs_comparison():
         h_win = (v_h < v_g) if is_negative_stat else (v_h > v_g)
         g_win = (v_g < v_h) if is_negative_stat else (v_g > v_h)
         
-        # Style Definitionen - JETZT EINHEITLICHE GRÖSSE (28px)
-        # Nur die Farbe unterscheidet sich noch (Grün für den besseren Wert)
+        # Style Definitionen
+        # 1. Einheitliche Schriftgröße (28px) damit nichts springt
+        # 2. background:#ffffff für weiße Balken
+        # 3. Farbe: Helles Grün (#28a745) statt Dunkelgrün
         base_style = "font-size:28px; padding:10px; background:#ffffff;"
         
-        s_h = f"{base_style} color:#004d00; font-weight:900;" if h_win else f"{base_style} color:#000; font-weight:800;"
-        s_g = f"{base_style} color:#004d00; font-weight:900;" if g_win else f"{base_style} color:#000; font-weight:800;"
+        # Wenn Gewinner: Helles Grün (#28a745) + Extra Fett (900)
+        # Wenn Verlierer: Schwarz (#000) + Fett (800)
+        s_h = f"{base_style} color:#28a745; font-weight:900;" if h_win else f"{base_style} color:#000; font-weight:800;"
+        s_g = f"{base_style} color:#28a745; font-weight:900;" if g_win else f"{base_style} color:#000; font-weight:800;"
         
         if "pct" in key:
             f_h = f"{v_h:.1f}%"; f_g = f"{v_g:.1f}%"
@@ -169,7 +173,6 @@ def render_obs_comparison():
 
     html += "</table></div>"
     st.markdown(html, unsafe_allow_html=True)
-
 # --- 4. PLAYER OF THE GAME (GOLD THEME) ---
 def render_obs_potg():
     st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
