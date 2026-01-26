@@ -168,7 +168,7 @@ def render_home():
     with c2:
         if st.button("🔴 Live Game Center", use_container_width=True): st.session_state.current_page = "live"; st.rerun()
     with c3:
-        if st.button("📡 Stream Infos (OBS)", use_container_width=True): go_streaminfos(); st.rerun()
+        if st.button("📡 Stream Infos (OBS)", use_container_width=True): st.session_state.current_page = "obs"; st.rerun()
     
     st.write("")
     c4, c5, c6 = st.columns(3)
