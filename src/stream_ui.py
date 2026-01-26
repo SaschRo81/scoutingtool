@@ -120,7 +120,7 @@ body {
 .potg-stat-label { font-size: 14px; color: #666; margin-bottom: 2px; }
 .potg-stat-val { font-size: 28px; font-weight: 900; color: #00338d; }
 
-/* --- FINAL BANNER STYLES (CLEAN) --- */
+/* --- FINAL BANNER STYLES (REDESIGN) --- */
 .fb-container {
     position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
     width: 1600px; font-family: sans-serif;
@@ -129,36 +129,37 @@ body {
 .fb-header {
     background: linear-gradient(90deg, #001040 0%, #002060 100%); /* Deep Blue */
     color: white; 
-    height: 130px; 
+    height: 90px; /* REDUZIERT */
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 50px; border-top: 6px solid #ff6600;
+    padding: 0 40px; border-top: 6px solid #ff6600;
 }
 .fb-team-name { 
-    font-size: 40px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; 
-    width: 40%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; 
+    font-size: 28px; /* REDUZIERT VON 40px */
+    font-weight: 900; text-transform: uppercase; letter-spacing: 1px; 
+    width: 45%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; 
 }
 .fb-team-name.right { text-align: right; }
 
-.fb-logos { display: flex; align-items: center; gap: 30px; height: 100%; }
-.fb-logo-img { 
-    height: 110px !important; 
-    width: auto; 
-    object-fit: contain; 
-    filter: drop-shadow(0 0 10px rgba(255,255,255,0.4)); 
-}
-.fb-vs { font-size: 32px; font-weight: 900; color: #ff6600; font-style: italic; font-family: sans-serif; }
+.fb-vs { font-size: 24px; font-weight: 900; color: #ff6600; font-style: italic; font-family: sans-serif; }
 
 .fb-footer {
-    background: white; height: 90px; display: flex; align-items: center; justify-content: center;
-    padding: 0; position: relative;
+    background: white; height: 110px; /* ERHÖHT FÜR LOGOS */
+    display: flex; align-items: center; justify-content: space-between; /* LOGOS AUSSEN */
+    padding: 0 30px; position: relative;
     border-bottom: 4px solid #ccc;
 }
 
+/* NEUE LOGO STYLES FÜR FOOTER */
+.fb-logo-footer {
+    height: 90px; width: auto; object-fit: contain;
+    filter: drop-shadow(0 2px 5px rgba(0,0,0,0.2)); /* Weicher Schatten auf Weiß */
+}
+
 .fb-center-box {
-    position: absolute; top: -35px; left: 50%; transform: translateX(-50%);
+    position: absolute; top: -25px; left: 50%; transform: translateX(-50%);
     background: white; padding: 15px 60px; border-radius: 12px 12px 0 0;
     text-align: center; border-top: 5px solid #ff6600;
-    box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+    box-shadow: 0 -5px 20px rgba(0,0,0,0.15);
 }
 .fb-center-sub { font-size: 16px; font-weight: 900; color: #ff6600; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
 .fb-center-score { font-size: 60px; font-weight: 900; color: #001f5b; line-height: 1; }
@@ -282,23 +283,21 @@ def render_obs_final_banner():
         sh = sum([int(p.get("points",0)) for p in box.get("homeTeam", {}).get("playerStats",[])])
         sg = sum([int(p.get("points",0)) for p in box.get("guestTeam", {}).get("playerStats",[])])
 
-    # HTML (KEIN TOP PERFORMER MEHR)
+    # HTML (RE-DESIGN: LOGOS IM FOOTER)
     html = f"""
     <div class='fb-container'>
         <div class='fb-header'>
             <div class='fb-team-name'>{h_name}</div>
-            <div class='fb-logos'>
-                <img src='{h_logo}' class='fb-logo-img'>
-                <div class='fb-vs'>VS</div>
-                <img src='{g_logo}' class='fb-logo-img'>
-            </div>
+            <div class='fb-vs'>VS</div>
             <div class='fb-team-name right'>{g_name}</div>
         </div>
         <div class='fb-footer'>
+            <img src='{h_logo}' class='fb-logo-footer'>
             <div class='fb-center-box'>
                 <div class='fb-center-sub'>FINAL SCORE</div>
                 <div class='fb-center-score'>{sh} | {sg}</div>
             </div>
+            <img src='{g_logo}' class='fb-logo-footer'>
         </div>
     </div>
     """
