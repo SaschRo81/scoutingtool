@@ -23,14 +23,20 @@ CURRENT_SEASON_ID = "2025"
 BASKETBALL_ICON = "🏀"
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon=BASKETBALL_ICON)
 
-# --- 2. OBS ROUTING (GANZ OBEN) ---
+# --- 2. OBS ROUTING (GRAFIKEN) ---
+# Dieser Teil rendert NUR die Grafik für OBS und stoppt dann sofort.
 if "view" in st.query_params:
     view_mode = st.query_params["view"]
+    # Grafik-Modi (stoppen sofort, damit kein UI geladen wird)
     if view_mode == "obs_starting5": render_obs_starting5(); st.stop()
     elif view_mode == "obs_standings": render_obs_standings(); st.stop()
     elif view_mode == "obs_comparison": render_obs_comparison(); st.stop()
     elif view_mode == "obs_potg": render_obs_potg(); st.stop()
     elif view_mode == "obs_final_banner": render_obs_final_banner(); st.stop()
+
+    # HINWEIS: Der Modus "config" wird hier absichtlich NICHT abgefangen, 
+    # damit die Funktionen weiter unten erst definiert werden können.
+    # Er wird ganz am Ende der Datei im Haupt-Router behandelt.
 
 # --- STANDARDFUNKTIONEN & IMPORTE ---
 try:
@@ -54,7 +60,7 @@ from src.analysis_ui import (
     generate_complex_ai_prompt, render_game_top_performers
 )
 
-# Session State
+# Session State Initialisierung
 for key, default in [("current_page", "home"), ("print_mode", False), ("game_meta", {}), ("roster_df", None), ("live_view_mode", "today"), ("live_date_filter", date.today()), ("stats_team_id", None), ("analysis_team_id", None), ("generated_ai_report", None), ("live_game_id", None), ("facts_offense", pd.DataFrame([])), ("facts_defense", pd.DataFrame([])), ("facts_about", pd.DataFrame([]))]:
     if key not in st.session_state: st.session_state[key] = default
 
@@ -82,7 +88,16 @@ def render_page_header(page_title):
 
 # --- ADMIN SEITE: STREAM INFOS ---
 def render_streaminfos_page():
-    render_page_header("📡 Stream Overlay Konfigurator")
+    # Wenn wir im "config" Modus sind (externer Link), passen wir den Header an
+    is_external = st.query_params.get("view") == "config"
+    
+    if is_external:
+        inject_custom_css()
+        st.title("📡 Stream Overlay Konfigurator")
+        st.divider()
+    else:
+        render_page_header("📡 Stream Overlay Konfigurator")
+        
     st.info("Generiere hier die Links für OBS Browserquellen (1920x1080).")
     
     south_teams = {k:v for k,v in TEAMS_DB.items() if v["staffel"] == "Süd"}
@@ -522,8 +537,15 @@ def render_player_comparison_page():
             with c2: st.markdown(f"<div style='text-align: center; background:#f8f9fa;'>{l}</div>", unsafe_allow_html=True)
             with c3: st.markdown(f"<div style='text-align: left; {s2}'>{v2}</div>", unsafe_allow_html=True)
 
-# --- ROUTER ---
-if st.session_state.current_page == "home": render_home()
+# --- ROUTER (HAUPTNAVIGATION) ---
+
+# 1. EXTENER LINK für OBS-Konfiguration
+# Prüft, ob "?view=config" in der URL steht.
+if "view" in st.query_params and st.query_params["view"] == "config":
+    render_streaminfos_page()
+
+# 2. NORMALE NAVIGATION (Wenn kein "view" Parameter da ist)
+elif st.session_state.current_page == "home": render_home()
 elif st.session_state.current_page == "scouting": render_scouting_page()
 elif st.session_state.current_page == "comparison": render_comparison_page()
 elif st.session_state.current_page == "analysis": render_analysis_page()
@@ -534,4 +556,6 @@ elif st.session_state.current_page == "live": render_live_page()
 elif st.session_state.current_page == "team_stats": render_team_stats_page()
 elif st.session_state.current_page == "team_analysis": render_team_analysis_page()
 elif st.session_state.current_page == "streaminfos": render_streaminfos_page()
-elif st.session_state.current_page == "live": render_live_view(None) # Platzhalter
+
+# Platzhalter für Live View, falls noch benötigt (standardmäßig über session_state "live")
+elif st.session_state.current_page == "live_placeholder": render_live_view(None)
