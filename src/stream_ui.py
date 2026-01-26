@@ -167,7 +167,7 @@ def render_obs_comparison():
     html += "</table></div>"
     st.markdown(html, unsafe_allow_html=True)
 
-# --- 4. PLAYER OF THE GAME (GOLD THEME) ---
+# --- 4. PLAYER OF THE GAME (GOLD & WHITE MIX) ---
 def render_obs_potg():
     st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
     gid = st.query_params.get("game_id")
@@ -188,24 +188,27 @@ def render_obs_potg():
                     "min": f"{int(p.get('secondsPlayed', 0))//60:02d}:00"
                 })
             except: pass
-            
+    
+    # FIX: Hier fehlte der Doppelpunkt
     if players:
         mvp = sorted(players, key=lambda x: x["eff"], reverse=True)[0]
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
         
-        # DESIGN UPDATE: Goldener Hintergrund, Schwarzer Rand, Schwarze Schrift
+        # HTML: Goldener Body, Weiße Stats-Box
         html = f"<div style='width:450px; margin:100px auto; background:#FFD700; border:4px solid #000; border-radius:20px; padding:30px; text-align:center; color:#000; font-family:sans-serif; box-shadow:0 0 50px rgba(0,0,0,0.8);'>"
         html += f"<h2 style='color:#000; margin:0 0 15px 0; font-size:24px; text-transform:uppercase; font-weight:900;'>Player of the Game</h2>"
         html += f"<img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid #000; object-fit:cover;'>"
         html += f"<h1 style='margin:15px 0 5px 0; font-size:32px; color:#000; font-weight:900;'>{mvp['name']}</h1>"
-        html += f"<h2 style='margin:0; color:#333;'>#{mvp['nr']}</h2>"
-        # Stats Box: Weißer Hintergrund für Kontrast
-        html += "<div style='display:flex; justify-content:center; gap:15px; margin-top:25px; background:#fff; padding:15px; border-radius:10px; border:1px solid #000;'>"
-        html += f"<div><div style='font-size:12px; color:#666;'>MIN</div><div style='font-size:24px; font-weight:900;'>{mvp['min']}</div></div>"
-        html += f"<div><div style='font-size:12px; color:#666;'>PTS</div><div style='font-size:24px; font-weight:900;'>{mvp['pts']}</div></div>"
-        html += f"<div><div style='font-size:12px; color:#666;'>REB</div><div style='font-size:24px; font-weight:900;'>{mvp['reb']}</div></div>"
-        html += f"<div><div style='font-size:12px; color:#666;'>EFF</div><div style='font-size:24px; font-weight:900; color:#001f5b;'>{mvp['eff']:.0f}</div></div></div></div>"
+        html += f"<h2 style='margin:0 0 20px 0; color:#333; font-weight:bold;'>#{mvp['nr']}</h2>"
+        
+        # Stats Box: Weißer Hintergrund
+        html += "<div style='display:flex; justify-content:center; gap:15px; background:#FFFFFF; padding:15px; border-radius:10px; border:2px solid #000;'>"
+        html += f"<div style='text-align:center;'><div style='font-size:12px; color:#666; font-weight:bold;'>MIN</div><div style='font-size:24px; font-weight:900; color:#000;'>{mvp['min']}</div></div>"
+        html += f"<div style='text-align:center;'><div style='font-size:12px; color:#666; font-weight:bold;'>PTS</div><div style='font-size:24px; font-weight:900; color:#000;'>{mvp['pts']}</div></div>"
+        html += f"<div style='text-align:center;'><div style='font-size:12px; color:#666; font-weight:bold;'>REB</div><div style='font-size:24px; font-weight:900; color:#000;'>{mvp['reb']}</div></div>"
+        html += f"<div style='text-align:center;'><div style='font-size:12px; color:#666; font-weight:bold;'>EFF</div><div style='font-size:24px; font-weight:900; color:#000;'>{mvp['eff']:.0f}</div></div>"
+        html += "</div></div>"
         st.markdown(html, unsafe_allow_html=True)
 
 # --- 5. FINAL SCORE BANNER ---
