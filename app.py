@@ -542,9 +542,14 @@ def render_player_comparison_page():
 # 1. EXTENER LINK für OBS-Konfiguration
 # Prüft, ob "?view=config" in der URL steht.
 if "view" in st.query_params and st.query_params["view"] == "config":
+st.markdown('<style>[data-testid="stAppViewContainer"] { background-image: none !important; background-color: #ffffff !important; } [data-testid="stHeader"] { background-color: #ffffff !important; }</style>', unsafe_allow_html=True)
     render_streaminfos_page()
 if "view" in st.query_params and st.query_params["view"] == "live":
+st.markdown('<style>[data-testid="stAppViewContainer"] { background-image: none !important; background-color: #ffffff !important; } [data-testid="stHeader"] { background-color: #ffffff !important; }</style>', unsafe_allow_html=True)
     render_live_page()
+
+
+    render_streaminfos_page()
 
 # 2. NORMALE NAVIGATION (Wenn kein "view" Parameter da ist)
 elif st.session_state.current_page == "home": render_home()
