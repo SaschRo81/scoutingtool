@@ -10,10 +10,7 @@ from src.api import (
 )
 from src.html_gen import generate_comparison_html
 
-# --- OBS ULTRA CLEAN CSS ---
-# 1. Alles von Streamlit ausblenden
-# 2. Hintergrund auf Transparent setzen
-# 3. Weiße Boxen für Inhalte definieren
+# --- OBS ULTRA CLEAN CSS (Vollständig & Aggressiv) ---
 OBS_ULTRA_CLEAN_CSS = """
 <style>
 /* UI Elemente verstecken */
@@ -26,7 +23,7 @@ header, footer, #MainMenu, [data-testid="stHeader"], [data-testid="stStatusWidge
     opacity: 0 !important;
 }
 
-/* Transparenz erzwingen (Canvas) */
+/* Transparenz erzwingen */
 .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"], .block-container {
     background: transparent !important;
     background-color: transparent !important;
@@ -57,18 +54,14 @@ def render_obs_starting5():
         ids = [x for x in ids_str.split(",") if x]
         if not ids: return
 
-        # Container fixiert unten
         html = f"<div class='overlay-container' style='position:fixed; bottom:40px; left:50%; transform:translateX(-50%); width:1550px; display:flex; flex-direction:column; z-index:9999;'>"
-        
-        # Header
         html += f"<div class='header-bar' style='background:linear-gradient(90deg, #001f5b 0%, #00338d 100%); color:white; padding:12px 35px; display:flex; align-items:center; justify-content:space-between; border-top:5px solid #ff6600; border-radius:10px 10px 0 0; box-shadow: 0 5px 15px rgba(0,0,0,0.5);'>"
         html += f"<div style='display:flex; align-items:center; gap:20px;'>"
         if logo_url: html += f"<img src='{logo_url}' style='height:65px; object-fit:contain;'>"
         html += f"<div style='font-size:34px; font-weight:900; text-transform:uppercase; font-family:sans-serif;'>{team_name}</div></div>"
         html += f"<div style='text-align:right; font-size:16px; color:#ddd; text-transform:uppercase; font-family:sans-serif;'>Head Coach<span style='font-weight:bold; color:white; display:block; font-size:22px;'>{coach_name}</span></div></div>"
-        
-        # Spieler
         html += f"<div style='display:flex; justify-content:space-between; background:white; padding:20px; border-radius:0 0 10px 10px; border-bottom:5px solid #001f5b;'>"
+        
         for pid in ids:
             meta = get_player_metadata_cached(pid)
             img = meta.get("img") or "https://via.placeholder.com/150"
@@ -97,7 +90,6 @@ def render_obs_standings():
         dbbl_logo = "https://toyota-dbbl.de/app/themes/dbbl/src/assets/toyota-DBBL-logo.svg"
         title_text = f"2. Damen Basketball Bundesliga {region.capitalize()}"
         
-        # Zentrierter Container
         html = f"<div style='position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:1400px; background:white; border-radius:15px; border:3px solid #00338d; overflow:hidden; box-shadow:0 0 50px rgba(0,0,0,0.8); font-family:sans-serif;'>"
         html += f"<div style='background:linear-gradient(90deg, #001f5b 0%, #00338d 100%); color:white; padding:10px 40px; display:flex; align-items:center; justify-content:space-between; border-bottom:5px solid #ff6600; height:120px;'>"
         html += f"<span style='font-size:40px; font-weight:900; text-transform:uppercase; letter-spacing:1px;'>{title_text}</span>"
@@ -120,7 +112,7 @@ def render_obs_standings():
         html += "</tbody></table></div>"
         st.markdown(html, unsafe_allow_html=True)
 
-# --- 3. TEAM COMPARISON (HEAD TO HEAD) ---
+# --- 3. TEAM COMPARISON (HEAD TO HEAD) - GOLD EDITION ---
 def render_obs_comparison():
     st.markdown(OBS_ULTRA_CLEAN_CSS, unsafe_allow_html=True)
     hid = st.query_params.get("hid"); gid = st.query_params.get("gid")
@@ -138,14 +130,14 @@ def render_obs_comparison():
         ("Steals", "st"), ("Blocks", "bs"), ("Fouls", "pf")
     ]
 
-    # FIX: Kompakter Container (1100px), Weiss, Zentriert
-    html = f"<div style='position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:1100px; background:white; border-radius:15px; padding:0; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.8); font-family:sans-serif; z-index:9999;'>"
+    # FIX: Kompakt (1100px), HINTERGRUND GOLD (#FFD700)
+    html = f"<div style='position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:1100px; background:#FFD700; border-radius:15px; padding:0; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.8); font-family:sans-serif; z-index:9999; border: 4px solid #000;'>"
     html += f"<table style='width:100%; border-collapse:collapse;'>"
     
-    # GOLD HEADER - Schrift etwas kleiner damit lange Namen passen
-    html += f"<tr><th style='background:#FFD700; color:black; padding:15px; font-size:24px; font-weight:900; width:40%; text-align:center; text-transform:uppercase; border-bottom:3px solid #000;'>{hname}</th>"
-    html += f"<th style='background:#222; color:white; width:20%; text-align:center; font-size:16px; letter-spacing:2px; border-bottom:3px solid #000;'>STATS</th>"
-    html += f"<th style='background:#FFD700; color:black; padding:15px; font-size:24px; font-weight:900; width:40%; text-align:center; text-transform:uppercase; border-bottom:3px solid #000;'>{gname}</th></tr>"
+    # Header Zeile in SCHWARZ mit Goldener/Weißer Schrift
+    html += f"<tr><th style='background:#000; color:#FFD700; padding:15px; font-size:24px; font-weight:900; width:40%; text-align:center; text-transform:uppercase; border-bottom:4px solid #000;'>{hname}</th>"
+    html += f"<th style='background:#222; color:white; width:20%; text-align:center; font-size:16px; letter-spacing:2px; border-bottom:4px solid #000;'>STATS</th>"
+    html += f"<th style='background:#000; color:#FFD700; padding:15px; font-size:24px; font-weight:900; width:40%; text-align:center; text-transform:uppercase; border-bottom:4px solid #000;'>{gname}</th></tr>"
 
     for label, key in metrics:
         try:
@@ -154,26 +146,26 @@ def render_obs_comparison():
         except:
             v_h = 0.0; v_g = 0.0
 
-        # Highlights
         is_negative_stat = key in ["to", "pf"]
         h_win = (v_h < v_g) if is_negative_stat else (v_h > v_g)
         g_win = (v_g < v_h) if is_negative_stat else (v_g > v_h)
         
-        # Style Klassen (Schriftgrößen angepasst)
-        s_h = "color:#1a8a34; font-size:30px; font-weight:900;" if h_win else "color:#111; font-size:26px; font-weight:800;"
-        s_g = "color:#1a8a34; font-size:30px; font-weight:900;" if g_win else "color:#111; font-size:26px; font-weight:800;"
+        # Style Klassen: Schwarze Schrift auf Gold. Win = Dunkles Grün.
+        # Wichtig: Sehr dunkles Grün für Kontrast auf Gold
+        s_h = "color:#004d00; font-size:30px; font-weight:900;" if h_win else "color:#000; font-size:26px; font-weight:800;"
+        s_g = "color:#004d00; font-size:30px; font-weight:900;" if g_win else "color:#000; font-size:26px; font-weight:800;"
         
-        # RUNDUNG: WICHTIG! Auf 1 Nachkommastelle
+        # RUNDUNG
         if "pct" in key:
-            f_h = f"{v_h:.1f}%"
-            f_g = f"{v_g:.1f}%"
+            f_h = f"{v_h:.1f}%"; f_g = f"{v_g:.1f}%"
         else:
-            f_h = f"{v_h:.1f}"
-            f_g = f"{v_g:.1f}"
+            f_h = f"{v_h:.1f}"; f_g = f"{v_g:.1f}"
 
-        html += f"<tr style='border-bottom:1px solid #ddd; text-align:center;'>"
+        # Zeilen: Borders etwas dunkler für Kontrast auf Gold
+        html += f"<tr style='border-bottom:1px solid #d4b000; text-align:center;'>"
         html += f"<td style='padding:10px; {s_h}'>{f_h}</td>"
-        html += f"<td style='background:#f4f4f4; color:#555; font-size:15px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px;'>{label}</td>"
+        # Mittlere Spalte (Labels): Weißer Hintergrund für Klarheit
+        html += f"<td style='background:#fff; color:#000; font-size:16px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; border-left:1px solid #d4b000; border-right:1px solid #d4b000;'>{label}</td>"
         html += f"<td style='padding:10px; {s_g}'>{f_g}</td></tr>"
 
     html += "</table></div>"
@@ -206,7 +198,6 @@ def render_obs_potg():
         meta = get_player_metadata_cached(mvp["id"])
         img = meta.get("img") or "https://via.placeholder.com/300"
         
-        # HTML ohne Einrückung
         html = f"<div style='width:450px; margin:100px auto; background:white; border:4px solid #ff6600; border-radius:20px; padding:30px; text-align:center; color:#333; font-family:sans-serif; box-shadow:0 0 50px rgba(0,0,0,0.5);'>"
         html += f"<h2 style='color:#ff6600; margin:0 0 15px 0; font-size:24px; text-transform:uppercase;'>Player of the Game</h2>"
         html += f"<img src='{img}' style='width:220px; height:220px; border-radius:50%; border:5px solid #00338d; object-fit:cover;'>"
