@@ -24,54 +24,6 @@ BASKETBALL_ICON = "🏀"
 
 st.set_page_config(page_title=f"DBBL Scouting Pro {VERSION}", layout="wide", page_icon=BASKETBALL_ICON)
 
-# --- 2. OBS ROUTING (GRAFIKEN) ---
-# Dieser Teil rendert NUR die Grafik für OBS und stoppt dann sofort.
-if "view" in st.query_params:
-    view_mode = st.query_params["view"]
-    # Grafik-Modi (stoppen sofort, damit kein UI geladen wird)
-    if view_mode == "obs_starting5": render_obs_starting5(); st.stop()
-    elif view_mode == "obs_standings": render_obs_standings(); st.stop()
-    elif view_mode == "obs_comparison": render_obs_comparison(); st.stop()
-    elif view_mode == "obs_potg": render_obs_potg(); st.stop()
-    elif view_mode == "obs_final_banner": render_obs_final_banner(); st.stop()
-
-    # HINWEIS: Der Modus "config" wird hier absichtlich NICHT abgefangen, 
-    # damit die Funktionen weiter unten erst definiert werden können.
-    # Er wird ganz am Ende der Datei im Haupt-Router behandelt.
-
-# --- STANDARDFUNKTIONEN & IMPORTE ---
-try:
-    import pdfkit
-    HAS_PDFKIT = True
-except ImportError:
-    HAS_PDFKIT = False
-
-from src.api import (
-    fetch_team_data, get_player_metadata_cached, fetch_schedule, 
-    fetch_game_boxscore, get_best_team_logo, fetch_league_standings, 
-    fetch_team_info_basic, fetch_game_details, fetch_games_from_recent, 
-    fetch_season_games, fetch_last_n_games_complete
-)
-from src.html_gen import generate_header_html, generate_top3_html, generate_card_html, generate_team_stats_html, generate_custom_sections_html, generate_comparison_html
-from src.state_manager import export_session_state, load_session_state
-# In deiner app.py ca. Zeile 57
-from src.analysis_ui import (
-    render_game_header, 
-    render_boxscore_table_pro, 
-    render_charts_and_stats, 
-    get_team_name, 
-    render_full_play_by_play, 
-    render_prep_dashboard, 
-    render_live_view, 
-    render_team_analysis_dashboard, 
-    generate_game_summary,
-    generate_complex_ai_prompt, 
-    render_game_top_performers,
-    render_analysis_page,       # WICHTIG: Hinzufügen
-    render_game_venue_page,     # WICHTIG: Hinzufügen
-    render_team_analysis_page   # WICHTIG: Hinzufügen
-)
-
 # --- STANDARDWERTE DEFINITIONEN ---
 DEFAULT_OFFENSE = [
     {"Fokus": "Run", "Beschreibung": "fastbreaks & quick inbounds"}, 
@@ -104,7 +56,44 @@ DEFAULT_ABOUT = [
     {"Fokus": "Communication", "Beschreibung": "Talk more, earlier and louder!"}
 ]
 
-# --- SESSION STATE INITIALISIERUNG (UPDATED) ---
+# --- 2. OBS ROUTING (GRAFIKEN) ---
+# Dieser Teil rendert NUR die Grafik für OBS und stoppt dann sofort.
+if "view" in st.query_params:
+    view_mode = st.query_params["view"]
+    # Grafik-Modi (stoppen sofort, damit kein UI geladen wird)
+    if view_mode == "obs_starting5": render_obs_starting5(); st.stop()
+    elif view_mode == "obs_standings": render_obs_standings(); st.stop()
+    elif view_mode == "obs_comparison": render_obs_comparison(); st.stop()
+    elif view_mode == "obs_potg": render_obs_potg(); st.stop()
+    elif view_mode == "obs_final_banner": render_obs_final_banner(); st.stop()
+
+    # HINWEIS: Der Modus "config" wird hier absichtlich NICHT abgefangen, 
+    # damit die Funktionen weiter unten erst definiert werden können.
+    # Er wird ganz am Ende der Datei im Haupt-Router behandelt.
+
+# --- STANDARDFUNKTIONEN & IMPORTE ---
+try:
+    import pdfkit
+    HAS_PDFKIT = True
+except ImportError:
+    HAS_PDFKIT = False
+
+from src.api import (
+    fetch_team_data, get_player_metadata_cached, fetch_schedule, 
+    fetch_game_boxscore, get_best_team_logo, fetch_league_standings, 
+    fetch_team_info_basic, fetch_game_details, fetch_games_from_recent, 
+    fetch_season_games, fetch_last_n_games_complete
+)
+from src.html_gen import generate_header_html, generate_top3_html, generate_card_html, generate_team_stats_html, generate_custom_sections_html, generate_comparison_html
+from src.state_manager import export_session_state, load_session_state
+from src.analysis_ui import (
+    render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
+    get_team_name, render_full_play_by_play, render_prep_dashboard, 
+    render_live_view, render_team_analysis_dashboard, generate_game_summary,
+    generate_complex_ai_prompt, render_game_top_performers
+)
+
+# Session State Initialisierung
 initial_keys = [
     ("current_page", "home"),
     ("print_mode", False),
@@ -113,18 +102,18 @@ initial_keys = [
     ("live_view_mode", "today"),
     ("live_date_filter", date.today()),
     ("stats_team_id", None),
-    ("stats_league_selection", None),
+    ("stats_league_selection", None), # Wichtig für die Stats-Seite
     ("analysis_team_id", None),
     ("generated_ai_report", None),
     ("live_game_id", None),
-    # HIER WERDEN JETZT DIE STANDARDS GELADEN:
-    ("facts_offense", pd.DataFrame(DEFAULT_OFFENSE)),
-    ("facts_defense", pd.DataFrame(DEFAULT_DEFENSE)),
-    ("facts_about", pd.DataFrame(DEFAULT_ABOUT)),
+    ("facts_offense", pd.DataFrame([])),
+    ("facts_defense", pd.DataFrame([])),
+    ("facts_about", pd.DataFrame([])),
+    # --- HIER WAREN DIE FEHLENDEN VARIABLEN ---
     ("saved_colors", {}),
     ("saved_notes", {}),
     ("pdf_bytes", None),
-    ("report_filename", "scouting_report.pdf"),
+    ("report_filename", "report.pdf"),
     ("final_html", "")
 ]
 
