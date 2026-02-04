@@ -5,11 +5,11 @@ import altair as alt
 from datetime import datetime
 import pytz
 
-# Importe aus deinen anderen Dateien
+# Importe aus deinen API- und Utility-Modulen
 from src.api import get_player_metadata_cached, get_best_team_logo, fetch_last_n_games_complete
 from src.utils import clean_pos
 
-# --- KONSTANTEN & HELPERS ---
+# --- KONSTANTEN & TRANSLATION ---
 ACTION_TRANSLATION = {
     "TWO_POINT_SHOT_MADE": "2P Treffer", "TWO_POINT_SHOT_MISSED": "2P Fehl",
     "THREE_POINT_SHOT_MADE": "3P Treffer", "THREE_POINT_SHOT_MISSED": "3P Fehl",
@@ -22,8 +22,7 @@ ACTION_TRANSLATION = {
 def translate_text(text):
     if not text: return ""
     text_upper = str(text).upper()
-    if text_upper in ACTION_TRANSLATION: return ACTION_TRANSLATION[text_upper]
-    return text.replace("_", " ").capitalize()
+    return ACTION_TRANSLATION.get(text_upper, text.replace("_", " ").capitalize())
 
 def safe_int(val):
     try: return int(float(val)) if val is not None else 0
@@ -34,7 +33,6 @@ def safe_div(num, den):
 
 def get_team_name(team_data, default_name="Team"):
     if not team_data: return default_name
-    # Prüfe verschiedene Orte, an denen der Name stehen könnte
     name = team_data.get("name") or team_data.get("nameFull")
     if not name and "seasonTeam" in team_data:
         name = team_data["seasonTeam"].get("name")
@@ -48,7 +46,7 @@ def format_date_time(iso_string):
         return dt.astimezone(berlin).strftime("%d.%m.%Y | %H:%M Uhr")
     except: return iso_string
 
-# --- UI KOMPONENTEN ---
+# --- UI KOMPONENTEN FÜR APP.PY ---
 
 def render_game_header(details):
     h_data, g_data = details.get("homeTeam", {}), details.get("guestTeam", {})
@@ -57,7 +55,7 @@ def render_game_header(details):
     sh, sg = res.get("homeTeamFinalScore", 0), res.get("guestTeamFinalScore", 0)
     
     st.markdown(f"""
-        <div style='text-align: center; background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #ddd;'>
+        <div style='text-align: center; background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 20px;'>
             <div style='display: flex; justify-content: space-around; align-items: center;'>
                 <div style='width: 40%;'><h2>{h_name}</h2></div>
                 <div style='width: 20%;'><h1 style='font-size: 3em; margin: 0;'>{sh}:{sg}</h1></div>
@@ -71,7 +69,6 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
     if not player_stats:
         st.info(f"Keine Spielerdaten für {team_name} verfügbar.")
         return
-    
     data = []
     for p in player_stats:
         info = p.get("seasonPlayer", {})
@@ -87,7 +84,6 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
             "PF": p.get("foulsCommitted", 0),
             "EFF": p.get("efficiency", 0)
         })
-    
     st.markdown(f"#### {team_name} (HC: {coach_name})")
     st.dataframe(pd.DataFrame(data), hide_index=True, width="stretch")
 
@@ -104,18 +100,11 @@ def render_game_top_performers(box):
                 for p in top:
                     st.write(f"- {p.get('seasonPlayer',{}).get('lastName')}: {p.get('points')} Pkt, {p.get('efficiency')} EFF")
 
-def render_live_comparison_bars(box):
+def render_charts_and_stats(box):
+    st.subheader("Team-Vergleich")
     h_stat = box.get("homeTeam", {}).get("gameStat", {})
     g_stat = box.get("guestTeam", {}).get("gameStat", {})
-    
-    stats = [
-        ("Punkte", "points"),
-        ("Rebounds", "totalRebounds"),
-        ("Assists", "assists"),
-        ("Steals", "steals"),
-        ("Turnover", "turnovers")
-    ]
-    
+    stats = [("Punkte", "points"), ("Rebounds", "totalRebounds"), ("Assists", "assists"), ("Steals", "steals"), ("Turnover", "turnovers")]
     for label, key in stats:
         hv, gv = safe_int(h_stat.get(key)), safe_int(g_stat.get(key))
         total = hv + gv if (hv + gv) > 0 else 1
@@ -125,85 +114,61 @@ def render_live_comparison_bars(box):
         c2.progress(hv / total)
         c3.write(gv)
 
-def render_charts_and_stats(box):
-    st.subheader("Team-Vergleich")
-    render_live_comparison_bars(box)
-
 def render_full_play_by_play(box, height=500):
     actions = box.get("actions", [])
     if not actions:
         st.info("Keine Ticker-Daten vorhanden.")
         return
-    
     data = []
     for a in sorted(actions, key=lambda x: x.get('actionNumber', 0), reverse=True):
         data.append({
             "Zeit": a.get("gameTime", "-"),
             "Team": "Heim" if a.get("homeTeamPoints") is not None else "Gast",
             "Aktion": translate_text(a.get("type")),
-            "Spieler": str(a.get("seasonPlayerId", "-")),
             "Score": f"{a.get('homeTeamPoints', 0)}:{a.get('guestTeamPoints', 0)}"
         })
     st.dataframe(pd.DataFrame(data), height=height, width="stretch", hide_index=True)
 
 def render_prep_dashboard(team_id, team_name, df_roster, last_games, metadata_callback=None):
     st.title(f"Scouting Report: {team_name}")
-    st.write(f"Kadergröße: {len(df_roster)} Spielerinnen")
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("Top Scorer")
-        st.dataframe(df_roster.sort_values("PPG", ascending=False)[["NR", "NAME_FULL", "PPG"]].head(5), hide_index=True)
-    with c2:
-        st.subheader("Letzte Spiele")
-        st.write(f"{len(last_games)} Spiele analysiert.")
+    st.subheader("Top Scorer")
+    st.dataframe(df_roster.sort_values("PPG", ascending=False)[["NR", "NAME_FULL", "PPG"]].head(5), hide_index=True)
 
 def render_live_view(box):
     if not box: return
     render_game_header(box)
-    st.divider()
     t1, t2, t3 = st.tabs(["📋 Boxscore", "📊 Stats", "📜 Ticker"])
     with t1:
+        render_game_top_performers(box)
         c1, c2 = st.columns(2)
-        render_boxscore_table_pro(box.get("homeTeam",{}).get("playerStats"), {}, "Heim")
-        render_boxscore_table_pro(box.get("guestTeam",{}).get("playerStats"), {}, "Gast")
-    with t2:
-        render_charts_and_stats(box)
-    with t3:
-        render_full_play_by_play(box)
-
-# --- ANALYSE & SCOUTING LOGIK ---
+        with c1: render_boxscore_table_pro(box.get("homeTeam",{}).get("playerStats"), {}, "Heim")
+        with c2: render_boxscore_table_pro(box.get("guestTeam",{}).get("playerStats"), {}, "Gast")
+    with t2: render_charts_and_stats(box)
+    with t3: render_full_play_by_play(box)
 
 def render_team_analysis_dashboard(team_id, team_name):
     st.subheader(f"Video- & Datenanalyse: {team_name}")
     games = fetch_last_n_games_complete(team_id, "2025", n=10)
-    if not games:
-        st.warning("Keine detaillierten Spieldaten für die Analyse gefunden.")
-        return
-    
-    st.write(f"Analysiere {len(games)} Spiele der aktuellen Saison...")
-    # Hier würde die Logik für Shotcharts oder Play-Analyse hinkommen
+    st.write(f"Analysiere {len(games)} Spiele der Saison...")
 
 def generate_game_summary(box):
-    h = get_team_name(box.get("homeTeam"))
-    g = get_team_name(box.get("guestTeam"))
-    return f"Spielzusammenfassung: {h} gegen {g}."
+    return f"Spielzusammenfassung: {get_team_name(box.get('homeTeam'))} vs {get_team_name(box.get('guestTeam'))}"
 
 def generate_complex_ai_prompt(box):
-    return "KI-Prompt für Game-Analysis..."
+    return "KI-Prompt generiert..."
 
 def run_openai_generation(api_key, prompt):
     return "KI Dienst ist momentan deaktiviert."
 
-# --- PAGE WRAPPERS (Für den Router in app.py) ---
+# --- PAGE WRAPPERS FÜR DEN ROUTER IN APP.PY ---
 
 def render_analysis_page():
     st.title("🎥 Spielnachbereitung")
-    st.write("Wählen Sie ein Spiel aus, um die Play-by-Play Analyse zu starten.")
+    st.info("Funktion wird geladen...")
 
 def render_game_venue_page():
     st.title("📍 Spielorte & Hallen")
-    st.info("Diese Sektion ist in Arbeit. Hier werden demnächst Hallenpläne angezeigt.")
+    st.info("Halleninformationen in Vorbereitung.")
 
 def render_team_analysis_page():
     st.title("🧠 Team Spielanalyse")
