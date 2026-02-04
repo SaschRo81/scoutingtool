@@ -54,12 +54,22 @@ from src.api import (
 )
 from src.html_gen import generate_header_html, generate_top3_html, generate_card_html, generate_team_stats_html, generate_custom_sections_html, generate_comparison_html
 from src.state_manager import export_session_state, load_session_state
+# In deiner app.py ca. Zeile 57
 from src.analysis_ui import (
-    render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
-    get_team_name, render_full_play_by_play, render_prep_dashboard, 
-    render_live_view, render_team_analysis_dashboard, generate_game_summary,
-    generate_complex_ai_prompt, render_game_top_performers,
-    render_analysis_page, render_game_venue_page, render_team_analysis_page  # <--- Diese 3 sind wichtig!
+    render_game_header, 
+    render_boxscore_table_pro, 
+    render_charts_and_stats, 
+    get_team_name, 
+    render_full_play_by_play, 
+    render_prep_dashboard, 
+    render_live_view, 
+    render_team_analysis_dashboard, 
+    generate_game_summary,
+    generate_complex_ai_prompt, 
+    render_game_top_performers,
+    render_analysis_page,       # WICHTIG: Hinzufügen
+    render_game_venue_page,     # WICHTIG: Hinzufügen
+    render_team_analysis_page   # WICHTIG: Hinzufügen
 )
 
 # --- STANDARDWERTE DEFINITIONEN ---
