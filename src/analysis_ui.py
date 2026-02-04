@@ -36,6 +36,7 @@ def safe_int(val):
     except: return 0
 
 def safe_div(numerator, denominator):
+    """Sichere Division mit Prozentberechnung"""
     if denominator == 0: return 0.0
     return round((numerator / denominator) * 100, 1)
 
@@ -76,6 +77,7 @@ def get_player_team_map(box):
     return player_team
 
 def get_team_ids(team_data):
+    """Extrahiert alle möglichen Team-IDs und gibt eindeutige Liste zurück"""
     ids = []
     if team_data:
         ids.extend([
@@ -83,6 +85,7 @@ def get_team_ids(team_data):
             str(team_data.get("teamId", "")),
             str(team_data.get("seasonTeam", {}).get("id", ""))
         ])
+    # Entferne leere Strings und Duplikate
     return list(set(filter(None, ids)))
 
 def get_time_info(time_str, period):
@@ -303,7 +306,6 @@ def render_boxscore_table_pro(player_stats, team_stats_official, team_name, coac
         return [''] * len(row)
 
     st.markdown(f"#### {team_name} (HC: {coach_name})")
-    # WICHTIG: use_container_width=True für volle Breite
     st.dataframe(df.style.apply(style_rows, axis=1), hide_index=True, use_container_width=True)
 
 def render_game_top_performers(box):
@@ -469,6 +471,10 @@ def render_live_view(box):
         empty = "⚪" * (5 - min(count, 5))
         return filled + empty
 
+    h_img = f"<img src='{h_logo}' style='height:60px; margin-bottom:5px;'>" if h_logo else ""
+    g_img = f"<img src='{g_logo}' style='height:60px; margin-bottom:5px;'>" if g_logo else ""
+
+    # Alternative: Streamlit-native Ansatz ohne HTML
     col1, col2, col3, col4 = st.columns([2, 1, 2, 1])
     
     with col1:
@@ -493,6 +499,9 @@ def render_live_view(box):
     
     st.divider()
 
+    # CONTENT
+    # Diese Zeilen löschen - werden nicht mehr benötigt
+    
     t1, t2, t3 = st.tabs(["📋 Boxscore", "📊 Team-Vergleich", "📜 Play-by-Play"])
     
     def style_live(row):
