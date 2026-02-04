@@ -58,7 +58,8 @@ from src.analysis_ui import (
     render_game_header, render_boxscore_table_pro, render_charts_and_stats, 
     get_team_name, render_full_play_by_play, render_prep_dashboard, 
     render_live_view, render_team_analysis_dashboard, generate_game_summary,
-    generate_complex_ai_prompt, render_game_top_performers
+    generate_complex_ai_prompt, render_game_top_performers,
+    render_analysis_page, render_game_venue_page, render_team_analysis_page  # <--- Diese 3 sind wichtig!
 )
 
 # --- STANDARDWERTE DEFINITIONEN ---
