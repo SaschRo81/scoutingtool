@@ -20,6 +20,19 @@ Sprachen: Deutsch, Englisch, Griechisch, in jede Richtung. Englisch gibt es als 
    - bei Bedarf ein **verbesserter Vorschlag**, den du mit einem Tipp übernimmst
 4. Übersetzung bei Bedarf noch von Hand anpassen, dann **Teilen**, **WhatsApp**, **Telegram** oder **Kopieren**.
 
+### Gesprächsmodus (live, zwei Personen)
+
+Oben auf **Gespräch** umschalten. Links stellst du deine Sprache ein (**Ich**), rechts die des Gegenübers.
+
+1. Wer spricht, tippt auf **seinen** Knopf (z. B. „Deutsch“ oder „Ελληνικά“) und redet los.
+2. Das Gesprochene erscheint **sofort beim Sprechen**. Jeder fertige Satz wird direkt übersetzt, die Übersetzung baut sich Wort für Wort auf, meist innerhalb von ein bis zwei Sekunden.
+3. Zum Wechseln tippt der andere einfach auf seinen Knopf. Zum Beenden nochmal auf den eigenen.
+4. In jeder Sprechblase stehen Übersetzung (groß) und Original (klein), so wissen beide immer, was gesagt wurde.
+5. Mit **Übersetzung vorlesen** liest das Handy die Übersetzung vor, sobald der Sprecher fertig ist. Damit das Mikrofon die Stimme nicht mithört, wird während eines Redebeitrags nicht vorgelesen.
+6. **Kopieren** übernimmt das ganze Gespräch (Original und Übersetzung) in die Zwischenablage.
+
+Technik: Die Spracherkennung läuft live über den Browser (am besten Chrome auf Android, Safari auf dem iPhone). Übersetzt wird mit dem schnellen Modell `gemini-3.5-flash-lite` im Streaming-Verfahren, die letzten Sätze gehen als Zusammenhang mit. Fehlt die Browser-Spracherkennung (z. B. Firefox), nimmt die App jeden Redebeitrag auf und übersetzt ihn nach dem Antippen, dann allerdings mit ein paar Sekunden Verzögerung.
+
 ### Zwei Arten der Spracheingabe (Einstellungen)
 
 | Modus | Wie | Wofür |

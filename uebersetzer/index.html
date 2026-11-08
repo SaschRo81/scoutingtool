@@ -30,18 +30,23 @@
     </button>
   </header>
 
+  <nav class="tabs" role="tablist" aria-label="Modus">
+    <button class="tab" role="tab" data-view="msg" aria-selected="true">Nachricht</button>
+    <button class="tab" role="tab" data-view="talk" aria-selected="false">Gespräch</button>
+  </nav>
+
   <main>
     <!-- Sprachwahl -->
     <section class="langbar" aria-label="Sprachen">
       <label class="lang">
-        <span class="sr-only">Von</span>
+        <span class="lang-cap"><span class="cap-msg">Von</span><span class="cap-talk">Ich</span></span>
         <select id="srcLang"></select>
       </label>
       <button id="btnSwap" class="swap" aria-label="Sprachen tauschen" title="Sprachen tauschen">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"/></svg>
       </button>
       <label class="lang">
-        <span class="sr-only">Nach</span>
+        <span class="lang-cap"><span class="cap-msg">Nach</span><span class="cap-talk">Gegenüber</span></span>
         <select id="tgtLang"></select>
       </label>
     </section>
@@ -52,6 +57,7 @@
       <button class="chip" role="radio" data-style="formal">Förmlich (Sie)</button>
     </div>
 
+    <div id="viewMsg" class="view">
     <!-- Eingabe -->
     <section class="card" aria-label="Ausgangstext">
       <div class="card-head">
@@ -115,6 +121,35 @@
         <button id="btnWhatsApp" class="share wa">WhatsApp</button>
         <button id="btnTelegram" class="share tg">Telegram</button>
         <button id="btnCopy" class="share">Kopieren</button>
+      </div>
+    </section>
+    </div>
+
+    <!-- Gesprächsmodus -->
+    <section id="viewTalk" class="view talk" aria-label="Gespräch" hidden>
+      <div id="talkLog" class="talk-log" aria-live="polite">
+        <div id="talkEmpty" class="talk-empty">
+          <b>So geht's:</b> Wer spricht, tippt auf seine Sprache und redet los.
+          Jeder Satz wird sofort übersetzt. Zum Wechseln einfach den anderen Knopf antippen.
+        </div>
+      </div>
+      <div class="talk-tools">
+        <label class="toggle"><input id="talkSpeak" type="checkbox"><span>Übersetzung vorlesen</span></label>
+        <span class="spacer"></span>
+        <button id="talkCopy" class="text-btn">Kopieren</button>
+        <button id="talkClear" class="text-btn">Leeren</button>
+      </div>
+      <div class="talk-buttons">
+        <button id="talkMe" class="talk-btn" data-who="me">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>
+          <span class="tb-lang">Deutsch</span>
+          <span class="tb-state">Tippen &amp; sprechen</span>
+        </button>
+        <button id="talkOther" class="talk-btn other" data-who="other">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>
+          <span class="tb-lang">Ελληνικά</span>
+          <span class="tb-state">Tippen &amp; sprechen</span>
+        </button>
       </div>
     </section>
   </main>
@@ -185,6 +220,10 @@
           <input id="setGeminiFallback" type="text" spellcheck="false">
         </label>
         <label class="field">
+          <span>Gemini-Modell Gespräch (schnell)</span>
+          <input id="setTalkModel" type="text" spellcheck="false">
+        </label>
+        <label class="field">
           <span>OpenAI-Modell Übersetzung</span>
           <input id="setChatModel" type="text" spellcheck="false">
         </label>
@@ -202,5 +241,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>
+  <script src="talk.js"></script>
 </body>
 </html>

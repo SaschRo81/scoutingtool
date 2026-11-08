@@ -1,10 +1,11 @@
 // Offline-Cache für die App-Oberfläche. Anfragen an OpenAI werden nie zwischengespeichert.
-const CACHE = 'uebersetzer-v3';
+const CACHE = 'uebersetzer-v4';
 const SHELL = [
   './',
   'index.html',
   'style.css',
   'app.js',
+  'talk.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',

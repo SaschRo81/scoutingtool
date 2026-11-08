@@ -11,6 +11,8 @@
     provider: 'gemini', // 'gemini' (kostenlos) | 'openai'
     geminiModel: 'gemini-3.8-flash',
     geminiFallback: 'gemini-3.1-flash-lite',
+    talkModel: 'gemini-3.5-flash-lite', // schnell, für den Gesprächsmodus
+    talkSpeak: false,
     chatModel: 'gpt-6.1-sol',
     sttModel: 'gpt-transcribe',
     sttMode: 'ai',
@@ -75,7 +77,7 @@
     share: $('btnShare'), wa: $('btnWhatsApp'), tg: $('btnTelegram'), copy: $('btnCopy'), speak: $('btnSpeak'),
     dlgSettings: $('dlgSettings'), settingsForm: $('settingsForm'), btnSettings: $('btnSettings'),
     setKey: $('setKey'), setGeminiKey: $('setGeminiKey'), fieldOpenai: $('fieldOpenai'), fieldGemini: $('fieldGemini'),
-    setGeminiModel: $('setGeminiModel'), setGeminiFallback: $('setGeminiFallback'), setAuto: $('setAuto'), setChatModel: $('setChatModel'), setSttModel: $('setSttModel'),
+    setGeminiModel: $('setGeminiModel'), setGeminiFallback: $('setGeminiFallback'), setTalkModel: $('setTalkModel'), setAuto: $('setAuto'), setChatModel: $('setChatModel'), setSttModel: $('setSttModel'),
     resetModels: $('btnResetModels'),
     dlgHistory: $('dlgHistory'), btnHistory: $('btnHistory'), historyList: $('historyList'), clearHistory: $('btnClearHistory'),
     toast: $('toast'),
@@ -217,8 +219,10 @@
   }
 
   // Erst das Hauptmodell, bei Limit/Überlast/unbekanntem Modell das Ersatzmodell.
-  async function geminiGenerate(body) {
-    const models = [...new Set([settings.geminiModel || DEFAULTS.geminiModel, settings.geminiFallback].filter(Boolean))];
+  const geminiModels = (primary) => [...new Set([primary || settings.geminiModel || DEFAULTS.geminiModel, settings.geminiFallback].filter(Boolean))];
+
+  async function geminiGenerate(body, primary) {
+    const models = geminiModels(primary);
     let lastErr;
     for (const m of models) {
       try {
@@ -298,6 +302,137 @@
     }
   }
 
+  // ---------- Schnelle Übersetzung mit Streaming (Gesprächsmodus) ----------
+  // Liest Server-Sent-Events zeilenweise und liefert jedes "data:"-JSON.
+  async function* readSse(res) {
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === '[DONE]') continue;
+        try { yield JSON.parse(data); } catch { /* unvollständig */ }
+      }
+    }
+  }
+
+  async function readError(res, provider) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).error?.message || msg; } catch { /* kein JSON */ }
+    return new ApiError(res.status, msg, provider);
+  }
+
+  function interpreterPrompt(src, tgt, context) {
+    const lines = [
+      `You are a professional live interpreter in a face-to-face conversation. Translate the speaker's utterance from ${LANGS[src].en} into ${LANGS[tgt].en}.`,
+      'The text comes from live speech recognition: silently fix obvious recognition mistakes and missing punctuation. Keep the meaning exactly, do not add, drop or soften anything.',
+      'Make it sound natural and grammatically correct, as a native speaker would say it.',
+      `Register: ${STYLES[settings.style]}.`,
+      'Output ONLY the translation. No quotes, no notes, no explanations.',
+    ];
+    if (context) lines.push('', 'Earlier in this conversation (context only, do NOT translate this):', context);
+    return lines.join('\n');
+  }
+
+  // Übersetzt kurz und schnell; onDelta(text) wird mit dem bisherigen Ergebnis aufgerufen.
+  async function streamTranslate(text, src, tgt, { context = '', onDelta = () => {} } = {}) {
+    const system = interpreterPrompt(src, tgt, context);
+    let acc = '';
+
+    if (settings.provider === 'openai') {
+      const base = {
+        model: settings.chatModel || DEFAULTS.chatModel,
+        stream: true,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: text }],
+      };
+      for (const body of [{ ...base, reasoning_effort: 'low' }, base]) {
+        let res;
+        try {
+          res = await fetch(API + '/chat/completions', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        } catch { throw new Error('Verbindung zu OpenAI fehlgeschlagen.'); }
+        if (!res.ok) {
+          const err = await readError(res, 'OpenAI');
+          if (err.status === 400 && body.reasoning_effort) continue;
+          throw err;
+        }
+        for await (const ev of readSse(res)) {
+          const d = ev.choices?.[0]?.delta?.content;
+          if (d) { acc += d; onDelta(acc); }
+        }
+        return acc.trim();
+      }
+    }
+
+    const body = {
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text }] }],
+    };
+    let lastErr;
+    for (const model of geminiModels(settings.talkModel || DEFAULTS.talkModel)) {
+      // erst ohne "Nachdenken" (schneller); falls das Modell den Parameter nicht kennt, ohne ihn
+      for (const genCfg of [{ temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } }, { temperature: 0.2 }]) {
+        let res;
+        try {
+          res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(geminiKey)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...body, generationConfig: genCfg }),
+          });
+        } catch { throw new Error('Verbindung zu Google Gemini fehlgeschlagen.'); }
+        if (!res.ok) {
+          lastErr = await readError(res, 'Gemini');
+          if (lastErr.status === 400 && genCfg.thinkingConfig && !/api key/i.test(lastErr.message)) continue;
+          break; // nächstes Modell versuchen oder Fehler werfen
+        }
+        for await (const ev of readSse(res)) {
+          const parts = ev.candidates?.[0]?.content?.parts || [];
+          const d = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join('');
+          if (d) { acc += d; onDelta(acc); }
+        }
+        return acc.trim();
+      }
+      if (!(lastErr instanceof ApiError && [404, 429, 500, 503].includes(lastErr.status))) throw lastErr;
+    }
+    throw lastErr;
+  }
+
+  // Rückfall ohne Browser-Spracherkennung: Aufnahme → erkennen + übersetzen in einem Schritt
+  async function transcribeAndTranslate(blob, src, tgt, context) {
+    if (settings.provider === 'openai') {
+      const prevSrc = settings.src;
+      settings.src = src;
+      let original;
+      try { original = await transcribe(blob); } finally { settings.src = prevSrc; }
+      if (!original.trim()) return { original: '', translation: '' };
+      return { original, translation: await streamTranslate(original, src, tgt, { context }) };
+    }
+    const instruction = interpreterPrompt(src, tgt, context)
+      + `\n\nThe input is an audio recording in ${LANGS[src].en}. Answer ONLY with JSON: {"original": "<exact transcript>", "translation": "<translation>"}. If there is no speech, use empty strings.`;
+    const run = async (b) => parseJsonLoose(await geminiGenerate({
+      contents: [{ role: 'user', parts: [{ text: instruction }, { inlineData: { mimeType: b.type.split(';')[0] || 'audio/webm', data: await blobToBase64(b) } }] }],
+      generationConfig: { responseMimeType: 'application/json' },
+    }, settings.talkModel));
+    try {
+      return await run(blob);
+    } catch (e) {
+      const formatProblem = e instanceof ApiError && e.status === 400 && !/api key/i.test(e.message);
+      if (!formatProblem || blob.type.includes('wav')) throw e;
+      return run(await toWav16k(blob));
+    }
+  }
+
   // ---------- Sprachen ----------
   function fillLangSelects() {
     for (const sel of [el.src, el.tgt]) {
@@ -319,6 +454,7 @@
     el.tgtLabel.textContent = LANGS[settings.tgt].native;
     el.srcText.lang = settings.src;
     el.tgtText.lang = settings.tgt;
+    document.dispatchEvent(new CustomEvent('langs-changed'));
   }
 
   function setLangs(src, tgt) {
@@ -850,6 +986,7 @@
     el.setGeminiKey.value = geminiKey;
     el.setGeminiModel.value = settings.geminiModel;
     el.setGeminiFallback.value = settings.geminiFallback;
+    el.setTalkModel.value = settings.talkModel;
     el.settingsForm.querySelectorAll('input[name=provider]').forEach((r) => { r.checked = r.value === settings.provider; });
     showProviderFields(settings.provider);
     el.setAuto.checked = !!settings.autoTranslate;
@@ -864,6 +1001,7 @@
     el.setSttModel.value = DEFAULTS.sttModel;
     el.setGeminiModel.value = DEFAULTS.geminiModel;
     el.setGeminiFallback.value = DEFAULTS.geminiFallback;
+    el.setTalkModel.value = DEFAULTS.talkModel;
   });
   el.dlgSettings.addEventListener('close', () => {
     if (el.dlgSettings.returnValue !== 'save') return;
@@ -875,6 +1013,7 @@
     if (prov) settings.provider = prov.value;
     settings.geminiModel = el.setGeminiModel.value.trim() || DEFAULTS.geminiModel;
     settings.geminiFallback = el.setGeminiFallback.value.trim();
+    settings.talkModel = el.setTalkModel.value.trim() || DEFAULTS.talkModel;
     settings.autoTranslate = el.setAuto.checked;
     settings.chatModel = el.setChatModel.value.trim() || DEFAULTS.chatModel;
     settings.sttModel = el.setSttModel.value.trim() || DEFAULTS.sttModel;
@@ -884,6 +1023,14 @@
     if (recState === 'idle') resetMicUi();
     toast('Gespeichert');
   });
+
+  // ---------- Schnittstelle für den Gesprächsmodus (talk.js) ----------
+  window.Uebersetzer = {
+    LANGS, settings, saveSettings, store, SR,
+    hasKey, requireKey, toast, friendlyError, keepAwake, releaseAwake, pickMime,
+    streamTranslate, transcribeAndTranslate,
+    stopDictation() { if (recState === 'recording') stopRecording(); },
+  };
 
   // ---------- Start ----------
   fillLangSelects();
