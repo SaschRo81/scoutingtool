@@ -329,3 +329,4 @@ body.talk-mode .footer { display: none; }
 .talk-btn.busy { opacity: .7; }
 .bubble.live .b-tr { display: none; }
 .bubble.live .b-or { margin-top: 0; }
+.secondary.small { padding: 6px 10px; font-size: .85rem; }

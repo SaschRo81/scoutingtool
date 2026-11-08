@@ -73,7 +73,7 @@
     srcText: $('srcText'), tgtText: $('tgtText'), interim: $('interim'),
     mic: $('btnMic'), recStatus: $('recStatus'), recHint: $('recHint'),
     clear: $('btnClear'), translate: $('btnTranslate'),
-    resultCard: $('resultCard'), badge: $('checkBadge'), score: $('checkScore'),
+    resultCard: $('resultCard'), badge: $('checkBadge'), retry: $('btnRetry'), score: $('checkScore'),
     checkBody: $('checkBody'), backText: $('backText'), issues: $('issues'),
     improvedBox: $('improvedBox'), improvedText: $('improvedText'), applyImproved: $('btnApplyImproved'),
     withOriginal: $('withOriginal'),
@@ -135,6 +135,11 @@
           : 'OpenAI-Limit erreicht oder kein Guthaben. Bitte später erneut versuchen.';
       }
       if (err.status === 404) return 'Modell nicht gefunden. Bitte in den Einstellungen unter „Erweitert“ prüfen.';
+      if ([500, 502, 503, 504].includes(err.status)) {
+        return gem
+          ? 'Google Gemini ist gerade überlastet – auch die Ausweich-Modelle. Das ist meist nach kurzer Zeit vorbei: bitte gleich nochmal versuchen.'
+          : 'OpenAI ist gerade überlastet. Bitte gleich nochmal versuchen.';
+      }
       return `${err.provider}-Fehler (${err.status}): ${err.message}`;
     }
     return 'Fehler: ' + (err.message || err);
@@ -194,7 +199,22 @@
   // Chat-Aufruf mit JSON-Antwort. Wenn ein Modell einen optionalen Parameter
   // nicht kennt (HTTP 400), wird einmal ohne die optionalen Parameter wiederholt.
   async function chatJson(system, user) {
-    if (settings.provider !== 'openai') return geminiJson(system, user);
+    if (settings.provider !== 'openai') {
+      const allBusy = geminiModels().every((m) => (cooldown.get(m) || 0) > Date.now());
+      if (apiKey && allBusy) { notifyRetry(99); return openaiJson(system, user); }
+      try {
+        return await geminiJson(system, user);
+      } catch (e) {
+        // Ist zusätzlich ein OpenAI-Key hinterlegt, springt OpenAI bei Überlastung ein.
+        if (!(apiKey && tryNextModel(e))) throw e;
+        notifyRetry(99);
+        return openaiJson(system, user);
+      }
+    }
+    return openaiJson(system, user);
+  }
+
+  async function openaiJson(system, user) {
     const base = {
       model: settings.chatModel || DEFAULTS.chatModel,
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
@@ -244,18 +264,40 @@
   }
 
   // Erst das Hauptmodell, bei Limit/Überlast/unbekanntem Modell das Ersatzmodell.
-  const geminiModels = (primary) => [...new Set([primary || settings.geminiModel || DEFAULTS.geminiModel, settings.geminiFallback].filter(Boolean))];
+  // Ausweich-Kette: Ist ein Modell bei Google überlastet (503) oder das Gratis-Limit
+  // erreicht (429), geht es mit dem nächsten weiter. Die Modelle haben getrennte Limits.
+  const GEMINI_CHAIN = ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview'];
+  // Überlastete Modelle eine Minute lang hinten anstellen
+  const cooldown = new Map();
+  const markBusy = (m, e) => { if (e?.name === 'TimeoutError' || (e instanceof ApiError && [429, 500, 502, 503, 504].includes(e.status))) cooldown.set(m, Date.now() + 60000); };
+  const geminiModels = (primary) => {
+    const all = [...new Set([primary || settings.geminiModel || DEFAULTS.geminiModel, settings.geminiFallback, ...GEMINI_CHAIN].filter(Boolean))];
+    const busy = (m) => (cooldown.get(m) || 0) > Date.now();
+    return [...all.filter((m) => !busy(m)), ...all.filter(busy)];
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const isOverload = (e) => e instanceof ApiError && [500, 502, 503, 504].includes(e.status);
+  const tryNextModel = (e) => e?.name === 'TimeoutError' || (e instanceof ApiError && [404, 429, 500, 502, 503, 504].includes(e.status));
+
+  // Wird bei jedem Ausweichen aufgerufen, damit die Oberfläche zeigen kann, was passiert.
+  let onRetry = null;
+  const notifyRetry = (n) => { try { onRetry?.(n); } catch { /* egal */ } };
 
   async function geminiGenerate(body, primary, ms) {
-    const models = geminiModels(primary);
-    let lastErr;
-    for (const m of models) {
-      try {
-        return await geminiCall(m, body, ms);
-      } catch (e) {
-        lastErr = e;
-        const retry = e.name === 'TimeoutError' || (e instanceof ApiError && [404, 429, 500, 503].includes(e.status));
-        if (!retry) throw e;
+    let lastErr, n = 0;
+    for (const m of geminiModels(primary)) {
+      // bei Überlastung dasselbe Modell nach kurzer Pause noch einmal versuchen
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          return await geminiCall(m, body, ms);
+        } catch (e) {
+          lastErr = e;
+          if (!tryNextModel(e)) throw e;
+          markBusy(m, e);
+          notifyRetry(++n);
+          if (isOverload(e) && attempt === 0) { await wait(1200); continue; }
+          break;
+        }
       }
     }
     throw lastErr;
@@ -423,11 +465,14 @@
         } catch (e) {
           if (e.name !== 'TimeoutError') throw e;
           lastErr = e;
+          markBusy(model, e);
           break; // nächstes Modell
         }
         if (!res.ok) {
           lastErr = await readError(res, 'Gemini');
           if (lastErr.status === 400 && genCfg.thinkingConfig && !/api key/i.test(lastErr.message)) continue;
+          markBusy(model, lastErr);
+          if (isOverload(lastErr)) await wait(600);
           break; // nächstes Modell versuchen oder Fehler werfen
         }
         for await (const ev of readSse(res)) {
@@ -437,8 +482,8 @@
         }
         return acc.trim();
       }
-      const retry = lastErr?.name === 'TimeoutError' || (lastErr instanceof ApiError && [404, 429, 500, 503].includes(lastErr.status));
-      if (!retry) throw lastErr;
+      if (!tryNextModel(lastErr)) throw lastErr;
+      notifyRetry(1);
     }
     throw lastErr;
   }
@@ -855,6 +900,7 @@
   }
 
   el.translate.addEventListener('click', runTranslation);
+  el.retry.addEventListener('click', runTranslation);
 
   async function runTranslation() {
     const text = el.srcText.value.trim();
@@ -871,6 +917,8 @@
     setBadge('loading', 'Übersetze …');
     el.checkBody.hidden = true;
     el.score.textContent = '';
+    el.retry.hidden = true;
+    onRetry = (n) => { if (id === runId) setBadge('loading', n === 99 ? 'Google ausgelastet – OpenAI springt ein …' : 'Google ausgelastet – neuer Versuch …'); };
 
     try {
       const res = await chatJson(translatePrompt(src, tgt, style), text);
@@ -884,6 +932,7 @@
     } catch (e) {
       if (id !== runId) return;
       setBadge('bad', 'Fehlgeschlagen');
+      el.retry.hidden = false;
       el.tgtText.placeholder = '';
       toast(friendlyError(e), true);
       return;
