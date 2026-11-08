@@ -1,5 +1,5 @@
 // Offline-Cache für die App-Oberfläche. Anfragen an OpenAI werden nie zwischengespeichert.
-const CACHE = 'uebersetzer-v6';
+const CACHE = 'uebersetzer-v7';
 const SHELL = [
   './',
   'index.html',

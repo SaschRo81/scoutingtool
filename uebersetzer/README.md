@@ -8,7 +8,10 @@ Web-App fürs Handy: Text **sprechen oder tippen**, **sauber übersetzen**, **au
 
 Sprachen: Deutsch, Englisch, Griechisch, in jede Richtung. Englisch gibt es als **English (UK)** (britische Schreibweise und Wörter, z. B. colour, organise, flat, mobile) und als **English (US)** (color, organize, apartment, cell phone). Standard ist UK. Die Gegenprüfung kontrolliert auch, dass die gewählte Variante durchgehend eingehalten wird.
 
-**Kostenlos nutzbar** mit einem Google-Gemini-Key (ohne Kreditkarte). OpenAI ist als kostenpflichtige Alternative eingebaut.
+**Übersetzungsdienste** (wählbar unter ⚙ Einstellungen):
+- **Google Gemini**: kostenlos, ohne Kreditkarte, mit KI-Gegenprüfung
+- **DeepL** (API Developer, 1 Mio. Zeichen frei): braucht einmalig eine kleine Weiterleitung, siehe [deepl-proxy/ANLEITUNG.md](deepl-proxy/ANLEITUNG.md). Mit zusätzlichem Gemini-Key prüft Gemini die DeepL-Übersetzung.
+- **OpenAI**: kostenpflichtig
 
 ## So funktioniert es
 
@@ -87,6 +90,7 @@ Reine Web-App ohne Server und ohne Build-Schritt:
 
 - `index.html`, `style.css`, `app.js`: Oberfläche und Logik
 - `manifest.json`, `sw.js`, `icons/`: Installation als App und Offline-Start
+- `deepl-proxy/worker.js`: Cloudflare Worker als Weiterleitung zu DeepL (DeepL blockiert direkte Aufrufe aus dem Browser)
 - **Gemini (Standard, kostenlos):** Spracherkennung, Übersetzung und Prüfung über `generateContent` mit `gemini-3.8-flash`, Ersatzmodell `gemini-3.1-flash-lite`. Lehnt Gemini das Aufnahmeformat ab, wandelt die App die Aufnahme in WAV um und schickt sie erneut.
 - **OpenAI (optional):** Spracherkennung mit `gpt-transcribe`, Übersetzung und Prüfung mit `gpt-6.1-sol`
 - Alle Modelle lassen sich in den Einstellungen unter „Erweitert“ ändern.

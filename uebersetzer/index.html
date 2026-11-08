@@ -178,15 +178,32 @@
       </div>
 
       <fieldset class="field">
-        <legend>KI-Dienst</legend>
+        <legend>Übersetzungsdienst</legend>
         <label class="radio"><input type="radio" name="provider" value="gemini">
           <span><b>Google Gemini – kostenlos</b> – kostenloser Key, keine Kreditkarte. Mit Tageslimit, das für private Nachrichten locker reicht.</span></label>
+        <label class="radio"><input type="radio" name="provider" value="deepl">
+          <span><b>DeepL</b> – Übersetzung durch DeepL (Developer-Key, 1 Mio. Zeichen frei). Braucht einmalig eine kleine Weiterleitung, siehe Anleitung.</span></label>
         <label class="radio"><input type="radio" name="provider" value="openai">
           <span><b>OpenAI</b> – kostenpflichtig, ca. 0,1–0,5 Cent pro Nachricht.</span></label>
       </fieldset>
 
+      <div class="field" id="fieldDeepl" hidden>
+        <label class="field">
+          <span>DeepL API-Key</span>
+          <input id="setDeeplKey" type="password" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-…:fx">
+          <small>Unter <a href="https://www.deepl.com/your-account/keys" target="_blank" rel="noopener">deepl.com → Konto → API-Keys</a>. Wird nur auf diesem Gerät gespeichert.</small>
+        </label>
+        <label class="field">
+          <span>Adresse der DeepL-Weiterleitung</span>
+          <input id="setDeeplProxy" type="text" autocomplete="off" spellcheck="false" inputmode="url" placeholder="https://uebersetzer-deepl.DEINNAME.workers.dev">
+          <small>Dein Cloudflare Worker. <a href="https://github.com/SaschRo81/scoutingtool/blob/claude/live-translation-tool-hzs1zl/uebersetzer/deepl-proxy/ANLEITUNG.md" target="_blank" rel="noopener">Anleitung (5 Minuten)</a></small>
+        </label>
+        <button type="button" id="btnDeeplUsage" class="secondary small">Verbindung &amp; Kontingent prüfen</button>
+        <small id="deeplUsage" class="usage" aria-live="polite"></small>
+      </div>
+
       <label class="field" id="fieldGemini">
-        <span>Gemini API-Key</span>
+        <span>Gemini API-Key <em id="geminiOptional" class="opt" hidden>(optional: für KI-Gegenprüfung und KI-Aufnahme)</em></span>
         <input id="setGeminiKey" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…">
         <small>Kostenlos erstellen unter <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Wird nur auf diesem Gerät gespeichert.</small>
       </label>

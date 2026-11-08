@@ -61,8 +61,14 @@
   if (!settings.liveDefault) { settings.liveDefault = true; settings.sttMode = DEFAULTS.sttMode; }
   let apiKey = store.get('apiKey', '');        // OpenAI
   let geminiKey = store.get('geminiKey', '');  // Google Gemini
-  const providerName = () => (settings.provider === 'openai' ? 'OpenAI' : 'Gemini');
-  const hasKey = () => !!(settings.provider === 'openai' ? apiKey : geminiKey);
+  let deeplKey = store.get('deeplKey', '');    // DeepL
+  let deeplProxy = store.get('deeplProxy', ''); // Adresse des Cloudflare Workers
+  const providerName = () => ({ openai: 'OpenAI', deepl: 'DeepL' }[settings.provider] || 'Gemini');
+  const hasKey = () => {
+    if (settings.provider === 'openai') return !!apiKey;
+    if (settings.provider === 'deepl') return !!(deeplKey && deeplProxy);
+    return !!geminiKey;
+  };
   const saveSettings = () => store.set('settings', settings);
 
   // ---------- DOM ----------
@@ -80,6 +86,8 @@
     share: $('btnShare'), wa: $('btnWhatsApp'), tg: $('btnTelegram'), copy: $('btnCopy'), speak: $('btnSpeak'),
     dlgSettings: $('dlgSettings'), settingsForm: $('settingsForm'), btnSettings: $('btnSettings'),
     setKey: $('setKey'), setGeminiKey: $('setGeminiKey'), fieldOpenai: $('fieldOpenai'), fieldGemini: $('fieldGemini'),
+    setDeeplKey: $('setDeeplKey'), setDeeplProxy: $('setDeeplProxy'), fieldDeepl: $('fieldDeepl'),
+    btnDeeplUsage: $('btnDeeplUsage'), deeplUsage: $('deeplUsage'), geminiOptional: $('geminiOptional'),
     setGeminiModel: $('setGeminiModel'), setGeminiFallback: $('setGeminiFallback'), setTalkModel: $('setTalkModel'), setAuto: $('setAuto'), setChatModel: $('setChatModel'), setSttModel: $('setSttModel'),
     resetModels: $('btnResetModels'),
     dlgHistory: $('dlgHistory'), btnHistory: $('btnHistory'), historyList: $('historyList'), clearHistory: $('btnClearHistory'),
@@ -111,7 +119,9 @@
 
   function requireKey() {
     if (hasKey()) return true;
-    toast(`Bitte zuerst den ${providerName()} API-Key eintragen.`, true);
+    toast(settings.provider === 'deepl'
+      ? 'Bitte DeepL-Key und Adresse der DeepL-Weiterleitung eintragen.'
+      : `Bitte zuerst den ${providerName()} API-Key eintragen.`, true);
     openSettings();
     return false;
   }
@@ -124,6 +134,14 @@
     if (err.name === 'AbortError') return 'Abgebrochen.';
     if (err.name === 'TimeoutError') return `${err.provider || 'Der KI-Dienst'} antwortet gerade nicht (Zeitüberschreitung). Bitte nochmal versuchen.`;
     if (!navigator.onLine) return 'Keine Internetverbindung.';
+    if (err instanceof ApiError && err.provider === 'DeepL') {
+      if (err.status === 401 || err.status === 403) return 'DeepL-Key ungültig. Bitte in den Einstellungen prüfen.';
+      if (err.status === 456) return 'Dein DeepL-Kontingent ist aufgebraucht. In den Einstellungen kannst du auf Gemini umstellen.';
+      if (err.status === 429) return 'Zu viele Anfragen an DeepL. Bitte kurz warten.';
+      if (err.status === 404) return 'DeepL-Weiterleitung antwortet nicht richtig. Bitte die Adresse in den Einstellungen prüfen.';
+      if (err.status >= 500) return 'DeepL ist gerade überlastet. Bitte gleich nochmal versuchen.';
+      return `DeepL-Fehler (${err.status}): ${err.message}`;
+    }
     if (err instanceof ApiError) {
       const gem = err.provider === 'Gemini';
       if (err.status === 401 || err.status === 403 || (gem && err.status === 400 && /api key/i.test(err.message))) {
@@ -372,6 +390,77 @@
     }
   }
 
+  // ---------- DeepL (über die eigene Weiterleitung) ----------
+  const DEEPL_SOURCE = { de: 'DE', 'en-gb': 'EN', 'en-us': 'EN', el: 'EL' };
+  const DEEPL_TARGET = { de: 'DE', 'en-gb': 'EN-GB', 'en-us': 'EN-US', el: 'EL' };
+  const DEEPL_FORMALITY = { neutral: 'default', casual: 'prefer_less', formal: 'prefer_more' };
+
+  function deeplUrl(path) {
+    let base = deeplProxy.trim().replace(/\/+$/, '');
+    if (base && !/^https?:\/\//i.test(base)) base = 'https://' + base;
+    return base + path;
+  }
+
+  async function deeplRequest(path, init = {}, ms = 20000) {
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let res;
+      try {
+        res = await timedFetch(deeplUrl(path), {
+          ...init,
+          headers: { Authorization: 'DeepL-Auth-Key ' + deeplKey, ...(init.headers || {}) },
+        }, ms, 'DeepL');
+      } catch (e) {
+        if (e.name === 'TimeoutError' || e.name === 'AbortError') throw e;
+        throw new Error('DeepL-Weiterleitung nicht erreichbar. Bitte die Adresse in den Einstellungen prüfen.');
+      }
+      if (res.ok) return readJson(res, 'DeepL');
+      lastErr = await readError(res, 'DeepL');
+      // laut DeepL: 429 und 5xx wiederholen, 456 (Kontingent) und 400 nicht
+      if (!(res.status === 429 || res.status >= 500)) throw lastErr;
+      notifyRetry(attempt + 1);
+      await wait(attempt === 0 ? 600 : 1500);
+    }
+    throw lastErr;
+  }
+
+  let deeplPlain = false; // true, wenn der Tarif die Zusatzfelder ablehnt
+  async function deeplTranslate(text, src, tgt, { context = '', style = settings.style } = {}) {
+    const body = {
+      text: [text],
+      source_lang: DEEPL_SOURCE[src],
+      target_lang: DEEPL_TARGET[tgt],
+      formality: DEEPL_FORMALITY[style] || 'default',
+      model_type: 'prefer_quality_optimized',
+      preserve_formatting: true,
+    };
+    if (context) body.context = context;
+    const send = (b) => deeplRequest('/v2/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(b),
+    });
+    const { model_type, formality, ...plain } = body;
+    let data;
+    if (deeplPlain) {
+      data = await send(plain);
+    } else {
+      try {
+        data = await send(body);
+      } catch (e) {
+        // Falls ein Zusatzfeld im Tarif nicht erlaubt ist: ohne die Extras erneut (und künftig gleich so)
+        if (!(e instanceof ApiError && e.status === 400)) throw e;
+        data = await send(plain);
+        deeplPlain = true;
+      }
+    }
+    return String(data.translations?.[0]?.text || '').trim();
+  }
+
+  async function deeplUsage() {
+    return deeplRequest('/v2/usage', { method: 'GET' });
+  }
+
   // ---------- Schnelle Übersetzung mit Streaming (Gesprächsmodus) ----------
   // Liest Server-Sent-Events zeilenweise und liefert jedes "data:"-JSON.
   async function* readSse(res) {
@@ -401,7 +490,7 @@
 
   async function readError(res, provider) {
     let msg = res.statusText;
-    try { msg = (await res.json()).error?.message || msg; } catch { /* kein JSON */ }
+    try { const j = await res.json(); msg = j.error?.message || j.message || msg; } catch { /* kein JSON */ }
     return new ApiError(res.status, msg, provider);
   }
 
@@ -419,6 +508,11 @@
 
   // Übersetzt kurz und schnell; onDelta(text) wird mit dem bisherigen Ergebnis aufgerufen.
   async function streamTranslate(text, src, tgt, { context = '', onDelta = () => {} } = {}) {
+    if (settings.provider === 'deepl') {
+      const t = await deeplTranslate(text, src, tgt, { context });
+      onDelta(t);
+      return t;
+    }
     const system = interpreterPrompt(src, tgt, context);
     let acc = '';
 
@@ -490,7 +584,7 @@
 
   // Rückfall ohne Browser-Spracherkennung: Aufnahme → erkennen + übersetzen in einem Schritt
   async function transcribeAndTranslate(blob, src, tgt, context) {
-    if (settings.provider === 'openai') {
+    if (settings.provider === 'openai' || settings.provider === 'deepl') {
       const prevSrc = settings.src;
       settings.src = src;
       let original;
@@ -766,7 +860,13 @@
   }
 
   async function transcribe(blob) {
-    if (settings.provider !== 'openai') return geminiTranscribe(blob);
+    if (settings.provider === 'deepl') {
+      // DeepL kann keine Sprache erkennen – dafür Gemini oder OpenAI nutzen, falls ein Key da ist
+      if (geminiKey) return geminiTranscribe(blob);
+      if (!apiKey) throw new Error('DeepL kann keine Aufnahmen erkennen. Bitte in den Einstellungen „Live-Diktat“ wählen oder zusätzlich einen Gemini-Key eintragen.');
+    } else if (settings.provider !== 'openai') {
+      return geminiTranscribe(blob);
+    }
     const lang = LANGS[settings.src].iso;
     const model = settings.sttModel || DEFAULTS.sttModel;
     const prompt = {
@@ -918,12 +1018,13 @@
     el.checkBody.hidden = true;
     el.score.textContent = '';
     el.retry.hidden = true;
-    onRetry = (n) => { if (id === runId) setBadge('loading', n === 99 ? 'Google ausgelastet – OpenAI springt ein …' : 'Google ausgelastet – neuer Versuch …'); };
+    onRetry = (n) => { if (id === runId) setBadge('loading', n === 99 ? 'Google ausgelastet – OpenAI springt ein …' : `${settings.provider === 'deepl' ? 'DeepL' : 'Google'} ausgelastet – neuer Versuch …`); };
 
     try {
-      const res = await chatJson(translatePrompt(src, tgt, style), text);
+      const translation = settings.provider === 'deepl'
+        ? await deeplTranslate(text, src, tgt, { style })
+        : String((await chatJson(translatePrompt(src, tgt, style), text)).translation || '').trim();
       if (id !== runId) return;
-      const translation = String(res.translation || '').trim();
       if (!translation) throw new Error('Leere Übersetzung erhalten.');
       el.tgtText.value = translation;
       lastResult = { ts: Date.now(), src, tgt, style, text, translation };
@@ -946,10 +1047,20 @@
     // Gegenprüfung in einem zweiten, unabhängigen Durchgang
     setBadge('loading', 'Wird gegengeprüft …');
     try {
-      const chk = await chatJson(
-        checkPrompt(src, tgt, style),
-        `ORIGINAL (${LANGS[src].en}):\n${text}\n\nTRANSLATION (${LANGS[tgt].en}):\n${el.tgtText.value}`,
-      );
+      let chk;
+      const checkInput = `ORIGINAL (${LANGS[src].en}):\n${text}\n\nTRANSLATION (${LANGS[tgt].en}):\n${el.tgtText.value}`;
+      if (settings.provider !== 'deepl') {
+        chk = await chatJson(checkPrompt(src, tgt, style), checkInput);
+      } else if (geminiKey) {
+        // DeepL übersetzt, Gemini prüft unabhängig (fällt Gemini aus, bleibt die DeepL-Rückübersetzung)
+        try {
+          chk = await geminiJson(checkPrompt(src, tgt, style), checkInput);
+        } catch {
+          chk = { back_translation: await deeplTranslate(el.tgtText.value, tgt, src, { style }), verdict: 'backonly' };
+        }
+      } else {
+        chk = { back_translation: await deeplTranslate(el.tgtText.value, tgt, src, { style }), verdict: 'backonly' };
+      }
       if (id !== runId) return;
       renderCheck(chk);
     } catch (e) {
@@ -968,9 +1079,10 @@
     const issues = Array.isArray(chk.issues) ? chk.issues.filter((i) => i && (i.problem || i.suggestion)) : [];
     const improved = String(chk.improved_translation || '').trim();
     let verdict = String(chk.verdict || '').toLowerCase();
-    if (!['ok', 'minor', 'major'].includes(verdict)) verdict = issues.length ? 'minor' : 'ok';
+    if (!['ok', 'minor', 'major', 'backonly'].includes(verdict)) verdict = issues.length ? 'minor' : 'ok';
 
-    if (verdict === 'ok') setBadge('ok', '✓ Passt');
+    if (verdict === 'backonly') setBadge('', 'Rückübersetzung zum Gegenlesen');
+    else if (verdict === 'ok') setBadge('ok', '✓ Passt');
     else if (verdict === 'minor') setBadge('warn', 'Kleine Hinweise');
     else setBadge('bad', 'Bitte prüfen');
 
@@ -1127,12 +1239,18 @@
   function showProviderFields(p) {
     el.fieldGemini.hidden = p === 'openai';
     el.fieldOpenai.hidden = p !== 'openai';
+    el.fieldDeepl.hidden = p !== 'deepl';
+    // bei DeepL ist Gemini optional (Prüfung und KI-Aufnahme)
+    el.geminiOptional.hidden = p !== 'deepl';
   }
   el.settingsForm.querySelectorAll('input[name=provider]').forEach((r) => r.addEventListener('change', () => showProviderFields(r.value)));
 
   function openSettings() {
     el.setKey.value = apiKey;
     el.setGeminiKey.value = geminiKey;
+    el.setDeeplKey.value = deeplKey;
+    el.setDeeplProxy.value = deeplProxy;
+    el.deeplUsage.textContent = '';
     el.setGeminiModel.value = settings.geminiModel;
     el.setGeminiFallback.value = settings.geminiFallback;
     el.setTalkModel.value = settings.talkModel;
@@ -1145,6 +1263,25 @@
     el.dlgSettings.showModal();
   }
   el.btnSettings.addEventListener('click', openSettings);
+  el.btnDeeplUsage.addEventListener('click', async () => {
+    // mit den gerade eingetippten Werten prüfen, auch wenn noch nicht gespeichert
+    const prev = [deeplKey, deeplProxy];
+    deeplKey = el.setDeeplKey.value.trim();
+    deeplProxy = el.setDeeplProxy.value.trim();
+    el.deeplUsage.textContent = 'Prüfe …';
+    try {
+      if (!deeplKey || !deeplProxy) throw new Error('Bitte Key und Adresse eintragen.');
+      const u = await deeplUsage();
+      const fmt = (n) => Number(n || 0).toLocaleString('de-DE');
+      el.deeplUsage.textContent = u.character_limit
+        ? `✓ Verbindung klappt. Verbraucht: ${fmt(u.character_count)} von ${fmt(u.character_limit)} Zeichen.`
+        : '✓ Verbindung klappt.';
+    } catch (e) {
+      el.deeplUsage.textContent = '✗ ' + friendlyError(e);
+    } finally {
+      [deeplKey, deeplProxy] = prev;
+    }
+  });
   el.resetModels.addEventListener('click', () => {
     el.setChatModel.value = DEFAULTS.chatModel;
     el.setSttModel.value = DEFAULTS.sttModel;
@@ -1158,6 +1295,10 @@
     store.set('apiKey', apiKey);
     geminiKey = el.setGeminiKey.value.trim();
     store.set('geminiKey', geminiKey);
+    deeplKey = el.setDeeplKey.value.trim();
+    store.set('deeplKey', deeplKey);
+    deeplProxy = el.setDeeplProxy.value.trim();
+    store.set('deeplProxy', deeplProxy);
     const prov = el.settingsForm.querySelector('input[name=provider]:checked');
     if (prov) settings.provider = prov.value;
     settings.geminiModel = el.setGeminiModel.value.trim() || DEFAULTS.geminiModel;
