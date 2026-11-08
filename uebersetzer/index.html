@@ -133,7 +133,21 @@
         <button class="text-btn" value="cancel" formnovalidate>Abbrechen</button>
       </div>
 
-      <label class="field">
+      <fieldset class="field">
+        <legend>KI-Dienst</legend>
+        <label class="radio"><input type="radio" name="provider" value="gemini">
+          <span><b>Google Gemini – kostenlos</b> – kostenloser Key, keine Kreditkarte. Mit Tageslimit, das für private Nachrichten locker reicht.</span></label>
+        <label class="radio"><input type="radio" name="provider" value="openai">
+          <span><b>OpenAI</b> – kostenpflichtig, ca. 0,1–0,5 Cent pro Nachricht.</span></label>
+      </fieldset>
+
+      <label class="field" id="fieldGemini">
+        <span>Gemini API-Key</span>
+        <input id="setGeminiKey" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…">
+        <small>Kostenlos erstellen unter <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Wird nur auf diesem Gerät gespeichert.</small>
+      </label>
+
+      <label class="field" id="fieldOpenai">
         <span>OpenAI API-Key</span>
         <input id="setKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…">
         <small>Wird nur auf diesem Gerät gespeichert und nur an api.openai.com gesendet.</small>
@@ -155,11 +169,19 @@
       <details class="field">
         <summary>Erweitert</summary>
         <label class="field">
-          <span>Modell Übersetzung</span>
+          <span>Gemini-Modell</span>
+          <input id="setGeminiModel" type="text" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>Gemini-Ersatzmodell (bei Limit)</span>
+          <input id="setGeminiFallback" type="text" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>OpenAI-Modell Übersetzung</span>
           <input id="setChatModel" type="text" spellcheck="false">
         </label>
         <label class="field">
-          <span>Modell Spracherkennung</span>
+          <span>OpenAI-Modell Spracherkennung</span>
           <input id="setSttModel" type="text" spellcheck="false">
         </label>
         <button type="button" id="btnResetModels" class="text-btn">Standardwerte</button>

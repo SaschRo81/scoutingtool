@@ -222,3 +222,5 @@ details.field summary { cursor: pointer; color: var(--muted); }
 .toast.error { background: var(--bad); }
 
 button:focus:not(:focus-visible) { outline: none; }
+.field small a { color: var(--accent); }
+[hidden] { display: none !important; }

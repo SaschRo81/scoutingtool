@@ -4,6 +4,8 @@ Web-App fürs Handy: Text **sprechen oder tippen**, **sauber übersetzen**, **au
 
 Sprachen: Deutsch, Englisch, Griechisch, in jede Richtung (DE→EN, DE→EL, EL→DE, EL→EN, EN→DE, EN→EL).
 
+**Kostenlos nutzbar** mit einem Google-Gemini-Key (ohne Kreditkarte). OpenAI ist als kostenpflichtige Alternative eingebaut.
+
 ## So funktioniert es
 
 1. Oben die Sprachen wählen (⇄ tauscht sie) und den Tonfall: Neutral, Locker (Du) oder Förmlich (Sie).
@@ -18,19 +20,31 @@ Sprachen: Deutsch, Englisch, Griechisch, in jede Richtung (DE→EN, DE→EL, EL�
 
 | Modus | Wie | Wofür |
 |---|---|---|
-| **KI-Aufnahme** (Standard) | Nimmt Audio auf, bis du Stopp tippst, und lässt es danach von OpenAI erkennen | Längere Texte. Bricht bei Pausen **nicht** ab, das ist der Unterschied zu Google und DeepL. |
+| **KI-Aufnahme** (Standard) | Nimmt Audio auf, bis du Stopp tippst, und lässt es danach von der KI (Gemini oder OpenAI) erkennen | Längere Texte. Bricht bei Pausen **nicht** ab, das ist der Unterschied zu Google und DeepL. |
 | **Live-Diktat** | Spracherkennung des Browsers, Text erscheint sofort | Kostenlos. Startet nach Pausen automatisch neu. Geht am besten in Chrome auf Android. |
 
 Die Diktierfunktion der Handy-Tastatur (Mikrofon-Taste auf der Tastatur) funktioniert im Textfeld zusätzlich immer.
 
 ## Einrichtung (einmalig)
 
-### 1. OpenAI API-Key
+### 1. API-Key (kostenlos)
 
-Unter https://platform.openai.com/api-keys einen neuen Key anlegen und in der App unter ⚙ Einstellungen eintragen.
-Der Key wird nur auf dem Handy gespeichert (localStorage) und nur an `api.openai.com` geschickt.
+**Empfohlen: Google Gemini, kostenlos**
 
-Kosten: Eine Nachricht mit Übersetzung und Prüfung kostet etwa 0,1 bis 0,5 Cent. Eine Minute Sprachaufnahme liegt in derselben Größenordnung.
+1. https://aistudio.google.com/apikey öffnen und mit einem Google-Konto anmelden
+2. **API-Key erstellen** antippen (keine Kreditkarte, kein Abo)
+3. Key in der App unter ⚙ Einstellungen → „Google Gemini – kostenlos“ eintragen
+
+Der kostenlose Tarif hat Limits pro Minute und pro Tag. Für private Nachrichten reicht das locker. Ist das Hauptmodell (`gemini-3.8-flash`) gerade ausgelastet, wechselt die App automatisch auf das Ersatzmodell (`gemini-3.1-flash-lite`).
+Hinweis: Im kostenlosen Tarif darf Google die Eingaben zur Verbesserung seiner Dienste verwenden. Für Vertrauliches besser den kostenpflichtigen Tarif oder OpenAI nehmen.
+
+**Alternative: OpenAI (kostenpflichtig)**
+
+Key unter https://platform.openai.com/api-keys anlegen und in den Einstellungen „OpenAI“ wählen. Kosten: etwa 0,1 bis 0,5 Cent pro Nachricht mit Prüfung.
+
+Beide Keys werden nur auf dem Handy gespeichert (localStorage) und nur an den jeweiligen Anbieter geschickt.
+
+**Warum nicht DeepL?** Die DeepL-API (Free: 500.000 Zeichen im Monat) lässt laut eigener Doku keine Aufrufe direkt aus dem Browser zu. Dafür bräuchte es einen eigenen kleinen Server als Zwischenstation. Außerdem kann DeepL weder Sprache erkennen noch eine Übersetzung inhaltlich prüfen.
 
 ### 2. Online stellen (GitHub Pages, kostenlos)
 
@@ -54,9 +68,9 @@ Reine Web-App ohne Server und ohne Build-Schritt:
 
 - `index.html`, `style.css`, `app.js`: Oberfläche und Logik
 - `manifest.webmanifest`, `sw.js`, `icons/`: Installation als App und Offline-Start
-- Spracherkennung: OpenAI `gpt-transcribe` (`/v1/audio/transcriptions`)
-- Übersetzung und Prüfung: OpenAI `gpt-6.1-sol` (`/v1/chat/completions`, JSON-Antwort)
-- Beide Modelle lassen sich in den Einstellungen unter „Erweitert“ ändern, etwa auf ein günstigeres Modell.
+- **Gemini (Standard, kostenlos):** Spracherkennung, Übersetzung und Prüfung über `generateContent` mit `gemini-3.8-flash`, Ersatzmodell `gemini-3.1-flash-lite`. Lehnt Gemini das Aufnahmeformat ab, wandelt die App die Aufnahme in WAV um und schickt sie erneut.
+- **OpenAI (optional):** Spracherkennung mit `gpt-transcribe`, Übersetzung und Prüfung mit `gpt-6.1-sol`
+- Alle Modelle lassen sich in den Einstellungen unter „Erweitert“ ändern.
 - Verlauf: die letzten 30 Übersetzungen, nur lokal auf dem Gerät
 
 Lokal testen: `cd uebersetzer && python3 -m http.server 8000`, dann http://localhost:8000 öffnen.

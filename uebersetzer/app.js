@@ -6,7 +6,11 @@
   'use strict';
 
   const API = 'https://api.openai.com/v1';
+  const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
   const DEFAULTS = {
+    provider: 'gemini', // 'gemini' (kostenlos) | 'openai'
+    geminiModel: 'gemini-3.8-flash',
+    geminiFallback: 'gemini-3.1-flash-lite',
     chatModel: 'gpt-6.1-sol',
     sttModel: 'gpt-transcribe',
     sttMode: 'ai',
@@ -43,7 +47,10 @@
   };
 
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
-  let apiKey = store.get('apiKey', '');
+  let apiKey = store.get('apiKey', '');        // OpenAI
+  let geminiKey = store.get('geminiKey', '');  // Google Gemini
+  const providerName = () => (settings.provider === 'openai' ? 'OpenAI' : 'Gemini');
+  const hasKey = () => !!(settings.provider === 'openai' ? apiKey : geminiKey);
   const saveSettings = () => store.set('settings', settings);
 
   // ---------- DOM ----------
@@ -60,7 +67,8 @@
     withOriginal: $('withOriginal'),
     share: $('btnShare'), wa: $('btnWhatsApp'), tg: $('btnTelegram'), copy: $('btnCopy'), speak: $('btnSpeak'),
     dlgSettings: $('dlgSettings'), settingsForm: $('settingsForm'), btnSettings: $('btnSettings'),
-    setKey: $('setKey'), setAuto: $('setAuto'), setChatModel: $('setChatModel'), setSttModel: $('setSttModel'),
+    setKey: $('setKey'), setGeminiKey: $('setGeminiKey'), fieldOpenai: $('fieldOpenai'), fieldGemini: $('fieldGemini'),
+    setGeminiModel: $('setGeminiModel'), setGeminiFallback: $('setGeminiFallback'), setAuto: $('setAuto'), setChatModel: $('setChatModel'), setSttModel: $('setSttModel'),
     resetModels: $('btnResetModels'),
     dlgHistory: $('dlgHistory'), btnHistory: $('btnHistory'), historyList: $('historyList'), clearHistory: $('btnClearHistory'),
     toast: $('toast'),
@@ -90,24 +98,31 @@
   }
 
   function requireKey() {
-    if (apiKey) return true;
-    toast('Bitte zuerst den OpenAI API-Key eintragen.', true);
+    if (hasKey()) return true;
+    toast(`Bitte zuerst den ${providerName()} API-Key eintragen.`, true);
     openSettings();
     return false;
   }
 
   class ApiError extends Error {
-    constructor(status, message) { super(message); this.status = status; }
+    constructor(status, message, provider = 'OpenAI') { super(message); this.status = status; this.provider = provider; }
   }
 
   function friendlyError(err) {
     if (err.name === 'AbortError') return 'Abgebrochen.';
     if (!navigator.onLine) return 'Keine Internetverbindung.';
     if (err instanceof ApiError) {
-      if (err.status === 401) return 'API-Key ungültig. Bitte in den Einstellungen prüfen.';
-      if (err.status === 429) return 'OpenAI-Limit erreicht oder kein Guthaben. Bitte später erneut versuchen.';
+      const gem = err.provider === 'Gemini';
+      if (err.status === 401 || err.status === 403 || (gem && err.status === 400 && /api key/i.test(err.message))) {
+        return 'API-Key ungültig. Bitte in den Einstellungen prüfen.';
+      }
+      if (err.status === 429) {
+        return gem
+          ? 'Kostenloses Gemini-Kontingent gerade aufgebraucht. In einer Minute erneut versuchen (Tageslimit: morgen wieder).'
+          : 'OpenAI-Limit erreicht oder kein Guthaben. Bitte später erneut versuchen.';
+      }
       if (err.status === 404) return 'Modell nicht gefunden. Bitte in den Einstellungen unter „Erweitert“ prüfen.';
-      return `OpenAI-Fehler (${err.status}): ${err.message}`;
+      return `${err.provider}-Fehler (${err.status}): ${err.message}`;
     }
     return 'Fehler: ' + (err.message || err);
   }
@@ -140,6 +155,7 @@
   // Chat-Aufruf mit JSON-Antwort. Wenn ein Modell einen optionalen Parameter
   // nicht kennt (HTTP 400), wird einmal ohne die optionalen Parameter wiederholt.
   async function chatJson(system, user) {
+    if (settings.provider !== 'openai') return geminiJson(system, user);
     const base = {
       model: settings.chatModel || DEFAULTS.chatModel,
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
@@ -164,6 +180,115 @@
       }
     }
     throw lastErr;
+  }
+
+  // ---------- Google Gemini (kostenloser Tarif) ----------
+  async function geminiCall(model, body) {
+    let res;
+    try {
+      res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw new Error('Verbindung zu Google Gemini fehlgeschlagen.');
+    }
+    if (!res.ok) {
+      let msg = res.statusText;
+      try { msg = (await res.json()).error?.message || msg; } catch { /* kein JSON */ }
+      throw new ApiError(res.status, msg, 'Gemini');
+    }
+    const data = await res.json();
+    const cand = data.candidates?.[0];
+    const text = (cand?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join('');
+    if (!text) {
+      if (data.promptFeedback?.blockReason || cand?.finishReason === 'SAFETY') throw new Error('Gemini hat die Anfrage abgelehnt.');
+      return '';
+    }
+    return text;
+  }
+
+  // Erst das Hauptmodell, bei Limit/Überlast/unbekanntem Modell das Ersatzmodell.
+  async function geminiGenerate(body) {
+    const models = [...new Set([settings.geminiModel || DEFAULTS.geminiModel, settings.geminiFallback].filter(Boolean))];
+    let lastErr;
+    for (const m of models) {
+      try {
+        return await geminiCall(m, body);
+      } catch (e) {
+        lastErr = e;
+        if (!(e instanceof ApiError && [404, 429, 500, 503].includes(e.status))) throw e;
+      }
+    }
+    throw lastErr;
+  }
+
+  async function geminiJson(system, user) {
+    const text = await geminiGenerate({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    return parseJsonLoose(text);
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(',')[1] || '');
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+
+  // Wandelt eine Aufnahme in WAV (16 kHz, mono) um – Rückfall, falls Gemini das Originalformat ablehnt.
+  async function toWav16k(blob) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const audio = await new Promise((res, rej) => blob.arrayBuffer().then((buf) => ctx.decodeAudioData(buf, res, rej), rej));
+    try { ctx.close(); } catch { /* egal */ }
+    const rate = 16000;
+    const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(audio.duration * rate)), rate);
+    const node = off.createBufferSource();
+    node.buffer = audio;
+    node.connect(off.destination);
+    node.start();
+    const pcm = (await off.startRendering()).getChannelData(0);
+    const view = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+    const str = (o, t) => { for (let i = 0; i < t.length; i++) view.setUint8(o + i, t.charCodeAt(i)); };
+    str(0, 'RIFF'); view.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVE');
+    str(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    str(36, 'data'); view.setUint32(40, pcm.length * 2, true);
+    for (let i = 0; i < pcm.length; i++) {
+      const v = Math.max(-1, Math.min(1, pcm[i]));
+      view.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+    }
+    return new Blob([view], { type: 'audio/wav' });
+  }
+
+  async function geminiTranscribe(blob) {
+    if (blob.size > 14 * 1024 * 1024) throw new Error('Aufnahme zu lang. Bitte in mehreren Teilen aufnehmen.');
+    const instruction = `Transcribe this audio word for word in ${LANGS[settings.src].en}. `
+      + 'Use correct punctuation, capitalization and accents. Output ONLY the transcript, no comments, no quotes. '
+      + 'If there is no speech, output nothing.';
+    const run = async (b) => (await geminiGenerate({
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: instruction },
+          { inlineData: { mimeType: b.type.split(';')[0] || 'audio/webm', data: await blobToBase64(b) } },
+        ],
+      }],
+    })).trim();
+    try {
+      return await run(blob);
+    } catch (e) {
+      const formatProblem = e instanceof ApiError && e.status === 400 && !/api key/i.test(e.message);
+      if (!formatProblem || blob.type.includes('wav')) throw e;
+      return run(await toWav16k(blob));
+    }
   }
 
   // ---------- Sprachen ----------
@@ -294,7 +419,7 @@
     const mime = pickMime();
     chunks = [];
     try {
-      mediaRecorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime, audioBitsPerSecond: 48000 } : undefined);
+      mediaRecorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime, audioBitsPerSecond: 32000 } : undefined);
     } catch {
       mediaRecorder = new MediaRecorder(mediaStream);
     }
@@ -353,6 +478,7 @@
   }
 
   async function transcribe(blob) {
+    if (settings.provider !== 'openai') return geminiTranscribe(blob);
     const lang = settings.src;
     const model = settings.sttModel || DEFAULTS.sttModel;
     const prompt = {
@@ -452,7 +578,7 @@
     el.interim.textContent = '';
     const hadText = el.srcText.value.trim();
     resetMicUi();
-    if (hadText && settings.autoTranslate && apiKey) runTranslation();
+    if (hadText && settings.autoTranslate && hasKey()) runTranslation();
   }
 
   // ---------- Übersetzen & Prüfen ----------
@@ -705,8 +831,19 @@
   document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
 
   // ---------- Einstellungen ----------
+  function showProviderFields(p) {
+    el.fieldGemini.hidden = p === 'openai';
+    el.fieldOpenai.hidden = p !== 'openai';
+  }
+  el.settingsForm.querySelectorAll('input[name=provider]').forEach((r) => r.addEventListener('change', () => showProviderFields(r.value)));
+
   function openSettings() {
     el.setKey.value = apiKey;
+    el.setGeminiKey.value = geminiKey;
+    el.setGeminiModel.value = settings.geminiModel;
+    el.setGeminiFallback.value = settings.geminiFallback;
+    el.settingsForm.querySelectorAll('input[name=provider]').forEach((r) => { r.checked = r.value === settings.provider; });
+    showProviderFields(settings.provider);
     el.setAuto.checked = !!settings.autoTranslate;
     el.setChatModel.value = settings.chatModel;
     el.setSttModel.value = settings.sttModel;
@@ -717,11 +854,19 @@
   el.resetModels.addEventListener('click', () => {
     el.setChatModel.value = DEFAULTS.chatModel;
     el.setSttModel.value = DEFAULTS.sttModel;
+    el.setGeminiModel.value = DEFAULTS.geminiModel;
+    el.setGeminiFallback.value = DEFAULTS.geminiFallback;
   });
   el.dlgSettings.addEventListener('close', () => {
     if (el.dlgSettings.returnValue !== 'save') return;
     apiKey = el.setKey.value.trim();
     store.set('apiKey', apiKey);
+    geminiKey = el.setGeminiKey.value.trim();
+    store.set('geminiKey', geminiKey);
+    const prov = el.settingsForm.querySelector('input[name=provider]:checked');
+    if (prov) settings.provider = prov.value;
+    settings.geminiModel = el.setGeminiModel.value.trim() || DEFAULTS.geminiModel;
+    settings.geminiFallback = el.setGeminiFallback.value.trim();
     settings.autoTranslate = el.setAuto.checked;
     settings.chatModel = el.setChatModel.value.trim() || DEFAULTS.chatModel;
     settings.sttModel = el.setSttModel.value.trim() || DEFAULTS.sttModel;
@@ -736,7 +881,7 @@
   fillLangSelects();
   renderChips();
   resetMicUi();
-  if (!apiKey) setTimeout(openSettings, 300);
+  if (!hasKey()) setTimeout(openSettings, 300);
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => { /* offline-Cache optional */ });
