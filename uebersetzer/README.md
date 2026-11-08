@@ -86,7 +86,7 @@ Danach startet der Übersetzer wie eine normale App im Vollbild.
 Reine Web-App ohne Server und ohne Build-Schritt:
 
 - `index.html`, `style.css`, `app.js`: Oberfläche und Logik
-- `manifest.webmanifest`, `sw.js`, `icons/`: Installation als App und Offline-Start
+- `manifest.json`, `sw.js`, `icons/`: Installation als App und Offline-Start
 - **Gemini (Standard, kostenlos):** Spracherkennung, Übersetzung und Prüfung über `generateContent` mit `gemini-3.8-flash`, Ersatzmodell `gemini-3.1-flash-lite`. Lehnt Gemini das Aufnahmeformat ab, wandelt die App die Aufnahme in WAV um und schickt sie erneut.
 - **OpenAI (optional):** Spracherkennung mit `gpt-transcribe`, Übersetzung und Prüfung mit `gpt-6.1-sol`
 - Alle Modelle lassen sich in den Einstellungen unter „Erweitert“ ändern.

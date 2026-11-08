@@ -7,6 +7,7 @@
 
   const API = 'https://api.openai.com/v1';
   const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
+  const SR_AVAILABLE = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   const DEFAULTS = {
     provider: 'gemini', // 'gemini' (kostenlos) | 'openai'
     geminiModel: 'gemini-3.8-flash',
@@ -15,7 +16,7 @@
     talkSpeak: false,
     chatModel: 'gpt-6.1-sol',
     sttModel: 'gpt-transcribe',
-    sttMode: 'ai',
+    sttMode: SR_AVAILABLE ? 'browser' : 'ai', // Live-Diktat: Text erscheint beim Sprechen
     autoTranslate: true,
     src: 'de',
     tgt: 'el',
@@ -56,6 +57,8 @@
   // ältere Einstellung "en" → britisches Englisch
   for (const k of ['src', 'tgt']) if (!LANGS[settings[k]]) settings[k] = settings[k] === 'en' ? 'en-gb' : DEFAULTS[k];
   if (settings.src === settings.tgt) settings.tgt = settings.src === 'de' ? 'el' : 'de';
+  // einmalig: auf Live-Diktat umstellen, damit der Text beim Sprechen sofort erscheint
+  if (!settings.liveDefault) { settings.liveDefault = true; settings.sttMode = DEFAULTS.sttMode; }
   let apiKey = store.get('apiKey', '');        // OpenAI
   let geminiKey = store.get('geminiKey', '');  // Google Gemini
   const providerName = () => (settings.provider === 'openai' ? 'OpenAI' : 'Gemini');
@@ -119,6 +122,7 @@
 
   function friendlyError(err) {
     if (err.name === 'AbortError') return 'Abgebrochen.';
+    if (err.name === 'TimeoutError') return `${err.provider || 'Der KI-Dienst'} antwortet gerade nicht (Zeitüberschreitung). Bitte nochmal versuchen.`;
     if (!navigator.onLine) return 'Keine Internetverbindung.';
     if (err instanceof ApiError) {
       const gem = err.provider === 'Gemini';
@@ -136,22 +140,48 @@
     return 'Fehler: ' + (err.message || err);
   }
 
-  async function apiFetch(path, init) {
-    let res;
-    try {
-      res = await fetch(API + path, {
-        ...init,
-        headers: { Authorization: 'Bearer ' + apiKey, ...(init.headers || {}) },
-      });
-    } catch (e) {
-      throw new Error('Verbindung zu OpenAI fehlgeschlagen.');
+  // fetch mit Zeitlimit. Zusätzlich kann der Nutzer laufende Anfragen über
+  // userAbort abbrechen (z. B. Antippen des Mikrofons während der Erkennung).
+  let userAbort = null;
+  class TimeoutError extends Error {
+    constructor(provider) { super('Zeitüberschreitung'); this.name = 'TimeoutError'; this.provider = provider; }
+  }
+  async function timedFetch(url, init, ms, provider) {
+    const ctl = new AbortController();
+    let timedOut = false;
+    setTimeout(() => { timedOut = true; ctl.abort(); }, ms); // nach fertigem Lesen wirkungslos
+    const outer = userAbort;
+    if (outer) {
+      if (outer.signal.aborted) ctl.abort();
+      else outer.signal.addEventListener('abort', () => ctl.abort(), { once: true });
     }
+    try {
+      return await fetch(url, { ...init, signal: ctl.signal });
+    } catch (e) {
+      if (timedOut) throw new TimeoutError(provider);
+      if (ctl.signal.aborted) { const a = new Error('Abgebrochen.'); a.name = 'AbortError'; throw a; }
+      throw new Error(`Verbindung zu ${provider} fehlgeschlagen.`);
+    }
+  }
+  // Liest den Antwort-Body; bricht das Zeitlimit mitten im Lesen ab, kommt ein verständlicher Fehler.
+  async function readJson(res, provider) {
+    try { return await res.json(); } catch (e) {
+      if (e.name === 'AbortError') throw new TimeoutError(provider);
+      throw e;
+    }
+  }
+
+  async function apiFetch(path, init, ms = 30000) {
+    const res = await timedFetch(API + path, {
+      ...init,
+      headers: { Authorization: 'Bearer ' + apiKey, ...(init.headers || {}) },
+    }, ms, 'OpenAI');
     if (!res.ok) {
       let msg = res.statusText;
       try { msg = (await res.json()).error?.message || msg; } catch { /* kein JSON */ }
       throw new ApiError(res.status, msg);
     }
-    return res.json();
+    return readJson(res, 'OpenAI');
   }
 
   function parseJsonLoose(text) {
@@ -192,23 +222,18 @@
   }
 
   // ---------- Google Gemini (kostenloser Tarif) ----------
-  async function geminiCall(model, body) {
-    let res;
-    try {
-      res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-    } catch {
-      throw new Error('Verbindung zu Google Gemini fehlgeschlagen.');
-    }
+  async function geminiCall(model, body, ms = 30000) {
+    const res = await timedFetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }, ms, 'Gemini');
     if (!res.ok) {
       let msg = res.statusText;
       try { msg = (await res.json()).error?.message || msg; } catch { /* kein JSON */ }
       throw new ApiError(res.status, msg, 'Gemini');
     }
-    const data = await res.json();
+    const data = await readJson(res, 'Gemini');
     const cand = data.candidates?.[0];
     const text = (cand?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join('');
     if (!text) {
@@ -221,15 +246,16 @@
   // Erst das Hauptmodell, bei Limit/Überlast/unbekanntem Modell das Ersatzmodell.
   const geminiModels = (primary) => [...new Set([primary || settings.geminiModel || DEFAULTS.geminiModel, settings.geminiFallback].filter(Boolean))];
 
-  async function geminiGenerate(body, primary) {
+  async function geminiGenerate(body, primary, ms) {
     const models = geminiModels(primary);
     let lastErr;
     for (const m of models) {
       try {
-        return await geminiCall(m, body);
+        return await geminiCall(m, body, ms);
       } catch (e) {
         lastErr = e;
-        if (!(e instanceof ApiError && [404, 429, 500, 503].includes(e.status))) throw e;
+        const retry = e.name === 'TimeoutError' || (e instanceof ApiError && [404, 429, 500, 503].includes(e.status));
+        if (!retry) throw e;
       }
     }
     throw lastErr;
@@ -284,6 +310,8 @@
     const instruction = `Transcribe this audio word for word. Language: ${LANGS[settings.src].en}. `
       + 'Use correct punctuation, capitalization and accents. Output ONLY the transcript, no comments, no quotes. '
       + 'If there is no speech, output nothing.';
+    // schnelles Modell, Zeitlimit wächst mit der Länge der Aufnahme
+    const ms = 15000 + Math.round(blob.size / 12);
     const run = async (b) => (await geminiGenerate({
       contents: [{
         role: 'user',
@@ -292,7 +320,7 @@
           { inlineData: { mimeType: b.type.split(';')[0] || 'audio/webm', data: await blobToBase64(b) } },
         ],
       }],
-    })).trim();
+    }, settings.talkModel || DEFAULTS.talkModel, ms)).trim();
     try {
       return await run(blob);
     } catch (e) {
@@ -309,7 +337,12 @@
     const dec = new TextDecoder();
     let buf = '';
     for (;;) {
-      const { value, done } = await reader.read();
+      let chunk;
+      try { chunk = await reader.read(); } catch (e) {
+        if (e.name === 'AbortError') throw new TimeoutError('Der KI-Dienst');
+        throw e;
+      }
+      const { value, done } = chunk;
       if (done) break;
       buf += dec.decode(value, { stream: true });
       let i;
@@ -354,14 +387,11 @@
         messages: [{ role: 'system', content: system }, { role: 'user', content: text }],
       };
       for (const body of [{ ...base, reasoning_effort: 'low' }, base]) {
-        let res;
-        try {
-          res = await fetch(API + '/chat/completions', {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-        } catch { throw new Error('Verbindung zu OpenAI fehlgeschlagen.'); }
+        const res = await timedFetch(API + '/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }, 30000, 'OpenAI');
         if (!res.ok) {
           const err = await readError(res, 'OpenAI');
           if (err.status === 400 && body.reasoning_effort) continue;
@@ -385,12 +415,16 @@
       for (const genCfg of [{ temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } }, { temperature: 0.2 }]) {
         let res;
         try {
-          res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(geminiKey)}`, {
+          res = await timedFetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(geminiKey)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...body, generationConfig: genCfg }),
-          });
-        } catch { throw new Error('Verbindung zu Google Gemini fehlgeschlagen.'); }
+          }, 30000, 'Gemini');
+        } catch (e) {
+          if (e.name !== 'TimeoutError') throw e;
+          lastErr = e;
+          break; // nächstes Modell
+        }
         if (!res.ok) {
           lastErr = await readError(res, 'Gemini');
           if (lastErr.status === 400 && genCfg.thinkingConfig && !/api key/i.test(lastErr.message)) continue;
@@ -403,7 +437,8 @@
         }
         return acc.trim();
       }
-      if (!(lastErr instanceof ApiError && [404, 429, 500, 503].includes(lastErr.status))) throw lastErr;
+      const retry = lastErr?.name === 'TimeoutError' || (lastErr instanceof ApiError && [404, 429, 500, 503].includes(lastErr.status));
+      if (!retry) throw lastErr;
     }
     throw lastErr;
   }
@@ -519,7 +554,9 @@
     if (settings.sttMode === 'browser') {
       return SR ? 'Live-Diktat · Text erscheint beim Sprechen' : 'Live-Diktat wird von diesem Browser nicht unterstützt';
     }
-    return 'KI-Aufnahme · sprich in Ruhe, Pausen sind kein Problem';
+    return previewPossible
+      ? 'KI-Aufnahme · Live-Vorschau beim Sprechen, Pausen sind kein Problem'
+      : 'KI-Aufnahme · Text erscheint nach dem Stopp';
   }
   const resetMicUi = () => { activeMode = null; setMicUi('idle', 'Tippen zum Sprechen', idleHint()); };
 
@@ -533,7 +570,7 @@
 
   el.mic.addEventListener('click', () => {
     if (recState === 'recording') return stopRecording();
-    if (recState === 'transcribing') return;
+    if (recState === 'transcribing') { userAbort?.abort(); return; }
     if (settings.sttMode === 'browser') startBrowserDictation();
     else startAiRecording();
   });
@@ -569,6 +606,7 @@
     mediaRecorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunks.push(ev.data); };
     mediaRecorder.onstop = onAiRecordingStopped;
     mediaRecorder.start(1000);
+    startPreview();
     activeMode = 'ai';
     recStart = Date.now();
     keepAwake();
@@ -581,7 +619,53 @@
   function stopRecording() {
     if (activeMode === 'browser') return stopBrowserDictation();
     clearInterval(recTimer);
+    lastPreview = stopPreview();
     if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  }
+
+  // Live-Vorschau während der KI-Aufnahme: die Browser-Erkennung schreibt mit,
+  // damit man sofort sieht, dass es funktioniert. Auf Android teilen sich
+  // Aufnahme und Erkennung das Mikrofon nicht zuverlässig, dort ohne Vorschau.
+  const previewPossible = !!SR && !/Android/i.test(navigator.userAgent);
+  let previewRec = null, previewFinal = '', previewInterim = '', lastPreview = '';
+  function showPreview() {
+    const t = (previewFinal + ' ' + previewInterim).trim();
+    el.interim.hidden = !t;
+    el.interim.textContent = t;
+  }
+  function startPreview() {
+    previewFinal = previewInterim = lastPreview = '';
+    if (!previewPossible) return;
+    const r = new SR();
+    previewRec = r;
+    r.lang = LANGS[settings.src].bcp;
+    r.continuous = true;
+    r.interimResults = true;
+    r.onresult = (ev) => {
+      if (previewRec !== r) return;
+      let interim = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const res = ev.results[i];
+        if (res.isFinal) previewFinal = (previewFinal + ' ' + res[0].transcript).trim();
+        else interim += res[0].transcript;
+      }
+      previewInterim = interim;
+      showPreview();
+    };
+    r.onerror = (ev) => { if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(ev.error)) previewRec = null; };
+    r.onend = () => { if (previewRec === r) { try { r.start(); } catch { previewRec = null; } } };
+    try { r.start(); } catch { previewRec = null; }
+  }
+  function stopPreview() {
+    const r = previewRec;
+    previewRec = null;
+    try { r?.abort(); } catch { /* egal */ }
+    return (previewFinal + ' ' + previewInterim).trim();
+  }
+  function clearPreview() {
+    previewFinal = previewInterim = '';
+    el.interim.hidden = true;
+    el.interim.textContent = '';
   }
 
   async function onAiRecordingStopped() {
@@ -595,18 +679,34 @@
       toast('Aufnahme war zu kurz.', true);
       return;
     }
-    setMicUi('transcribing', 'Text wird erkannt …', '');
+    const started = Date.now();
+    const status = () => setMicUi('transcribing', `Text wird erkannt … ${Math.round((Date.now() - started) / 1000)} s`, 'Tippen zum Abbrechen');
+    status();
+    el.mic.classList.remove('busy'); // muss antippbar bleiben (Abbrechen)
+    const tick = setInterval(() => { status(); el.mic.classList.remove('busy'); }, 1000);
+    userAbort = new AbortController();
+    const preview = lastPreview;
     try {
       const text = await transcribe(blob);
       if (!text.trim()) {
-        toast('Es wurde keine Sprache erkannt.', true);
+        if (preview) { appendText(el.srcText, preview); if (settings.autoTranslate) runTranslation(); }
+        else toast('Es wurde keine Sprache erkannt.', true);
       } else {
         appendText(el.srcText, text);
         if (settings.autoTranslate) runTranslation();
       }
     } catch (e) {
-      toast(friendlyError(e), true);
+      if (preview) {
+        // Live-Text als Rückfall übernehmen, damit nichts verloren geht
+        appendText(el.srcText, preview);
+        toast(e.name === 'AbortError' ? 'Abgebrochen – Live-Text übernommen.' : friendlyError(e) + ' Live-Text wurde übernommen.', e.name !== 'AbortError');
+      } else {
+        toast(friendlyError(e), true);
+      }
     } finally {
+      clearInterval(tick);
+      userAbort = null;
+      clearPreview();
       resetMicUi();
     }
   }
@@ -641,11 +741,11 @@
       return fd;
     };
     try {
-      return (await apiFetch('/audio/transcriptions', { method: 'POST', body: build(true) })).text || '';
+      return (await apiFetch('/audio/transcriptions', { method: 'POST', body: build(true) }, 15000 + Math.round(blob.size / 12))).text || '';
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 400)) throw e;
       // Fallback: nur Pflichtfelder
-      return (await apiFetch('/audio/transcriptions', { method: 'POST', body: build(false) })).text || '';
+      return (await apiFetch('/audio/transcriptions', { method: 'POST', body: build(false) }, 15000 + Math.round(blob.size / 12))).text || '';
     }
   }
 

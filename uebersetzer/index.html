@@ -10,7 +10,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Übersetzer">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preload" href="fonts/open-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -198,10 +198,10 @@
 
       <fieldset class="field">
         <legend>Spracheingabe</legend>
-        <label class="radio"><input type="radio" name="sttMode" value="ai">
-          <span><b>KI-Aufnahme</b> – du sprichst so lange du willst, nichts bricht ab. Text erscheint nach dem Stopp.</span></label>
         <label class="radio"><input type="radio" name="sttMode" value="browser">
-          <span><b>Live-Diktat</b> – Text erscheint sofort, kostenlos, läuft über die Spracherkennung des Browsers.</span></label>
+          <span><b>Live-Diktat</b> (Standard) – der Text erscheint schon beim Sprechen. Kostenlos, startet nach Pausen automatisch neu.</span></label>
+        <label class="radio"><input type="radio" name="sttMode" value="ai">
+          <span><b>KI-Aufnahme</b> – nimmt auf, bis du Stopp tippst, und lässt die KI den Text erkennen. Genauer bei langen Texten und Hintergrundlärm. Auf dem Computer siehst du dabei eine Live-Vorschau.</span></label>
       </fieldset>
 
       <label class="toggle">
