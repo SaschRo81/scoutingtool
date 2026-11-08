@@ -1,5 +1,5 @@
 // Offline-Cache für die App-Oberfläche. Anfragen an OpenAI werden nie zwischengespeichert.
-const CACHE = 'uebersetzer-v2';
+const CACHE = 'uebersetzer-v3';
 const SHELL = [
   './',
   'index.html',
@@ -10,6 +10,13 @@ const SHELL = [
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
+  'icons/logo-rosanke.png',
+  'fonts/montserrat-latin-600-normal.woff2',
+  'fonts/montserrat-latin-700-normal.woff2',
+  'fonts/open-sans-latin-400-normal.woff2',
+  'fonts/open-sans-latin-600-normal.woff2',
+  'fonts/open-sans-greek-400-normal.woff2',
+  'fonts/open-sans-greek-600-normal.woff2',
 ];
 
 self.addEventListener('install', (event) => {

@@ -1,8 +1,12 @@
-# Übersetzer DE · EN · EL
+# Rosanke Übersetzer (DE · EN · EL)
+
+Ein Werkzeug von [Rosanke Web & Digital](https://rosanke.de), gestaltet im Corporate Design (Navy/Markenblau, Montserrat und Open Sans, lokal eingebunden).
+
+**Direkt öffnen:** https://raw.githack.com/SaschRo81/scoutingtool/claude/live-translation-tool-hzs1zl/uebersetzer/index.html
 
 Web-App fürs Handy: Text **sprechen oder tippen**, **sauber übersetzen**, **automatisch gegenprüfen** und direkt per **WhatsApp, Telegram** oder über das Teilen-Menü verschicken.
 
-Sprachen: Deutsch, Englisch, Griechisch, in jede Richtung (DE→EN, DE→EL, EL→DE, EL→EN, EN→DE, EN→EL).
+Sprachen: Deutsch, Englisch, Griechisch, in jede Richtung. Englisch gibt es als **English (UK)** (britische Schreibweise und Wörter, z. B. colour, organise, flat, mobile) und als **English (US)** (color, organize, apartment, cell phone). Standard ist UK. Die Gegenprüfung kontrolliert auch, dass die gewählte Variante durchgehend eingehalten wird.
 
 **Kostenlos nutzbar** mit einem Google-Gemini-Key (ohne Kreditkarte). OpenAI ist als kostenpflichtige Alternative eingebaut.
 
@@ -46,7 +50,9 @@ Beide Keys werden nur auf dem Handy gespeichert (localStorage) und nur an den je
 
 **Warum nicht DeepL?** Die DeepL-API (Free: 500.000 Zeichen im Monat) lässt laut eigener Doku keine Aufrufe direkt aus dem Browser zu. Dafür bräuchte es einen eigenen kleinen Server als Zwischenstation. Außerdem kann DeepL weder Sprache erkennen noch eine Übersetzung inhaltlich prüfen.
 
-### 2. Online stellen (GitHub Pages, kostenlos)
+### 2. Dauerhafte Adresse (GitHub Pages, kostenlos)
+
+Der Link oben funktioniert sofort. Für eine eigene, dauerhafte Adresse:
 
 1. Im Repository auf GitHub: **Settings → Pages**
 2. Unter „Build and deployment“: Source **Deploy from a branch**, Branch **main** (oder diesen Branch), Ordner **/ (root)**, dann **Save**

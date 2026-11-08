@@ -1,7 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#0d5eaf"/>
-  <path d="M96 150c0-22 18-40 40-40h160c22 0 40 18 40 40v100c0 22-18 40-40 40h-92l-58 50v-50h-10c-22 0-40-18-40-40z" fill="#ffffff"/>
-  <path d="M206 236c0-22 18-40 40-40h130c22 0 40 18 40 40v96c0 22-18 40-40 40h-6v50l-58-50h-66c-22 0-40-18-40-40z" fill="#9cc7f2"/>
-  <text x="168" y="226" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="92" fill="#0d5eaf" text-anchor="middle">A</text>
-  <text x="312" y="320" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="92" fill="#0d5eaf" text-anchor="middle">Ω</text>
+  <defs>
+    <radialGradient id="g" cx="0.2" cy="0.1" r="1.1">
+      <stop offset="0" stop-color="#2563b8"/>
+      <stop offset="0.4" stop-color="#2159a6"/>
+      <stop offset="1" stop-color="#051a3b"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <g stroke="#dbeafe" stroke-width="6" opacity="0.55">
+    <line x1="70" y1="88" x2="118" y2="132"/><line x1="118" y1="132" x2="64" y2="190"/><line x1="118" y1="132" x2="160" y2="96"/>
+  </g>
+  <g fill="#dbeafe" opacity="0.8"><circle cx="70" cy="88" r="10"/><circle cx="64" cy="190" r="9"/><circle cx="160" cy="96" r="8"/><circle cx="118" cy="132" r="13"/></g>
+  <path d="M100 168c0-22 18-40 40-40h156c22 0 40 18 40 40v96c0 22-18 40-40 40h-90l-56 48v-48h-10c-22 0-40-18-40-40z" fill="#ffffff"/>
+  <path d="M206 250c0-22 18-40 40-40h126c22 0 40 18 40 40v92c0 22-18 40-40 40h-6v48l-56-48h-64c-22 0-40-18-40-40z" fill="#dbeafe"/>
+  <text x="170" y="244" font-family="Montserrat, Arial, Helvetica, sans-serif" font-weight="700" font-size="88" fill="#051a3b" text-anchor="middle">A</text>
+  <text x="310" y="330" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="88" fill="#2159a6" text-anchor="middle">Ω</text>
 </svg>

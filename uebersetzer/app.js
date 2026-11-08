@@ -21,10 +21,14 @@
     withOriginal: false,
   };
 
+  // iso = Sprachcode für die Spracherkennung, en = Beschreibung für die KI
   const LANGS = {
-    de: { label: 'Deutsch', native: 'Deutsch', en: 'German', bcp: 'de-DE' },
-    en: { label: 'Englisch', native: 'English', en: 'English', bcp: 'en-US' },
-    el: { label: 'Griechisch', native: 'Ελληνικά', en: 'Greek (Modern)', bcp: 'el-GR' },
+    de: { native: 'Deutsch', short: 'DE', iso: 'de', bcp: 'de-DE', en: 'German (standard German as used in Germany, correct use of ß and umlauts)' },
+    'en-gb': { native: 'English (UK)', short: 'EN-UK', iso: 'en', bcp: 'en-GB',
+      en: 'British English (UK spelling and vocabulary throughout, e.g. colour, organise, centre, travelled, flat, mobile, holiday; dates as 8 November)' },
+    'en-us': { native: 'English (US)', short: 'EN-US', iso: 'en', bcp: 'en-US',
+      en: 'American English (US spelling and vocabulary throughout, e.g. color, organize, center, traveled, apartment, cell phone, vacation; dates as November 8)' },
+    el: { native: 'Ελληνικά', short: 'EL', iso: 'el', bcp: 'el-GR', en: 'Modern Greek (correct monotonic accents/tonos, final sigma ς, Greek question mark ;)' },
   };
 
   const STYLES = {
@@ -47,6 +51,9 @@
   };
 
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
+  // ältere Einstellung "en" → britisches Englisch
+  for (const k of ['src', 'tgt']) if (!LANGS[settings[k]]) settings[k] = settings[k] === 'en' ? 'en-gb' : DEFAULTS[k];
+  if (settings.src === settings.tgt) settings.tgt = settings.src === 'de' ? 'el' : 'de';
   let apiKey = store.get('apiKey', '');        // OpenAI
   let geminiKey = store.get('geminiKey', '');  // Google Gemini
   const providerName = () => (settings.provider === 'openai' ? 'OpenAI' : 'Gemini');
@@ -270,7 +277,7 @@
 
   async function geminiTranscribe(blob) {
     if (blob.size > 14 * 1024 * 1024) throw new Error('Aufnahme zu lang. Bitte in mehreren Teilen aufnehmen.');
-    const instruction = `Transcribe this audio word for word in ${LANGS[settings.src].en}. `
+    const instruction = `Transcribe this audio word for word. Language: ${LANGS[settings.src].en}. `
       + 'Use correct punctuation, capitalization and accents. Output ONLY the transcript, no comments, no quotes. '
       + 'If there is no speech, output nothing.';
     const run = async (b) => (await geminiGenerate({
@@ -479,7 +486,7 @@
 
   async function transcribe(blob) {
     if (settings.provider !== 'openai') return geminiTranscribe(blob);
-    const lang = settings.src;
+    const lang = LANGS[settings.src].iso;
     const model = settings.sttModel || DEFAULTS.sttModel;
     const prompt = {
       de: 'Diktierte Nachricht auf Deutsch, mit korrekter Groß-/Kleinschreibung und Satzzeichen.',
@@ -591,6 +598,7 @@
       'The source text was often dictated with speech recognition: silently fix obvious recognition mistakes, filler words and missing punctuation, but never add, drop or soften content.',
       'The result will be sent as a chat message (WhatsApp/Telegram), so it must read like it was written by a native speaker: natural, idiomatic, correct grammar, spelling and accents.',
       `Register: ${STYLES[style]}.`,
+      `Write the target text strictly in ${LANGS[tgt].en}.`,
       'Keep names, numbers, dates, times, addresses, emojis and line breaks. Do not add greetings or comments.',
       'Answer ONLY with JSON: {"translation": "<the translated message>"}',
     ].join('\n');
@@ -602,7 +610,7 @@
       `You get an original message in ${LANGS[src].en} (possibly dictated, may contain speech-recognition errors) and its translation into ${LANGS[tgt].en}.`,
       `1. Translate the translation back into ${LANGS[src].en} as faithfully as possible, without looking at the original wording → "back_translation".`,
       '2. Compare meaning with the original: omissions, additions, wrong meaning, wrong numbers/dates/names, ambiguous phrasing, grammar or spelling errors, unnatural wording.',
-      `3. Check the register: it should be ${STYLES[style]}.`,
+      `3. Check the register (it should be ${STYLES[style]}) and that the translation consistently follows the conventions of ${LANGS[tgt].en}.`,
       '4. If anything should be changed, give a corrected full translation in "improved_translation", otherwise use "".',
       'Write "problem" and "suggestion" texts in German, short and concrete. Do not report pure matters of taste.',
       'Answer ONLY with JSON:',
@@ -805,12 +813,12 @@
       const li = document.createElement('li');
       const meta = document.createElement('div');
       meta.className = 'h-meta';
-      meta.textContent = `${new Date(e.ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} · ${e.src.toUpperCase()} → ${e.tgt.toUpperCase()}`;
+      meta.textContent = `${new Date(e.ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} · ${(LANGS[e.src] || {}).short || e.src} → ${(LANGS[e.tgt] || {}).short || e.tgt}`;
       const s = document.createElement('div'); s.className = 'h-src'; s.textContent = e.text;
       const t = document.createElement('div'); t.className = 'h-tgt'; t.textContent = e.translation;
       li.append(meta, s, t);
       li.addEventListener('click', () => {
-        setLangs(e.src, e.tgt);
+        if (LANGS[e.src] && LANGS[e.tgt]) setLangs(e.src, e.tgt);
         if (e.style) { settings.style = e.style; saveSettings(); renderChips(); }
         el.srcText.value = e.text;
         el.tgtText.value = e.translation;
