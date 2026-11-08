@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Übersetzer DE · EN · EL</title>
+  <meta name="description" content="Text sprechen oder tippen, sauber übersetzen, gegenprüfen und per WhatsApp oder Telegram verschicken.">
+  <meta name="theme-color" content="#0d5eaf">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Übersetzer">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Übersetzer</h1>
+    <button id="btnHistory" class="icon-btn" aria-label="Verlauf" title="Verlauf">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v5l3 2M3.05 11a9 9 0 1 1 .5 4M3 5v6h6"/></svg>
+    </button>
+    <button id="btnSettings" class="icon-btn" aria-label="Einstellungen" title="Einstellungen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <!-- Sprachwahl -->
+    <section class="langbar" aria-label="Sprachen">
+      <label class="lang">
+        <span class="sr-only">Von</span>
+        <select id="srcLang"></select>
+      </label>
+      <button id="btnSwap" class="swap" aria-label="Sprachen tauschen" title="Sprachen tauschen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"/></svg>
+      </button>
+      <label class="lang">
+        <span class="sr-only">Nach</span>
+        <select id="tgtLang"></select>
+      </label>
+    </section>
+
+    <div class="chips" role="radiogroup" aria-label="Tonfall">
+      <button class="chip" role="radio" data-style="neutral">Neutral</button>
+      <button class="chip" role="radio" data-style="casual">Locker (Du)</button>
+      <button class="chip" role="radio" data-style="formal">Förmlich (Sie)</button>
+    </div>
+
+    <!-- Eingabe -->
+    <section class="card" aria-label="Ausgangstext">
+      <div class="card-head">
+        <span id="srcLabel" class="card-title">Deutsch</span>
+        <button id="btnClear" class="text-btn">Leeren</button>
+      </div>
+      <textarea id="srcText" rows="5" placeholder="Text sprechen oder eintippen …"></textarea>
+      <div id="interim" class="interim" hidden></div>
+
+      <div class="rec-row">
+        <button id="btnMic" class="mic" aria-label="Aufnahme starten">
+          <svg class="ico-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>
+          <svg class="ico-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+        <div class="rec-info">
+          <div id="recStatus" class="rec-status">Tippen zum Sprechen</div>
+          <div id="recHint" class="rec-hint"></div>
+        </div>
+      </div>
+    </section>
+
+    <button id="btnTranslate" class="primary">Übersetzen &amp; prüfen</button>
+
+    <!-- Ergebnis -->
+    <section id="resultCard" class="card result" aria-label="Übersetzung" hidden>
+      <div class="card-head">
+        <span id="tgtLabel" class="card-title">Ελληνικά</span>
+        <button id="btnSpeak" class="text-btn" title="Vorlesen">Vorlesen</button>
+      </div>
+      <textarea id="tgtText" rows="5" aria-label="Übersetzung (bearbeitbar)"></textarea>
+
+      <div id="check" class="check">
+        <div class="check-head">
+          <span id="checkBadge" class="badge">Prüfung …</span>
+          <span id="checkScore" class="score"></span>
+        </div>
+        <div id="checkBody" class="check-body" hidden>
+          <div class="back">
+            <div class="mini-label">Rückübersetzung (zum Gegenlesen)</div>
+            <p id="backText"></p>
+          </div>
+          <ul id="issues" class="issues"></ul>
+          <div id="improvedBox" class="improved" hidden>
+            <div class="mini-label">Verbesserter Vorschlag</div>
+            <p id="improvedText"></p>
+            <button id="btnApplyImproved" class="secondary">Vorschlag übernehmen</button>
+          </div>
+        </div>
+      </div>
+
+      <label class="toggle">
+        <input id="withOriginal" type="checkbox">
+        <span>Original mitsenden</span>
+      </label>
+
+      <div class="share-row">
+        <button id="btnShare" class="share share-main">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13"/></svg>
+          Teilen
+        </button>
+        <button id="btnWhatsApp" class="share wa">WhatsApp</button>
+        <button id="btnTelegram" class="share tg">Telegram</button>
+        <button id="btnCopy" class="share">Kopieren</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Verlauf -->
+  <dialog id="dlgHistory" class="sheet">
+    <div class="sheet-head">
+      <h2>Verlauf</h2>
+      <button class="text-btn" data-close>Schließen</button>
+    </div>
+    <ul id="historyList" class="history"></ul>
+    <button id="btnClearHistory" class="text-btn danger">Verlauf löschen</button>
+  </dialog>
+
+  <!-- Einstellungen -->
+  <dialog id="dlgSettings" class="sheet">
+    <form method="dialog" id="settingsForm">
+      <div class="sheet-head">
+        <h2>Einstellungen</h2>
+        <button class="text-btn" value="cancel" formnovalidate>Abbrechen</button>
+      </div>
+
+      <label class="field">
+        <span>OpenAI API-Key</span>
+        <input id="setKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…">
+        <small>Wird nur auf diesem Gerät gespeichert und nur an api.openai.com gesendet.</small>
+      </label>
+
+      <fieldset class="field">
+        <legend>Spracheingabe</legend>
+        <label class="radio"><input type="radio" name="sttMode" value="ai">
+          <span><b>KI-Aufnahme</b> – du sprichst so lange du willst, nichts bricht ab. Text erscheint nach dem Stopp.</span></label>
+        <label class="radio"><input type="radio" name="sttMode" value="browser">
+          <span><b>Live-Diktat</b> – Text erscheint sofort, kostenlos, läuft über die Spracherkennung des Browsers.</span></label>
+      </fieldset>
+
+      <label class="toggle">
+        <input id="setAuto" type="checkbox">
+        <span>Nach der Aufnahme automatisch übersetzen</span>
+      </label>
+
+      <details class="field">
+        <summary>Erweitert</summary>
+        <label class="field">
+          <span>Modell Übersetzung</span>
+          <input id="setChatModel" type="text" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>Modell Spracherkennung</span>
+          <input id="setSttModel" type="text" spellcheck="false">
+        </label>
+        <button type="button" id="btnResetModels" class="text-btn">Standardwerte</button>
+      </details>
+
+      <button class="primary" value="save">Speichern</button>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
